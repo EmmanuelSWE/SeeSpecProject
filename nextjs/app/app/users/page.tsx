@@ -16,19 +16,14 @@ export default function UsersPage() {
         {
           key: "isActive",
           label: "Is active",
-          render: (row) => <input type="checkbox" checked={Boolean(row.isActive)} readOnly />
+          kind: "boolean"
         },
         {
           key: "id",
           label: "Actions",
           width: "310px",
-          render: () => (
-            <div className="action-row">
-              <button type="button" className="table-action">Edit</button>
-              <button type="button" className="table-action danger">Delete</button>
-              <button type="button" className="table-action">Reset password</button>
-            </div>
-          )
+          kind: "actions",
+          actions: ["Edit", "Delete", "Reset password"]
         }
       ]}
     />

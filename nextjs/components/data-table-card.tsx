@@ -9,7 +9,8 @@ type Column<T extends Record<string, RowValue>> = {
   key: keyof T;
   label: string;
   width?: string;
-  render?: (row: T) => React.ReactNode;
+  kind?: "text" | "boolean" | "actions";
+  actions?: string[];
 };
 
 export function DataTableCard<T extends Record<string, RowValue>>({
@@ -129,7 +130,23 @@ export function DataTableCard<T extends Record<string, RowValue>>({
                 <tr key={index}>
                   {columns.map((column) => (
                     <td key={String(column.key)}>
-                      {column.render ? column.render(row) : String(row[column.key])}
+                      {column.kind === "boolean" ? (
+                        <input type="checkbox" checked={Boolean(row[column.key])} readOnly />
+                      ) : column.kind === "actions" ? (
+                        <div className="action-row">
+                          {(column.actions ?? []).map((action) => (
+                            <button
+                              key={action}
+                              type="button"
+                              className={`table-action ${action.toLowerCase().includes("delete") ? "danger" : ""}`}
+                            >
+                              {action}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        String(row[column.key])
+                      )}
                     </td>
                   ))}
                 </tr>
