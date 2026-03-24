@@ -4,9 +4,24 @@
 .vs/
 obj/
 bin/
+
+# Angular frontend
+angular/
+
+# Environment files
+nextjs/.env
+nextjs/.env.*
+aspnet-core/.env
+aspnet-core/.env.*
+
+# ASP.NET Core logs and outputs
 aspnet-core/src/SeeSpec.Web.Host/App_Data/Logs/
 aspnet-core/src/SeeSpec.Web.Mvc/App_Data/Logs/
 aspnet-core/src/SeeSpec.Migrator/Logs/Logs.txt
 aspnet-core/build/outputs/
 aspnet-core/docker/mvc/Mvc-Logs/
 
+# Next.js outputs
+nextjs/node_modules/
+nextjs/.next/
+nextjs/out/
