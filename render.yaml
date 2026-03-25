@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: seespec-web-host
+    runtime: docker
+    rootDir: aspnet-core/src
+    dockerfilePath: ./SeeSpec.Web.Host/Dockerfile
+    dockerContext: ./aspnet-core/src
+    autoDeploy: true
