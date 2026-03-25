@@ -424,99 +424,166 @@ button, input { font: inherit; }
   display: grid;
   place-items: center;
   padding: 32px 16px;
-  background: linear-gradient(180deg, #eef3f9 0%, #e5ecf3 100%);
+  background: #edf2f7;
 }
 
-.auth-stack {
+.login-box {
   width: 100%;
-  max-width: 420px;
+  max-width: 360px;
   text-align: center;
 }
 
-.auth-logo {
-  margin-bottom: 22px;
-  font-size: 1.6rem;
+.login-logo {
+  margin-bottom: 18px;
+  font-size: 2.7rem;
+  font-weight: 300;
+}
+
+.login-logo a {
+  color: #4c5b6b;
 }
 
 .auth-card {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
-.tenant-banner {
+.auth-card-header {
   padding: 14px 18px;
-  border-bottom: 1px solid #e7edf5;
-  color: #556372;
+  border-bottom: 1px solid #e4eaf1;
+  color: #4b5a68;
+  font-size: 0.98rem;
 }
 
-.tenant-banner button {
+.auth-card-header button {
   border: 0;
   background: transparent;
   color: #2f80ed;
   cursor: pointer;
 }
 
-.auth-card-body { padding: 26px 20px; }
+.login-card-body {
+  padding: 22px 20px 18px;
+}
+
 .auth-card-footer {
-  padding: 16px 18px;
-  border-top: 1px solid #e7edf5;
-  background: #fafcff;
+  padding: 14px 16px;
+  background: #fafcfe;
 }
 
-.auth-form-wrap h1 {
-  margin: 0 0 20px;
+.account-footer {
+  margin-top: 18px;
+  color: #596674;
+}
+
+.account-view h4 {
+  margin: 0 0 16px;
   font-size: 2rem;
-  font-weight: 400;
+  font-weight: 300;
+  color: #485663;
 }
 
-.auth-form {
+.text-center {
+  text-align: center;
+}
+
+.compact-form {
   display: grid;
   gap: 14px;
   text-align: left;
 }
 
-.auth-form label span {
-  display: block;
-  margin-bottom: 6px;
-  color: #5e6b79;
-}
-
-.input-frame {
+.form-group {
   display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
+  gap: 6px;
 }
 
-.input-frame input {
+.input-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.form-control {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 1px solid #d3dbe5;
   border-right: 0;
-  border-radius: 6px 0 0 6px;
+  border-radius: 4px 0 0 4px;
+  background: #fff;
 }
 
-.input-icon {
+.input-group-append {
+  display: flex;
+}
+
+.input-group-text {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 46px;
-  border: 1px solid #cfd8e3;
-  border-left: 0;
-  border-radius: 0 6px 6px 0;
-  background: #f8fbfe;
+  min-width: 42px;
+  padding: 0 10px;
+  border: 1px solid #d3dbe5;
+  border-radius: 0 4px 4px 0;
+  background: #f7f9fb;
+  color: #7d8792;
 }
 
-.auth-actions, .split-actions { justify-content: space-between; gap: 12px; }
-.checkbox-row, .language-row {
+.form-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
-.language-row { justify-content: center; flex-wrap: wrap; }
+.form-col {
+  flex: 1;
+}
+
+.remember-col {
+  flex: 2;
+}
+
+.submit-col {
+  flex: 1;
+}
+
+.wide-col {
+  flex: 2;
+}
+
+.narrow-col {
+  flex: 1;
+}
+
+.remember-me {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #5a6775;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.primary-button.full-width,
+.auth-back-button {
+  min-height: 38px;
+}
+
+.register-link {
+  margin: 14px 0 0;
+  text-align: left;
+}
+
+.account-languages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .language-chip { display: inline-flex; }
-.helper-link { margin: 14px 0 0; text-align: left; }
-.auth-footer { margin-top: 18px; color: #5f6e7d; }
 
 .flag {
   display: inline-flex;
@@ -541,8 +608,124 @@ button, input { font: inherit; }
 
 .sidebar-overlay { display: none; }
 
+.landing-page {
+  min-height: 100vh;
+  padding: 56px 24px;
+  background:
+    radial-gradient(circle at top left, rgba(54, 153, 255, 0.12), transparent 28%),
+    linear-gradient(180deg, #f7fafd 0%, #edf2f7 100%);
+}
+
+.landing-hero,
+.landing-links {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr;
+  gap: 24px;
+  align-items: stretch;
+  margin-bottom: 24px;
+}
+
+.landing-copy {
+  padding: 52px 24px 32px 0;
+}
+
+.landing-kicker {
+  margin: 0 0 12px;
+  color: #2f80ed;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.landing-copy h1 {
+  margin: 0 0 12px;
+  font-size: clamp(3.2rem, 8vw, 5.5rem);
+  line-height: 0.95;
+  color: #243444;
+}
+
+.landing-description {
+  max-width: 54ch;
+  margin: 0 0 20px;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: #586779;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.landing-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.landing-panel-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid #e5ebf2;
+  font-weight: 700;
+  color: #314050;
+  background: #f8fbfe;
+}
+
+.landing-steps {
+  display: grid;
+  gap: 0;
+}
+
+.landing-step {
+  padding: 20px;
+  border-top: 1px solid #eef3f7;
+}
+
+.landing-step:first-child {
+  border-top: 0;
+}
+
+.landing-step p {
+  margin: 8px 0 0;
+  color: #607080;
+  line-height: 1.65;
+}
+
+.landing-links {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.landing-link-card {
+  display: block;
+  padding: 22px;
+  color: inherit;
+}
+
+.landing-link-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  color: #2f3d4a;
+}
+
+.landing-link-card p {
+  margin: 0;
+  color: #657486;
+  line-height: 1.6;
+}
+
 @media (max-width: 1100px) {
   .hero-grid, .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .landing-hero {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 900px) {
@@ -563,6 +746,18 @@ button, input { font: inherit; }
 @media (max-width: 720px) {
   .top-link { display: none; }
   .hero-grid, .summary-grid { grid-template-columns: 1fr; }
+  .landing-page {
+    padding: 28px 16px;
+  }
+  .landing-copy {
+    padding: 8px 0 0;
+  }
+  .landing-actions {
+    flex-direction: column;
+  }
+  .landing-links {
+    grid-template-columns: 1fr;
+  }
   .section-header, .table-footer, .footer, .auth-actions, .split-actions {
     flex-direction: column;
     align-items: stretch;

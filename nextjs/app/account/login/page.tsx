@@ -2,34 +2,40 @@ import Link from "next/link";
 
 export default function LoginPage() {
   return (
-    <div className="auth-form-wrap">
-      <h1>Log in</h1>
-      <form className="auth-form">
-        <label>
-          <span>User name or email</span>
-          <div className="input-frame">
-            <input type="text" placeholder="User name or email" defaultValue="admin" />
-            <span className="input-icon">U</span>
+    <div className="auth-form-wrap account-view">
+      <h4 className="text-center">Log in</h4>
+      <form className="auth-form compact-form">
+        <div className="form-group">
+          <div className="input-group">
+            <input type="text" className="form-control" placeholder="User name or email" defaultValue="admin" />
+            <div className="input-group-append">
+              <div className="input-group-text">U</div>
+            </div>
           </div>
-        </label>
-        <label>
-          <span>Password</span>
-          <div className="input-frame">
-            <input type="password" placeholder="Password" defaultValue="123qwe" />
-            <span className="input-icon">L</span>
+        </div>
+        <div className="form-group">
+          <div className="input-group">
+            <input type="password" className="form-control" placeholder="Password" defaultValue="123qwe" />
+            <div className="input-group-append">
+              <div className="input-group-text">L</div>
+            </div>
           </div>
-        </label>
-        <div className="auth-actions">
-          <label className="checkbox-row">
-            <input type="checkbox" defaultChecked />
-            <span>Remember me</span>
-          </label>
-          <Link href="/app/about" className="primary-button">
-            Log in
-          </Link>
+        </div>
+        <div className="form-row auth-submit-row">
+          <div className="form-col remember-col">
+            <label className="remember-me">
+              <input type="checkbox" defaultChecked />
+              <span>Remember me</span>
+            </label>
+          </div>
+          <div className="form-col submit-col">
+            <Link href="/app/about" className="primary-button full-width">
+              Log in
+            </Link>
+          </div>
         </div>
       </form>
-      <p className="helper-link">
+      <p className="register-link">
         <Link href="/account/register">Register</Link>
       </p>
     </div>

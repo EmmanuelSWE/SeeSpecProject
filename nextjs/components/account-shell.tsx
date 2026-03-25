@@ -10,20 +10,20 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="auth-page">
-      <div className="auth-stack">
-        <div className="auth-logo">
+      <div className="login-box">
+        <div className="login-logo">
           <Link href="/">
             <strong>SeeSpec</strong>
           </Link>
         </div>
 
-        <div className="auth-card">
-          <div className="tenant-banner">
+        <div className="auth-card card">
+          <div className="auth-card-header">
             Current tenant: Not selected <button type="button">Change</button>
           </div>
-          <div className="auth-card-body">{children}</div>
-          <div className="auth-card-footer">
-            <div className="language-row">
+          <div className="auth-card-body login-card-body">{children}</div>
+          <div className="auth-card-footer card-footer">
+            <div className="account-languages">
               {languages.map((language) => (
                 <span key={language.code} className="language-chip">
                   <Flag code={language.flag} />
@@ -33,8 +33,10 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="auth-footer">
-          Copyright &copy; {currentYear} <b>Version</b> {versionText}
+        <div className="account-footer">
+          <small>
+            Copyright &copy; {currentYear} <b>Version</b> {versionText}
+          </small>
         </div>
       </div>
     </div>
