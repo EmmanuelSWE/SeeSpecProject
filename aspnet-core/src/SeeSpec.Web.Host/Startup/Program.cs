@@ -9,6 +9,7 @@ namespace SeeSpec.Web.Host.Startup
     {
         public static void Main(string[] args)
         {
+            System.AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
             CreateHostBuilder(args).Build().Run();
         }
 
