@@ -19,6 +19,8 @@ namespace SeeSpec
     {
         public override void PreInitialize()
         {
+            Clock.Provider = ClockProviders.Utc;
+
             Configuration.Auditing.IsEnabledForAnonymousUsers = true;
 
             // Declare entity types
