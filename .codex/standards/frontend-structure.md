@@ -19,6 +19,10 @@ The current implementation uses custom React components and global CSS. The proj
 - Playwright for end-to-end coverage
 - Figma-driven layout and spacing
 - Ant Design plus `antd-style` as the target component and styling system for new or refactored product surfaces
+- page-segmented component ownership under `app/components/`, with a shared global component layer only for reused elements
+- centralized Axios instances and proxy-aware API access
+- provider-based shared state under `app/lib/providers/`
+- service functions and shared client utilities under `app/lib/utils/`, consumed by providers
 
 The guide below reflects both:
 
@@ -52,68 +56,189 @@ Design precedence:
 
 ```text
 nextjs/
-├── app/                                        # App Router routes, layouts, and route-level entry files
-│   ├── layout.tsx                              # Root application layout
-│   ├── page.tsx                                # Landing page at "/"
-│   ├── globals.css                             # Global styles and current shared visual primitives
-│   ├── account/                                # Public auth route group
-│   │   ├── layout.tsx                          # Auth-specific layout wrapper
-│   │   ├── login/
-│   │   │   └── page.tsx                        # Login screen
-│   │   └── register/
-│   │       └── page.tsx                        # Registration screen
-│   └── app/                                    # Single authenticated product route group
-│       ├── layout.tsx                          # Shared workspace/dashboard shell
-│       ├── page.tsx                            # Workspace entry dashboard
-│       ├── settings/
-│       │   └── page.tsx                        # User settings / password / account profile surface
-│       ├── users/
-│       │   ├── page.tsx                        # User list
-│       │   └── [userSlug]/
-│       │       └── page.tsx                    # User-specific view without exposing raw IDs
-│       ├── tenants/
-│       │   ├── page.tsx                        # Tenant list
-│       │   └── [tenantSlug]/
-│       │       └── page.tsx                    # Tenant-specific workspace
-│       ├── projects/
-│       │   ├── page.tsx                        # Project list
-│       │   └── [projectSlug]/
-│       │       ├── page.tsx                    # Project overview / dashboard
-│       │       ├── requirements/
-│       │       │   └── page.tsx                # Requirements page from Figma
-│       │       ├── task-assignment/
-│       │       │   └── page.tsx                # Task assignment page from Figma
-│       │       ├── use-case-diagram/
-│       │       │   └── page.tsx                # Spec workspace page from Figma
-│       │       ├── domain-model/
-│       │       │   └── page.tsx                # Spec workspace page from Figma
-│       │       ├── activity-diagram/
-│       │       │   └── page.tsx                # Spec workspace page from Figma
-│       │       └── teams/
-│       │           └── page.tsx                # Backend team view if a project owns multiple teams
-│       └── administration/
-│           ├── roles/
-│           │   └── page.tsx                    # Roles management
-│           └── about/
-│               └── page.tsx                    # About / product information
-├── components/                                 # Shared presentational and layout components
-│   ├── account-shell.tsx                       # Auth screen shell
-│   ├── dashboard-shell.tsx                     # Sidebar/topbar admin shell
-│   ├── data-table-card.tsx                     # Reusable table-like card view
-│   └── icons.tsx                               # Shared icon primitives
-├── lib/
-│   └── data.ts                                 # Static/demo data and simple shared data helpers
+├── app
+│   ├───(Authentication)
+│   │   ├───login
+│   │   │   └───page.tsx
+│   │   └───signup
+│   │       └───page.tsx
+│   ├───(loggedIn)
+│   │   ├───account
+│   │   │   └───page.tsx
+│   │   ├───activities
+│   │   │   ├───page.tsx
+│   │   │   └───create
+│   │   │       └───page.tsx
+│   │   ├───admin
+│   │   │   └───dashboard
+│   │   │       ├───page.tsx
+│   │   │       └───[id]
+│   │   │           ├───page.tsx
+│   │   │           └───submitProposal
+│   │   │               └───page.tsx
+│   │   ├───Client
+│   │   │   ├───createClient
+│   │   │   │   └───page.tsx
+│   │   │   └───[id]
+│   │   │       ├───page.tsx
+│   │   │       ├───clientOverView
+│   │   │       │   └───page.tsx
+│   │   │       ├───createContact
+│   │   │       │   └───page.tsx
+│   │   │       ├───createOpportunity
+│   │   │       │   └───page.tsx
+│   │   │       └───createProposal
+│   │   │           └───page.tsx
+│   │   ├───clients
+│   │   │   └───page.tsx
+│   │   ├───contracts
+│   │   │   ├───page.tsx
+│   │   │   ├───create
+│   │   │   │   └───page.tsx
+│   │   │   └───[contractId]
+│   │   │       ├───page.tsx
+│   │   │       └───createRenewal
+│   │   │           └───page.tsx
+│   │   ├───notes
+│   │   │   ├───page.tsx
+│   │   │   └───create
+│   │   │       └───page.tsx
+│   │   ├───opportunities
+│   │   │   └───page.tsx
+│   │   ├───pricingRequests
+│   │   │   ├───page.tsx
+│   │   │   └───create
+│   │   │       └───page.tsx
+│   │   └───staff
+│   │       ├───page.tsx
+│   │       └───invite
+│   │           └───page.tsx
+│   └───components
+│       ├───auth
+│       ├───dashboard
+│       │   ├───kpiCards
+│       │   ├───pipelineChart
+│       │   ├───revenueChart
+│       │   ├───salesActivities
+│       │   ├───scopeItems
+│       │   └───sections
+│       ├───global
+│       ├───loggedIn
+│       │   ├───accountInfo
+│       │   ├───activities
+│       │   ├───clientOverview
+│       │   │   ├───card
+│       │   │   ├───clientActionsCard
+│       │   │   ├───clientContactDetails
+│       │   │   ├───clientContracts
+│       │   │   ├───clientDocumentHistory
+│       │   │   ├───clientOpportunities
+│       │   │   ├───clientOverviewCard
+│       │   │   ├───clientPricingRequests
+│       │   │   └───clientProposals
+│       │   ├───clients
+│       │   ├───createActivity
+│       │   ├───createClient
+│       │   │   └───submitButton
+│       │   ├───createContact
+│       │   ├───createContract
+│       │   ├───createNote
+│       │   ├───createOpportunity
+│       │   ├───createPricingRequest
+│       │   ├───createRenewal
+│       │   ├───form
+│       │   ├───opportunities
+│       │   ├───pricingRequests
+│       │   ├───salesCycle
+│       │   ├───sideBar
+│       │   ├───staff
+│       │   ├───submitButton
+│       │   ├───submitProposal
+│       │   └───topBar
+│       ├───login
+│       └───signup
+ │   ├───lib
+ │   │   ├───api                                      # Axios instance and API config
+ │   │   │   ├───axiosInstance.ts
+ │   │   │   ├───endpoints.ts
+ │   │   │   └───proxy.ts
+ │   │   ├───providers                                # Provider-standard state folders
+ │   │   │   ├───userProvider
+ │   │   │   │   ├───actions.tsx
+ │   │   │   │   ├───context.tsx
+ │   │   │   │   ├───reducer.tsx
+ │   │   │   │   └───index.tsx
+ │   │   │   ├───tenantProvider
+ │   │   │   │   ├───actions.tsx
+ │   │   │   │   ├───context.tsx
+ │   │   │   │   ├───reducer.tsx
+ │   │   │   │   └───index.tsx
+ │   │   │   ├───projectProvider
+ │   │   │   │   ├───actions.tsx
+ │   │   │   │   ├───context.tsx
+ │   │   │   │   ├───reducer.tsx
+ │   │   │   │   └───index.tsx
+ │   │   │   ├───activityProvider
+ │   │   │   │   ├───actions.tsx
+ │   │   │   │   ├───context.tsx
+ │   │   │   │   ├───reducer.tsx
+ │   │   │   │   └───index.tsx
+ │   │   │   ├───clientProvider
+ │   │   │   │   ├───actions.tsx
+ │   │   │   │   ├───context.tsx
+ │   │   │   │   ├───reducer.tsx
+ │   │   │   │   └───index.tsx
+ │   │   │   ├───contractProvider
+ │   │   │   │   ├───actions.tsx
+ │   │   │   │   ├───context.tsx
+ │   │   │   │   ├───reducer.tsx
+ │   │   │   │   └───index.tsx
+ │   │   │   ├───noteProvider
+ │   │   │   │   ├───actions.tsx
+ │   │   │   │   ├───context.tsx
+ │   │   │   │   ├───reducer.tsx
+ │   │   │   │   └───index.tsx
+ │   │   │   ├───opportunityProvider
+ │   │   │   │   ├───actions.tsx
+ │   │   │   │   ├───context.tsx
+ │   │   │   │   ├───reducer.tsx
+ │   │   │   │   └───index.tsx
+ │   │   │   ├───pricingRequestProvider
+ │   │   │   │   ├───actions.tsx
+ │   │   │   │   ├───context.tsx
+ │   │   │   │   ├───reducer.tsx
+ │   │   │   │   └───index.tsx
+ │   │   │   └───staffProvider
+ │   │   │       ├───actions.tsx
+ │   │   │       ├───context.tsx
+ │   │   │       ├───reducer.tsx
+ │   │   │       └───index.tsx
+ │   │   └───utils                                    # Shared frontend utilities and services
+ │   │       ├───services
+ │   │       │   ├───userService.ts
+ │   │       │   ├───tenantService.ts
+ │   │       │   ├───projectService.ts
+ │   │       │   ├───activityService.ts
+ │   │       │   ├───clientService.ts
+ │   │       │   ├───contractService.ts
+ │   │       │   ├───noteService.ts
+ │   │       │   ├───opportunityService.ts
+ │   │       │   ├───pricingRequestService.ts
+ │   │       │   └───staffService.ts
+ │   │       └───index.ts
+ │   └───test-clients
 ├── public/
-│   └── img/
-│       ├── logo.png                            # Shared logo asset
-│       └── user.png                            # Shared user avatar asset
+│   ├── img/
+│   │   ├── logo.png
+│   │   └── user.png
+│   └── svg/                                            # Exported SVG assets once added
 ├── tests/
-│   └── example.spec.ts                         # Current Playwright coverage baseline
-├── playwright.config.ts                        # Playwright configuration
-├── package.json                                # Frontend scripts and dependencies
-├── tsconfig.json                               # TypeScript configuration
-├── next.config.mjs                             # Next.js configuration
-└── README.md                                   # Frontend-specific setup notes
+│   └── example.spec.ts
+├── playwright.config.ts
+├── package.json
+├── tsconfig.json
+├── next.config.mjs
+└── README.md
 ```
 
 ---
@@ -198,21 +323,24 @@ These should be added under coherent route groups rather than flat route sprawl.
 
 ---
 
-### 2. `nextjs/components` — Shared UI Composition Layer
+### 2. `nextjs/app/components` — UI Composition Layer
 
-**Purpose:** Contains reusable UI building blocks shared by routes and layouts.
+**Purpose:** Contains page-owned components and shared UI building blocks inside the `app/` tree, separate from route entry folders.
 
 Current responsibilities:
 
-- auth shell composition
-- admin/dashboard shell composition
-- reusable table/card presentation
-- shared icons
+- auth components
+- dashboard components
+- logged-in page and domain components
+- page-owned creation and detail components
+- global reused UI primitives where reuse is real
 
 #### Rules for the Component Layer
 
 - Keep components focused on presentation and interaction.
-- Move data access and domain transformation out of shared UI components when complexity increases.
+- Move data access and domain transformation out of UI components when complexity increases.
+- Keep page-specific components in `app/components/<page-or-domain>/...`.
+- Promote components to `app/components/global/` only when reuse is real across multiple routes or layout layers.
 - Prefer decomposition into:
   - shell components
   - list/table components
@@ -224,7 +352,7 @@ Current responsibilities:
 
 #### Current gap versus target standard
 
-The current components are custom-built and CSS-driven. New or heavily refactored shared components should move toward:
+The current components are custom-built and CSS-driven. New or heavily refactored components should move toward:
 
 - Ant Design primitives for common controls
 - `antd-style` or token-driven styling
@@ -234,19 +362,33 @@ This should be done incrementally rather than through a blind rewrite.
 
 ---
 
-### 3. `nextjs/lib` — Shared Data and Utility Layer
+### 3. `nextjs/app/lib` — Services, API, Providers, and Utilities
 
-**Purpose:** Holds lightweight shared data helpers, static data, and future frontend utility modules.
+**Purpose:** Separates raw API services, Axios configuration, provider state, and general utilities under the `app` tree.
 
-Current responsibility:
+Current and target responsibilities:
 
-- demo/static data backing current table and dashboard views
+- `app/lib/api`
+  - Axios instance definitions and API configuration
+- `app/lib/providers`
+  - provider folders following the provider-standards skill
+- `app/lib/utils`
+  - raw service functions that perform actual API calls
+  - shared non-service frontend utilities
 
 #### Rules for the Utility Layer
 
 - Keep utilities framework-safe and typed.
 - Shared UI-independent transformations belong here rather than inside components.
-- API clients, serializers, and domain mappers should live here or in a future dedicated `services/` or `api/` folder once live backend integration expands.
+- Define Axios instances in `app/lib/api/`.
+- Define provider folders in `app/lib/providers/<entityProvider>/` using:
+  - `actions.tsx`
+  - `context.tsx`
+  - `reducer.tsx`
+  - `index.tsx`
+- Define raw request services in `app/lib/utils/services/`.
+- Call `app/lib/utils/services` functions from provider `index.tsx` files.
+- Use proxy-aware helpers or route proxies so environment-specific backend URLs and auth forwarding do not leak into route components.
 - Avoid hiding side effects in generic helper files.
 
 ---
@@ -302,6 +444,50 @@ Current state:
 - Do not leave stale tests after UI behavior changes.
 
 ---
+
+## Provider Architecture
+
+Shared state should follow the provider-standards skill when a feature requires reusable entity-driven state.
+
+Required provider structure:
+
+```text
+app/lib/providers/
+├── userProvider/
+├── tenantProvider/
+├── projectProvider/
+├── activityProvider/
+├── clientProvider/
+├── contractProvider/
+├── noteProvider/
+├── opportunityProvider/
+├── pricingRequestProvider/
+└── staffProvider/
+```
+
+Provider rules:
+
+- `context.tsx` defines interfaces, initial state, and contexts
+- `actions.tsx` defines action enums and action creators
+- `reducer.tsx` defines the typed reducer
+- `index.tsx` wires reducer, provider, and hooks
+- `index.tsx` calls service functions from `app/lib/utils/services/`
+- service functions use Axios instances defined in `app/lib/api/`
+
+Use providers for:
+
+- user state
+- tenant state
+- project state
+- activity state
+- client state
+- contract state
+- note state
+- opportunity state
+- pricing request state
+- staff state
+
+only when shared state is genuinely needed across screens or major component sections
 
 ## Layout Strategy
 
@@ -412,7 +598,7 @@ Do not claim this structure exists until it is actually introduced.
 
 All user-visible actions must provide feedback:
 
-- loading indicators
+- pending indicators
 - disabled submit states
 - validation messages
 - empty states
@@ -552,6 +738,7 @@ At minimum, update the relevant doc when:
 - role-aware behavior changes
 - design source rules change
 - frontend architecture assumptions change
+- page component ownership patterns change
 
 ---
 

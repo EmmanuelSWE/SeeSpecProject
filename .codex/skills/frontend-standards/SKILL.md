@@ -24,6 +24,7 @@ Before making behavior-affecting changes, review:
 - `docs/architecture.md`
 - `docs/designs/figma-links.md`
 - `.codex/standards/frontend-structure.md`
+- `.codex/skills/provider-standards/SKILL.md` when shared state/providers are involved
 
 When role-aware behavior is involved, also review:
 - `docs/permissions.md` if present
@@ -70,6 +71,7 @@ Always produce frontend work that is:
 - Import shared tokens into component styles instead of hardcoding values.
 - Avoid inline styles except for trivial one-off cases that do not justify a style definition.
 - Keep visual language clean, deliberate, and aligned with Figma.
+- Follow the Ember Grid UI specification in `docs/ui-spec.md` for dark-surface hierarchy, thermal accents, and restrained motion.
 
 ## Project structure rules
 
@@ -80,12 +82,17 @@ Always produce frontend work that is:
 - Support multi-tenancy and user-specific content through dynamic segments, but do not expose raw internal IDs in user-facing route lists or navigation labels.
 - Prefer semantic route segments such as tenant slugs, project slugs, usernames, or other stable human-readable identifiers over opaque IDs when a route parameter is needed.
 - Keep route entry files slim.
-- Move substantial UI into separate components.
+- Keep route entry files slim.
+- Place page and feature components under `nextjs/app/components/`, segmented by page or domain.
+- Place API, provider, and utility support code under `nextjs/app/lib/`.
+- Keep test clients under `nextjs/app/test-clients/`.
+- Keep routing concerns in route folders and UI building blocks in `app/components/`.
 
 ### Component decomposition
 
 Break work into focused pieces such as:
 - page entry
+- page-scoped component folder under `app/components/`
 - data section
 - form section
 - summary section
@@ -94,6 +101,8 @@ Break work into focused pieces such as:
 - shared view-state component
 - colocated styles
 - colocated types when needed
+
+Each major page should own its own component folder under `app/components/`, for example `app/components/dashboard/` or `app/components/loggedIn/clients/`. Reusable parts should move to a shared `app/components/global/` area only when reuse is real.
 
 ### File naming
 - Use clear, intention-revealing names.
@@ -154,8 +163,15 @@ Every frontend change should consider:
 - Use suspense boundaries when they improve user experience.
 - Keep client state local unless shared state is genuinely required.
 - Avoid unnecessary global state.
-- Handle loading, empty, success, and error states explicitly.
+- Handle pending, empty, success, and error states explicitly.
 - Never assume data exists; guard null and undefined states properly.
+- Use centralized Axios instances for HTTP requests rather than ad hoc fetch logic spread across components.
+- Use proxy routes or proxy-aware API configuration where needed to isolate backend base URLs, auth forwarding, and environment differences from page components.
+- Keep API client logic out of page JSX.
+- Place Axios instance definitions in `app/lib/api/`.
+- Place provider contexts in `app/lib/providers/` using the provider standards pattern.
+- Place service functions and shared frontend helpers in `app/lib/utils/`.
+- Call service functions from provider `index.tsx` files.
 
 ## Frontend behavior rules
 
@@ -169,6 +185,10 @@ When implementing or changing frontend behavior:
 - keep authenticated screens inside the shared app route space
 - represent multi-tenant and user-specific context through dynamic routing only when the route needs it
 - keep navigation-facing route documentation focused on page purpose, not parameter implementation details
+- keep page-specific components under `app/components/` in folders matching the page or domain
+- move only genuinely shared pieces to `app/components/global/`
+- when shared entity state is needed, create providers in `app/lib/providers/<entityProvider>/`
+- keep API orchestration in provider index files and raw HTTP logic in `app/lib/utils/`
 
 ## Coding standards
 
@@ -231,6 +251,10 @@ A frontend task is not complete unless all of the following are true:
 - styles are colocated and consistent
 - related Playwright tests are added or updated
 - existing behavior was not broken unnecessarily
+- page-specific components live in `app/components/` rather than directly inside route folders
+- page-specific components are not dumped into the global component layer without reuse justification
+- request logic uses shared Axios configuration rather than duplicated page-local networking
+- provider-based shared state follows the `actions.tsx`, `context.tsx`, `reducer.tsx`, `index.tsx` structure in `app/lib/providers/`
 
 ## How to work
 
