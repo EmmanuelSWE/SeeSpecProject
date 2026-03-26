@@ -2,7 +2,7 @@
 
 ## Source of Truth Rules
 - Figma is the source of truth for layout and spacing.
-- SVG exports are the source of truth for static vector assets.
+- SVG exports are the source of truth for static vector assets. export into ./svgs folder
 - If Figma and SVG conflict:
   - layout, spacing, typography -> Figma wins
   - icon/vector path details -> SVG wins

@@ -44,6 +44,7 @@ This file defines repo-wide engineering rules that apply by default to all work 
   - error state
   - success state where relevant
 - Forms must define validation behavior and disabled/loading state
+  - follow the frontend structure in `.codex\standards\frontend-structure.md`
 
 ## Naming Conventions
 - Entities: singular nouns
