@@ -45,8 +45,10 @@ SeeSpec is a visual development platform for designing systems through UML diagr
 
 # Design
 
-## [MOCK UP](https://github.com/EmmanuelSWE/SeeSpecProject)
+## [MOCK UP](https://www.figma.com/design/yb7lujz1WtA1I6GjscwVcy/See-Spec?node-id=9-1522&m=dev&t=qrQNPmzXFxo3CJQm-1)
 
+
+## [DOMAIN MODEL]('./DomainModel.xml')
 # Running Application
 
 ## FRONTEND
@@ -54,8 +56,6 @@ SeeSpec is a visual development platform for designing systems through UML diagr
 - Next.js frontend:
 ### [nextjs folder](https://github.com/EmmanuelSWE/SeeSpecProject/tree/main/nextjs)
 
-- Angular reference frontend:
-### [angular folder](https://github.com/EmmanuelSWE/SeeSpecProject/tree/main/angular)
 
 ## BACKEND
 
