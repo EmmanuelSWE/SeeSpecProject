@@ -2,7 +2,7 @@
 
 ## Overview
 
-The SeeSpec (Human Resources Information System) backend is a **Domain-Driven Design (DDD)** application built on the **ASP.NET Boilerplate (ABP)** framework targeting **.NET 9**, using **PostgreSQL** as the database. The solution follows a layered, modular monolith architecture with clear separation of concerns.
+The SeeSpec (Human Resources Information System) backend is a **Domain-Driven Design (DDD)** application built on the **ASP.NET Boilerplate (ABP)** framework targeting **.NET 8**, using **PostgreSQL** as the database. The solution follows a layered, modular monolith architecture with clear separation of concerns.
 
 ---
 
@@ -560,7 +560,7 @@ ABP automatically exposes this as a REST API — no controller needed.
 
 | Component | Technology |
 |---|---|
-| Framework | ASP.NET Boilerplate (ABP Zero) on .NET 9 |
+| Framework | ASP.NET Boilerplate (ABP Zero) on .NET 8 |
 | Database | PostgreSQL via Npgsql |
 | ORM | Entity Framework Core |
 | IoC Container | Castle Windsor |
