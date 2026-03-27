@@ -11,6 +11,10 @@ export type AuthenticateResult = {
   encryptedAccessToken: string;
   expireInSeconds: number;
   userId: number;
+  tenantId: number | null;
+  userName: string;
+  fullName: string;
+  emailAddress: string;
 };
 
 export async function authenticate(payload: AuthenticateInput) {
@@ -20,4 +24,8 @@ export async function authenticate(payload: AuthenticateInput) {
   } catch {
     throw new Error("Sign-in failed. Verify the backend is running and the credentials are correct.");
   }
+}
+
+export async function logout() {
+  await axiosInstance.post("/api/TokenAuth/Logout");
 }

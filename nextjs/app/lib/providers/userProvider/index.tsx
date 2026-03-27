@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext, useEffect, useReducer } from "react";
-import { authenticate, type AuthenticateInput } from "@/app/lib/utils/services/auth-service";
+import { authenticate, logout as logoutRequest, type AuthenticateInput } from "@/app/lib/utils/services/auth-service";
 import {
   hydrateSession,
   loginError,
@@ -17,41 +17,57 @@ import {
 } from "./context";
 import { UserReducer } from "./reducer";
 
-const ACCESS_TOKEN_KEY = "seespec.accessToken";
-const ENCRYPTED_ACCESS_TOKEN_KEY = "seespec.encryptedAccessToken";
-const EXPIRE_IN_SECONDS_KEY = "seespec.expireInSeconds";
-const USER_ID_KEY = "seespec.userId";
+const SESSION_COOKIE_NAME = "seespec_user_session";
 
-function writeSession(session: IUserSession) {
-  localStorage.setItem(ACCESS_TOKEN_KEY, session.accessToken);
-  localStorage.setItem(ENCRYPTED_ACCESS_TOKEN_KEY, session.encryptedAccessToken);
-  localStorage.setItem(EXPIRE_IN_SECONDS_KEY, String(session.expireInSeconds));
-  localStorage.setItem(USER_ID_KEY, String(session.userId));
+function readCookieValue(name: string) {
+  const cookiePrefix = `${name}=`;
+  const cookies = document.cookie.split("; ");
+  const cookie = cookies.find((value) => value.startsWith(cookiePrefix));
+  return cookie ? decodeURIComponent(cookie.slice(cookiePrefix.length)) : null;
 }
 
 function readSession(): IUserSession | null {
-  const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-  const encryptedAccessToken = localStorage.getItem(ENCRYPTED_ACCESS_TOKEN_KEY);
-  const expireInSeconds = localStorage.getItem(EXPIRE_IN_SECONDS_KEY);
-  const userId = localStorage.getItem(USER_ID_KEY);
+  const rawSessionCookie = readCookieValue(SESSION_COOKIE_NAME);
 
-  if (!accessToken || !encryptedAccessToken || !expireInSeconds || !userId) {
+  if (!rawSessionCookie) {
     return null;
   }
 
-  return {
-    accessToken,
-    encryptedAccessToken,
-    expireInSeconds: Number(expireInSeconds),
-    userId: Number(userId)
-  };
+  try {
+    const parsed = JSON.parse(rawSessionCookie) as {
+      userId: number;
+      tenantId: number | null;
+      userName: string;
+      fullName: string;
+      emailAddress: string;
+      expireInSeconds: number;
+    };
+
+    return {
+      accessToken: "",
+      encryptedAccessToken: "",
+      expireInSeconds: parsed.expireInSeconds,
+      userId: parsed.userId,
+      tenantId: parsed.tenantId,
+      userName: parsed.userName,
+      fullName: parsed.fullName,
+      emailAddress: parsed.emailAddress
+    };
+  } catch {
+    return null;
+  }
 }
 
-function clearSession() {
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(ENCRYPTED_ACCESS_TOKEN_KEY);
-  localStorage.removeItem(EXPIRE_IN_SECONDS_KEY);
-  localStorage.removeItem(USER_ID_KEY);
+function clearSessionCookie() {
+  document.cookie = `${SESSION_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+}
+
+function mapLoginResultToSession(session: IUserSession): IUserSession {
+  return {
+    ...session,
+    accessToken: "",
+    encryptedAccessToken: ""
+  };
 }
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
@@ -65,8 +81,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     dispatch(loginPending());
 
     try {
-      const session = await authenticate(payload);
-      writeSession(session);
+      const result = await authenticate(payload);
+      const session = mapLoginResultToSession(result);
       dispatch(loginSuccess(session));
       return session;
     } catch (error) {
@@ -76,9 +92,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  function logout() {
-    clearSession();
-    dispatch(logoutAction());
+  async function logout() {
+    try {
+      await logoutRequest();
+    } finally {
+      clearSessionCookie();
+      dispatch(logoutAction());
+    }
   }
 
   function hydrateUserSession() {

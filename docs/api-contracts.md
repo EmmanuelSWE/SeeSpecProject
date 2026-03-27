@@ -117,12 +117,20 @@ Response:
 ```json
 {
   "accessToken": "jwt",
+  "encryptedAccessToken": "encrypted-jwt",
   "expireInSeconds": 3600,
   "userId": 123,
   "tenantId": 5,
-  "roles": ["SystemsArchitect"]
+  "userName": "ada",
+  "fullName": "Ada Lovelace",
+  "emailAddress": "ada@example.com"
 }
 ```
+
+Cookie behavior:
+
+- backend sets `seespec_auth_token` for cookie-based bearer auth
+- backend sets `seespec_user_session` with partial user info and `tenantId` for frontend hydration
 
 ## 6.2 Projects
 

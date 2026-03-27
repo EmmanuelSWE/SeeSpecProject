@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Icon, type IconName } from "@/app/components/global/icons";
 import { languages, multiLevelLinks, sidebarItems, versionText } from "@/app/lib/data";
+import { useUserActions, useUserState } from "@/app/lib/providers/userProvider";
 
 function Flag({ code }: { code: string }) {
   return <span className="flag">{code}</span>;
@@ -13,6 +14,8 @@ function Flag({ code }: { code: string }) {
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { logout } = useUserActions();
+  const { session } = useUserState();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -84,10 +87,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                   <Icon name="password" />
                   <span>Update password</span>
                 </Link>
-                <Link href="/account/login" className="dropdown-item">
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={async () => {
+                    await logout();
+                    window.location.href = "/account/login";
+                  }}
+                >
                   <Icon name="logout" />
                   <span>Logout</span>
-                </Link>
+                </button>
               </div>
             ) : null}
           </div>
@@ -102,7 +112,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         <div className="user-panel">
           <Image src="/img/user.png" alt="Current user" width={34} height={34} className="avatar-image" />
-          <span>.\\admin</span>
+          <span>{session?.userName ? `.\\${session.userName}` : ".\\guest"}</span>
         </div>
 
         <nav className="side-nav">
