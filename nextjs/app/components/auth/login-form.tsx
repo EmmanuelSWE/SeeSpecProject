@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { authenticate } from "@/app/lib/utils/services/auth-service";
+import { useUserActions, useUserState } from "@/app/lib/providers/userProvider";
 
 type LoginState = {
   userNameOrEmailAddress: string;
@@ -19,29 +19,17 @@ const INITIAL_STATE: LoginState = {
 
 export function LoginForm() {
   const router = useRouter();
+  const { login } = useUserActions();
+  const { isPending, isSuccess, errorMessage } = useUserState();
   const [form, setForm] = useState<LoginState>(INITIAL_STATE);
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsPending(true);
-    setIsSuccess(false);
-    setErrorMessage(null);
 
     try {
-      const result = await authenticate(form);
-      localStorage.setItem("seespec.accessToken", result.accessToken);
-      localStorage.setItem("seespec.encryptedAccessToken", result.encryptedAccessToken);
-      localStorage.setItem("seespec.userId", String(result.userId));
-      setIsSuccess(true);
+      await login(form);
       router.push("/app/home");
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to sign in.");
-    } finally {
-      setIsPending(false);
-    }
+    } catch {}
   }
 
   return (
