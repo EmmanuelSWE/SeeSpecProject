@@ -29,6 +29,11 @@ Before making behavior-affecting changes, review:
 When role-aware behavior is involved, also review:
 - `docs/permissions.md` if present
 
+When a page comes from Figma:
+- open the matching frame from `docs/designs/figma-links.md`
+- export the frame SVG when the design relies on frame geometry, vector framing, or illustration
+- treat the exported SVG as the geometry source of truth
+
 When implementation changes documented behavior or structure:
 - update the affected docs so the frontend guide and product docs do not drift
 
@@ -104,6 +109,8 @@ Break work into focused pieces such as:
 
 Each major page should own its own component folder under `app/components/`, for example `app/components/dashboard/` or `app/components/loggedIn/clients/`. Reusable parts should move to a shared `app/components/global/` area only when reuse is real.
 
+For new pages, create the components first and then assemble the route page from those components. Do not build the full page inline and split it later.
+
 ### File naming
 - Use clear, intention-revealing names.
 - Match file names to the main component or exported function.
@@ -166,6 +173,7 @@ Every frontend change should consider:
 - Handle pending, empty, success, and error states explicitly.
 - Never assume data exists; guard null and undefined states properly.
 - Use centralized Axios instances for HTTP requests rather than ad hoc fetch logic spread across components.
+- Do not use raw `fetch` for normal app API integration unless the task explicitly requires it.
 - Use proxy routes or proxy-aware API configuration where needed to isolate backend base URLs, auth forwarding, and environment differences from page components.
 - Keep API client logic out of page JSX.
 - Place Axios instance definitions in `app/lib/api/`.

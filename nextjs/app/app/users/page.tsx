@@ -1,5 +1,5 @@
-import { DataTableCard } from "@/components/data-table-card";
-import { users } from "@/lib/data";
+import { DataTableCard } from "@/app/components/global/data-table-card";
+import { users } from "@/app/lib/data";
 
 export default function UsersPage() {
   return (

@@ -8,7 +8,7 @@
   - icon/vector path details -> SVG wins
 - Any conflict must be resolved before implementation if it changes behavior.
 
-## Files
+## Files (Instead of links go to the `./svgs` path to get the pages)
 ### Project Workspace
 - Link: https://www.figma.com/design/yb7lujz1WtA1I6GjscwVcy/See-Spec?node-id=9-1522&m=dev&t=ZoPOkuBE1qpq55Ts-1
 - Frames:

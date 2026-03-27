@@ -46,7 +46,7 @@ namespace SeeSpec.Web.Host.Startup
 
                     options.Events = new JwtBearerEvents
                     {
-                        OnMessageReceived = QueryStringTokenResolver
+                        OnMessageReceived = ResolveToken
                     };
                 });
             }
@@ -54,12 +54,18 @@ namespace SeeSpec.Web.Host.Startup
 
         /* This method is needed to authorize SignalR javascript client.
          * SignalR can not send authorization header. So, we are getting it from query string as an encrypted text. */
-        private static Task QueryStringTokenResolver(MessageReceivedContext context)
+        private static Task ResolveToken(MessageReceivedContext context)
         {
+            var cookieAuthToken = context.HttpContext.Request.Cookies["seespec_auth_token"];
+            if (!string.IsNullOrWhiteSpace(cookieAuthToken))
+            {
+                context.Token = cookieAuthToken;
+                return Task.CompletedTask;
+            }
+
             if (!context.HttpContext.Request.Path.HasValue ||
                 !context.HttpContext.Request.Path.Value.StartsWith("/signalr"))
             {
-                // We are just looking for signalr clients
                 return Task.CompletedTask;
             }
 

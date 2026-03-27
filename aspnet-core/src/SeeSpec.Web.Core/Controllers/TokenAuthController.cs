@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Abp.Authorization;
 using Abp.Authorization.Users;
@@ -20,6 +22,9 @@ namespace SeeSpec.Controllers
     [Route("api/[controller]/[action]")]
     public class TokenAuthController : SeeSpecControllerBase
     {
+        private const string AuthCookieName = "seespec_auth_token";
+        private const string SessionCookieName = "seespec_user_session";
+
         private readonly LogInManager _logInManager;
         private readonly ITenantCache _tenantCache;
         private readonly AbpLoginResultTypeHelper _abpLoginResultTypeHelper;
@@ -43,18 +48,35 @@ namespace SeeSpec.Controllers
             var loginResult = await GetLoginResultAsync(
                 model.UserNameOrEmailAddress,
                 model.Password,
-                GetTenancyNameOrNull()
+                !string.IsNullOrWhiteSpace(model.TenancyName) ? model.TenancyName : GetTenancyNameOrNull()
             );
 
             var accessToken = CreateAccessToken(CreateJwtClaims(loginResult.Identity));
+            var fullName = $"{loginResult.User.Name} {loginResult.User.Surname}".Trim();
 
-            return new AuthenticateResultModel
+            var result = new AuthenticateResultModel
             {
                 AccessToken = accessToken,
                 EncryptedAccessToken = GetEncryptedAccessToken(accessToken),
                 ExpireInSeconds = (int)_configuration.Expiration.TotalSeconds,
-                UserId = loginResult.User.Id
+                UserId = loginResult.User.Id,
+                TenantId = loginResult.User.TenantId,
+                UserName = loginResult.User.UserName,
+                FullName = fullName,
+                EmailAddress = loginResult.User.EmailAddress
             };
+
+            AppendAuthCookies(result);
+
+            return result;
+        }
+
+        [HttpPost]
+        public IActionResult Logout()
+        {
+            Response.Cookies.Delete(AuthCookieName, BuildCookieOptions(httpOnly: true, expiresInSeconds: 0));
+            Response.Cookies.Delete(SessionCookieName, BuildCookieOptions(httpOnly: false, expiresInSeconds: 0));
+            return Ok();
         }
 
         private string GetTenancyNameOrNull()
@@ -115,6 +137,43 @@ namespace SeeSpec.Controllers
         private string GetEncryptedAccessToken(string accessToken)
         {
             return SimpleStringCipher.Instance.Encrypt(accessToken);
+        }
+
+        private void AppendAuthCookies(AuthenticateResultModel result)
+        {
+            Response.Cookies.Append(
+                AuthCookieName,
+                result.AccessToken,
+                BuildCookieOptions(httpOnly: true, expiresInSeconds: result.ExpireInSeconds)
+            );
+
+            var sessionPayload = JsonSerializer.Serialize(new
+            {
+                userId = result.UserId,
+                tenantId = result.TenantId,
+                userName = result.UserName,
+                fullName = result.FullName,
+                emailAddress = result.EmailAddress,
+                expireInSeconds = result.ExpireInSeconds
+            });
+
+            Response.Cookies.Append(
+                SessionCookieName,
+                sessionPayload,
+                BuildCookieOptions(httpOnly: false, expiresInSeconds: result.ExpireInSeconds)
+            );
+        }
+
+        private CookieOptions BuildCookieOptions(bool httpOnly, int expiresInSeconds)
+        {
+            return new CookieOptions
+            {
+                HttpOnly = httpOnly,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                Path = "/",
+                Expires = DateTimeOffset.UtcNow.AddSeconds(expiresInSeconds)
+            };
         }
     }
 }

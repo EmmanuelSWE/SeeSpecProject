@@ -16,6 +16,7 @@ Review:
 - `docs/api-contracts.md`
 - `docs/permissions.md`
 - `docs/designs/figma-links.md`
+- `docs/designs/output.pdf` when present or when the user points to the rendered output as the visual reference
 - `.codex/skills/frontend-standards/SKILL.md`
 - `.codex/skills/provider-standards/SKILL.md` when shared state is needed
 
@@ -25,9 +26,14 @@ Review:
 2. identify required API data
 3. identify role-aware actions and visibility rules
 4. identify Figma frame or documented layout intent
-5. break the page into route entry plus page-owned components
-6. implement page states
-7. add or update Playwright coverage
+5. open the matching Figma frame from `docs/designs/figma-links.md`
+6. load the matching SVG export from `docs/designs/svgs` when it exists
+7. verify the rendered appearance against `docs/designs/output.pdf` when that file exists or when the user says the output PDF is the final visual reference
+8. treat the rendered SVG/PDF output as the source of truth for component breakdown, relative spacing, major geometry, copy, and placement of visible controls
+9. identify reusable page-owned components directly from the design output before writing the route entry
+10. assemble the route entry from those components
+11. implement page states
+12. add or update Playwright coverage
 
 ## Route rules
 
@@ -38,6 +44,16 @@ Review:
 - prefer readable slugs in route segments
 
 ## Page structure
+
+For each page, define components first:
+
+- shell component
+- header component
+- content section components
+- contextual or side-panel components where needed
+- state components where needed
+
+Then compose the route entry from those components.
 
 For each page, define:
 
@@ -76,11 +92,19 @@ Use `docs/permissions.md` to determine:
 - keep request logic out of page JSX
 - use providers only when state is genuinely shared
 - use typed service functions for API calls
+- send requests through shared Axios instances in `app/lib/api/`
 
 ## Design rules
 
 - follow `docs/ui-spec.md` and the Ember Grid design direction
 - use Figma for layout and spacing when a frame exists
+- when an SVG export exists in `docs/designs/svgs`, follow that exported frame exactly unless the user explicitly approves a deviation
+- when `docs/designs/output.pdf` exists, use it as the final visual check for how the page must actually look after rendering
+- do not replace a form field, button, label, or visible panel from the SVG with a looser interpretation
+- if the rendered output shows different copy, spacing, or control ordering than your earlier interpretation, the rendered output wins
+- if the SVG shows a tenant input, search box, side panel, or control row, implement that exact surface first and make it functional where the contract allows
+- export the matching frame SVG when the frame defines vector geometry the page should preserve
+- rebuild the page from extracted components first, then compose the page from those components
 - preserve Angular parity only where that is still a stated requirement
 - keep typography, contrast, spacing, and motion intentional
 
