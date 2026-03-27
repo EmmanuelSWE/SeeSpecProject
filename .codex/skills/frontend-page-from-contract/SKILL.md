@@ -16,6 +16,7 @@ Review:
 - `docs/api-contracts.md`
 - `docs/permissions.md`
 - `docs/designs/figma-links.md`
+- `docs/designs/output.pdf` when present or when the user points to the rendered output as the visual reference
 - `.codex/skills/frontend-standards/SKILL.md`
 - `.codex/skills/provider-standards/SKILL.md` when shared state is needed
 
@@ -26,11 +27,13 @@ Review:
 3. identify role-aware actions and visibility rules
 4. identify Figma frame or documented layout intent
 5. open the matching Figma frame from `docs/designs/figma-links.md`
-6. export the frame SVG when the page depends on frame geometry or vector framing
-7. break the page into page-owned components before writing the route entry
-8. assemble the route entry from those components
-9. implement page states
-10. add or update Playwright coverage
+6. load the matching SVG export from `docs/designs/svgs` when it exists
+7. verify the rendered appearance against `docs/designs/output.pdf` when that file exists or when the user says the output PDF is the final visual reference
+8. treat the rendered SVG/PDF output as the source of truth for component breakdown, relative spacing, major geometry, copy, and placement of visible controls
+9. identify reusable page-owned components directly from the design output before writing the route entry
+10. assemble the route entry from those components
+11. implement page states
+12. add or update Playwright coverage
 
 ## Route rules
 
@@ -95,7 +98,13 @@ Use `docs/permissions.md` to determine:
 
 - follow `docs/ui-spec.md` and the Ember Grid design direction
 - use Figma for layout and spacing when a frame exists
+- when an SVG export exists in `docs/designs/svgs`, follow that exported frame exactly unless the user explicitly approves a deviation
+- when `docs/designs/output.pdf` exists, use it as the final visual check for how the page must actually look after rendering
+- do not replace a form field, button, label, or visible panel from the SVG with a looser interpretation
+- if the rendered output shows different copy, spacing, or control ordering than your earlier interpretation, the rendered output wins
+- if the SVG shows a tenant input, search box, side panel, or control row, implement that exact surface first and make it functional where the contract allows
 - export the matching frame SVG when the frame defines vector geometry the page should preserve
+- rebuild the page from extracted components first, then compose the page from those components
 - preserve Angular parity only where that is still a stated requirement
 - keep typography, contrast, spacing, and motion intentional
 

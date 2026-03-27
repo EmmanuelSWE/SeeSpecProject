@@ -106,6 +106,7 @@ Request:
 
 ```json
 {
+  "tenancyName": "default",
   "userNameOrEmailAddress": "arch@example.com",
   "password": "string",
   "rememberClient": true

@@ -3,18 +3,20 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AuthInputField } from "@/app/components/auth/auth-input-field";
+import { checkTenantAvailability } from "@/app/lib/utils/services/auth-service";
 import { useUserActions, useUserState } from "@/app/lib/providers/userProvider";
 
 type LoginState = {
-  userNameOrEmailAddress: string;
+  tenantName: string;
+  email: string;
   password: string;
-  rememberClient: boolean;
 };
 
 const INITIAL_STATE: LoginState = {
-  userNameOrEmailAddress: "admin",
-  password: "123qwe",
-  rememberClient: true
+  tenantName: "",
+  email: "",
+  password: ""
 };
 
 export function LoginForm() {
@@ -22,86 +24,177 @@ export function LoginForm() {
   const { login } = useUserActions();
   const { isPending, isSuccess, errorMessage } = useUserState();
   const [form, setForm] = useState<LoginState>(INITIAL_STATE);
+  const [isTenantPending, setIsTenantPending] = useState(false);
+  const [tenantMessage, setTenantMessage] = useState<string | null>(null);
+  const [tenantError, setTenantError] = useState<string | null>(null);
+
+  async function applyTenant(nextTenantName: string) {
+    const trimmedTenantName = nextTenantName.trim();
+
+    if (!trimmedTenantName) {
+      setTenantMessage(null);
+      setTenantError("Enter a tenant name before saving.");
+      return;
+    }
+
+    setIsTenantPending(true);
+    setTenantError(null);
+    setTenantMessage("Searching for tenant...");
+
+    try {
+      const result = await checkTenantAvailability(trimmedTenantName);
+
+      if (result.state === "Available") {
+        setForm((current) => ({ ...current, tenantName: trimmedTenantName }));
+        setTenantMessage(`Tenant ready: ${trimmedTenantName}`);
+        return;
+      }
+
+      if (result.state === "InActive") {
+        setTenantMessage(null);
+        setTenantError(`Tenant "${trimmedTenantName}" is inactive.`);
+        return;
+      }
+
+      setTenantMessage(null);
+      setTenantError(`Tenant "${trimmedTenantName}" does not exist.`);
+    } catch (error) {
+      setTenantMessage(null);
+      setTenantError(error instanceof Error ? error.message : "Unable to verify tenant right now.");
+    } finally {
+      setIsTenantPending(false);
+    }
+  }
+
+  async function selectHostTenant() {
+    setIsTenantPending(true);
+    setTenantError(null);
+    setTenantMessage("Loading host tenant...");
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    setForm((current) => ({ ...current, tenantName: "" }));
+    setTenantMessage("Host tenant selected.");
+    setIsTenantPending(false);
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     try {
-      await login(form);
+      const tenancyName = form.tenantName.trim();
+
+      await login({
+        tenancyName: tenancyName || undefined,
+        userNameOrEmailAddress: form.email,
+        password: form.password,
+        rememberClient: true
+      });
       router.push("/app/home");
     } catch {}
   }
 
   return (
-    <div className="auth-form-wrap account-view">
+    <div className="auth-form-wrap">
       <div className="auth-title-block">
-        <h4 className="text-center">Sign in</h4>
-        <p className="auth-subtitle">Use your tenant account to enter the workspace.</p>
+        <h1>Login to SeeSpec</h1>
+        <p className="auth-subtitle">Enter your workspace credentials</p>
       </div>
 
-      <form className="auth-form compact-form" onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label className="auth-label" htmlFor="username">
-            Username or email
-          </label>
-          <div className="input-group">
-            <input
-              id="username"
-              type="text"
-              className="form-control"
-              placeholder="admin"
-              value={form.userNameOrEmailAddress}
-              onChange={(event) => setForm((current) => ({ ...current, userNameOrEmailAddress: event.target.value }))}
-              disabled={isPending}
-              autoComplete="username"
-              required
-            />
-            <div className="input-group-append">
-              <div className="input-group-text">U</div>
-            </div>
-          </div>
-        </div>
+      <form className="auth-form" onSubmit={handleSubmit}>
+        <div className="auth-tenant-group">
+          <AuthInputField
+            id="tenantName"
+            type="text"
+            label="Tenant name"
+            placeholder="Default"
+            value={form.tenantName}
+            icon=""
+            disabled={isPending || isTenantPending}
+            autoComplete="organization"
+            onChange={(tenantName) => {
+              setTenantMessage(null);
+              setTenantError(null);
+              setForm((current) => ({ ...current, tenantName }));
+            }}
+          />
 
-        <div className="form-group">
-          <label className="auth-label" htmlFor="password">
-            Password
-          </label>
-          <div className="input-group">
-            <input
-              id="password"
-              type="password"
-              className="form-control"
-              placeholder="Enter password"
-              value={form.password}
-              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-              disabled={isPending}
-              autoComplete="current-password"
-              required
-            />
-            <div className="input-group-append">
-              <div className="input-group-text">L</div>
-            </div>
-          </div>
-        </div>
+          <div className="auth-tenant-actions">
+            <button
+              type="button"
+              className="secondary-button auth-tenant-button"
+              disabled={isPending || isTenantPending}
+              onClick={() => applyTenant(form.tenantName)}
+            >
+              <span className={`auth-button-loader ${isTenantPending ? "is-visible" : ""}`} aria-hidden="true" />
+              <span>{isTenantPending ? "Loading..." : "Save Tenant"}</span>
+            </button>
 
-        <div className="form-row auth-submit-row">
-          <div className="form-col remember-col">
-            <label className="remember-me">
-              <input
-                type="checkbox"
-                checked={form.rememberClient}
-                onChange={(event) => setForm((current) => ({ ...current, rememberClient: event.target.checked }))}
-                disabled={isPending}
-              />
-              <span>Remember me</span>
-            </label>
-          </div>
-          <div className="form-col submit-col">
-            <button type="submit" className="primary-button full-width" disabled={isPending}>
-              {isPending ? "Signing in..." : "Sign in"}
+            <button
+              type="button"
+              className="secondary-button auth-tenant-button"
+              disabled={isPending || isTenantPending}
+              onClick={selectHostTenant}
+            >
+              <span className={`auth-button-loader ${isTenantPending ? "is-visible" : ""}`} aria-hidden="true" />
+              <span>{isTenantPending ? "Loading..." : "Host Tenant"}</span>
             </button>
           </div>
+
+          {tenantMessage ? (
+            <p className="auth-status auth-status-neutral" role="status" aria-live="polite">
+              {tenantMessage}
+            </p>
+          ) : null}
+
+          {tenantError ? (
+            <p className="auth-status auth-status-error" role="alert">
+              {tenantError}
+            </p>
+          ) : null}
         </div>
+
+        <AuthInputField
+          id="email"
+          type="text"
+          label="Email"
+          placeholder="demo@seespec.com"
+          value={form.email}
+          icon=""
+          disabled={isPending}
+          autoComplete="username"
+          onChange={(email) => setForm((current) => ({ ...current, email }))}
+        />
+
+        <AuthInputField
+          id="password"
+          type="password"
+          label="Password"
+          placeholder="password123"
+          value={form.password}
+          icon=""
+          disabled={isPending}
+          autoComplete="current-password"
+          onChange={(password) => setForm((current) => ({ ...current, password }))}
+        />
+
+        <p className="auth-demo-note">Demo: Select a role to mock login</p>
+
+        <button type="button" className="auth-role-preview" disabled>
+          Host Admin
+        </button>
+
+        <div className="auth-submit-row">
+          <button type="submit" className="primary-button auth-submit-button" disabled={isPending}>
+            {isPending ? "Signing in..." : "Sign In"}
+          </button>
+        </div>
+
+        {isPending ? (
+          <p className="auth-status auth-status-neutral" role="status" aria-live="polite">
+            Logging in...
+          </p>
+        ) : null}
 
         {errorMessage ? (
           <p className="auth-status auth-status-error" role="alert">
@@ -113,11 +206,8 @@ export function LoginForm() {
       </form>
 
       <div className="auth-form-footer">
-        <p className="register-link">
-          <Link href="/account/register">Create an account</Link>
-        </p>
-        <p className="auth-helper-text">
-          Backend endpoint: <code>/api/TokenAuth/Authenticate</code>
+        <p className="auth-footer-copy">
+          Don&apos;t have a workspace? <Link href="/account/register">Create one</Link>
         </p>
       </div>
     </div>

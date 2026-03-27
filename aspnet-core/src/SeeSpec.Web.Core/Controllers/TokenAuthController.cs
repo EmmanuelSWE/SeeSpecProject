@@ -48,7 +48,7 @@ namespace SeeSpec.Controllers
             var loginResult = await GetLoginResultAsync(
                 model.UserNameOrEmailAddress,
                 model.Password,
-                GetTenancyNameOrNull()
+                !string.IsNullOrWhiteSpace(model.TenancyName) ? model.TenancyName : GetTenancyNameOrNull()
             );
 
             var accessToken = CreateAccessToken(CreateJwtClaims(loginResult.Identity));
