@@ -1,7 +1,107 @@
+"use client";
+
+import Link from "next/link";
 import { Icon } from "@/app/components/global/icons";
 import { closedPullRequests, dashboardStats, openIssues, summaryStats } from "@/app/lib/data";
+import { useUserState } from "@/app/lib/providers/userProvider";
 
 export default function HomePage() {
+  const { session } = useUserState();
+  const isHostContext = session?.tenantId == null;
+
+  if (isHostContext) {
+    return (
+      <section className="page-section host-home">
+        <div className="host-home-hero">
+          <div className="host-home-copy">
+            <span className="host-home-eyebrow">Host Administration</span>
+            <h1>Profile</h1>
+            <p>Host access is limited to your profile, system users, and tenant administration.</p>
+          </div>
+          <div className="host-home-badge">
+            <span>Host</span>
+          </div>
+        </div>
+
+        <div className="summary-grid host-summary-grid">
+          <article className="info-card host-info-card">
+            <div className="info-icon blue">
+              <Icon name="users" />
+            </div>
+            <div>
+              <p>User name</p>
+              <strong>{session?.userName ?? "guest"}</strong>
+            </div>
+          </article>
+
+          <article className="info-card host-info-card">
+            <div className="info-icon teal">
+              <Icon name="info" />
+            </div>
+            <div>
+              <p>Full name</p>
+              <strong>{session?.fullName || "Not available"}</strong>
+            </div>
+          </article>
+
+          <article className="info-card host-info-card">
+            <div className="info-icon gold">
+              <Icon name="building" />
+            </div>
+            <div>
+              <p>Scope</p>
+              <strong>Host administration</strong>
+            </div>
+          </article>
+        </div>
+
+        <div className="card narrow-card host-panel">
+          <div className="card-header">
+            <h3>Profile Information</h3>
+          </div>
+          <div className="card-body host-profile-card">
+            <dl className="host-profile-list">
+              <div>
+                <dt>User ID</dt>
+                <dd>{session?.userId ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd>{session?.emailAddress ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>Session scope</dt>
+                <dd>Host administration</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+
+        <div className="summary-grid host-summary-grid">
+          <Link href="/app/users" className="info-card host-link-card">
+            <div className="info-icon blue">
+              <Icon name="users" />
+            </div>
+            <div>
+              <p>System users</p>
+              <strong>Open Users</strong>
+            </div>
+          </Link>
+
+          <Link href="/app/tenants" className="info-card host-link-card">
+            <div className="info-icon teal">
+              <Icon name="building" />
+            </div>
+            <div>
+              <p>Tenants</p>
+              <strong>Open Tenants</strong>
+            </div>
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="page-section">
       <h1>Home page</h1>

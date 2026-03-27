@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AuthInputField } from "@/app/components/auth/auth-input-field";
-import { checkTenantAvailability } from "@/app/lib/utils/services/auth-service";
+import { AuthSelectField } from "@/app/components/auth/auth-select-field";
+import { getActiveTenantsForLogin, type ActiveTenantLoginOption } from "@/app/lib/utils/services/auth-service";
 import { useUserActions, useUserState } from "@/app/lib/providers/userProvider";
 
 type LoginState = {
@@ -14,7 +15,7 @@ type LoginState = {
 };
 
 const INITIAL_STATE: LoginState = {
-  tenantName: "",
+  tenantName: "__host__",
   email: "",
   password: ""
 };
@@ -24,59 +25,55 @@ export function LoginForm() {
   const { login } = useUserActions();
   const { isPending, isSuccess, errorMessage } = useUserState();
   const [form, setForm] = useState<LoginState>(INITIAL_STATE);
-  const [isTenantPending, setIsTenantPending] = useState(false);
-  const [tenantMessage, setTenantMessage] = useState<string | null>(null);
+  const [tenantOptions, setTenantOptions] = useState<ActiveTenantLoginOption[]>([]);
+  const [isTenantPending, setIsTenantPending] = useState(true);
+  const [tenantMessage, setTenantMessage] = useState<string | null>("Loading tenants...");
   const [tenantError, setTenantError] = useState<string | null>(null);
 
-  async function applyTenant(nextTenantName: string) {
-    const trimmedTenantName = nextTenantName.trim();
+  useEffect(() => {
+    let isMounted = true;
 
-    if (!trimmedTenantName) {
-      setTenantMessage(null);
-      setTenantError("Enter a tenant name before saving.");
-      return;
-    }
+    getActiveTenantsForLogin()
+      .then((tenants) => {
+        if (!isMounted) {
+          return;
+        }
 
-    setIsTenantPending(true);
-    setTenantError(null);
-    setTenantMessage("Searching for tenant...");
+        setTenantOptions(tenants);
+        setTenantMessage(tenants.length > 0 ? "Tenant list ready." : "Host tenant available. Tenant list endpoint is not available yet.");
+        setTenantError(null);
+      })
+      .catch((error) => {
+        if (!isMounted) {
+          return;
+        }
 
-    try {
-      const result = await checkTenantAvailability(trimmedTenantName);
-
-      if (result.state === "Available") {
-        setForm((current) => ({ ...current, tenantName: trimmedTenantName }));
-        setTenantMessage(`Tenant ready: ${trimmedTenantName}`);
-        return;
-      }
-
-      if (result.state === "InActive") {
         setTenantMessage(null);
-        setTenantError(`Tenant "${trimmedTenantName}" is inactive.`);
-        return;
-      }
+        setTenantError(error instanceof Error ? error.message : "Unable to load tenants right now.");
+      })
+      .finally(() => {
+        if (!isMounted) {
+          return;
+        }
 
-      setTenantMessage(null);
-      setTenantError(`Tenant "${trimmedTenantName}" does not exist.`);
-    } catch (error) {
-      setTenantMessage(null);
-      setTenantError(error instanceof Error ? error.message : "Unable to verify tenant right now.");
-    } finally {
-      setIsTenantPending(false);
-    }
-  }
+        setIsTenantPending(false);
+      });
 
-  async function selectHostTenant() {
-    setIsTenantPending(true);
-    setTenantError(null);
-    setTenantMessage("Loading host tenant...");
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    setForm((current) => ({ ...current, tenantName: "" }));
-    setTenantMessage("Host tenant selected.");
-    setIsTenantPending(false);
-  }
+  const tenantSelectOptions = useMemo(
+    () => [
+      { value: "__host__", label: "Host Tenant" },
+      ...tenantOptions.map((tenant) => ({
+        value: tenant.tenancyName,
+        label: tenant.name === tenant.tenancyName ? tenant.name : `${tenant.name} (${tenant.tenancyName})`
+      }))
+    ],
+    [tenantOptions]
+  );
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,7 +82,7 @@ export function LoginForm() {
       const tenancyName = form.tenantName.trim();
 
       await login({
-        tenancyName: tenancyName || undefined,
+        tenancyName: tenancyName && tenancyName !== "__host__" ? tenancyName : undefined,
         userNameOrEmailAddress: form.email,
         password: form.password,
         rememberClient: true
@@ -103,43 +100,18 @@ export function LoginForm() {
 
       <form className="auth-form" onSubmit={handleSubmit}>
         <div className="auth-tenant-group">
-          <AuthInputField
+          <AuthSelectField
             id="tenantName"
-            type="text"
             label="Tenant name"
-            placeholder="Default"
             value={form.tenantName}
-            icon=""
             disabled={isPending || isTenantPending}
-            autoComplete="organization"
+            options={tenantSelectOptions}
             onChange={(tenantName) => {
-              setTenantMessage(null);
               setTenantError(null);
+              setTenantMessage(tenantName === "__host__" ? "Host tenant selected." : "Tenant selected.");
               setForm((current) => ({ ...current, tenantName }));
             }}
           />
-
-          <div className="auth-tenant-actions">
-            <button
-              type="button"
-              className="secondary-button auth-tenant-button"
-              disabled={isPending || isTenantPending}
-              onClick={() => applyTenant(form.tenantName)}
-            >
-              <span className={`auth-button-loader ${isTenantPending ? "is-visible" : ""}`} aria-hidden="true" />
-              <span>{isTenantPending ? "Loading..." : "Save Tenant"}</span>
-            </button>
-
-            <button
-              type="button"
-              className="secondary-button auth-tenant-button"
-              disabled={isPending || isTenantPending}
-              onClick={selectHostTenant}
-            >
-              <span className={`auth-button-loader ${isTenantPending ? "is-visible" : ""}`} aria-hidden="true" />
-              <span>{isTenantPending ? "Loading..." : "Host Tenant"}</span>
-            </button>
-          </div>
 
           {tenantMessage ? (
             <p className="auth-status auth-status-neutral" role="status" aria-live="polite">
@@ -185,7 +157,7 @@ export function LoginForm() {
         </button>
 
         <div className="auth-submit-row">
-          <button type="submit" className="primary-button auth-submit-button" disabled={isPending}>
+          <button type="submit" className="primary-button auth-submit-button" disabled={isPending || isTenantPending}>
             {isPending ? "Signing in..." : "Sign In"}
           </button>
         </div>

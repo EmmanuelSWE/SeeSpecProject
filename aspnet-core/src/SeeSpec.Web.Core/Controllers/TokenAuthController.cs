@@ -13,6 +13,7 @@ using Abp.MultiTenancy;
 using Abp.Runtime.Security;
 using SeeSpec.Authentication.JwtBearer;
 using SeeSpec.Authorization;
+using SeeSpec.Authorization.Roles;
 using SeeSpec.Authorization.Users;
 using SeeSpec.Models.TokenAuth;
 using SeeSpec.MultiTenancy;
@@ -26,17 +27,20 @@ namespace SeeSpec.Controllers
         private const string SessionCookieName = "seespec_user_session";
 
         private readonly LogInManager _logInManager;
+        private readonly UserManager _userManager;
         private readonly ITenantCache _tenantCache;
         private readonly AbpLoginResultTypeHelper _abpLoginResultTypeHelper;
         private readonly TokenAuthConfiguration _configuration;
 
         public TokenAuthController(
             LogInManager logInManager,
+            UserManager userManager,
             ITenantCache tenantCache,
             AbpLoginResultTypeHelper abpLoginResultTypeHelper,
             TokenAuthConfiguration configuration)
         {
             _logInManager = logInManager;
+            _userManager = userManager;
             _tenantCache = tenantCache;
             _abpLoginResultTypeHelper = abpLoginResultTypeHelper;
             _configuration = configuration;
@@ -93,13 +97,23 @@ namespace SeeSpec.Controllers
         {
             var loginResult = await _logInManager.LoginAsync(usernameOrEmailAddress, password, tenancyName);
 
-            switch (loginResult.Result)
+            if (loginResult.Result == AbpLoginResultType.Success)
             {
-                case AbpLoginResultType.Success:
-                    return loginResult;
-                default:
-                    throw _abpLoginResultTypeHelper.CreateExceptionForFailedLoginAttempt(loginResult.Result, usernameOrEmailAddress, tenancyName);
+                return loginResult;
             }
+
+            if (!string.IsNullOrWhiteSpace(tenancyName))
+            {
+                var hostLoginResult = await _logInManager.LoginAsync(usernameOrEmailAddress, password, null);
+
+                if (hostLoginResult.Result == AbpLoginResultType.Success &&
+                    await _userManager.IsInRoleAsync(hostLoginResult.User, StaticRoleNames.Host.Admin))
+                {
+                    return hostLoginResult;
+                }
+            }
+
+            throw _abpLoginResultTypeHelper.CreateExceptionForFailedLoginAttempt(loginResult.Result, usernameOrEmailAddress, tenancyName);
         }
 
         private string CreateAccessToken(IEnumerable<Claim> claims, TimeSpan? expiration = null)
@@ -166,11 +180,13 @@ namespace SeeSpec.Controllers
 
         private CookieOptions BuildCookieOptions(bool httpOnly, int expiresInSeconds)
         {
+            var isSecureRequest = Request.IsHttps;
+
             return new CookieOptions
             {
                 HttpOnly = httpOnly,
-                Secure = Request.IsHttps,
-                SameSite = SameSiteMode.Lax,
+                Secure = isSecureRequest,
+                SameSite = isSecureRequest ? SameSiteMode.None : SameSiteMode.Lax,
                 Path = "/",
                 Expires = DateTimeOffset.UtcNow.AddSeconds(expiresInSeconds)
             };

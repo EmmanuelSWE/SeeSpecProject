@@ -1,7 +1,12 @@
 "use client";
 
 import { useContext, useEffect, useReducer } from "react";
-import { authenticate, logout as logoutRequest, type AuthenticateInput } from "@/app/lib/utils/services/auth-service";
+import {
+  authenticate,
+  getCurrentLoginInformations,
+  logout as logoutRequest,
+  type AuthenticateInput
+} from "@/app/lib/utils/services/auth-service";
 import {
   hydrateSession,
   loginError,
@@ -70,11 +75,46 @@ function mapLoginResultToSession(session: IUserSession): IUserSession {
   };
 }
 
+async function fetchCurrentSession(): Promise<IUserSession | null> {
+  try {
+    const result = await getCurrentLoginInformations();
+
+    if (!result.user) {
+      return null;
+    }
+
+    return {
+      accessToken: "",
+      encryptedAccessToken: "",
+      expireInSeconds: 0,
+      userId: result.user.id,
+      tenantId: result.tenant?.id ?? null,
+      userName: result.user.userName,
+      fullName: `${result.user.name} ${result.user.surname}`.trim(),
+      emailAddress: result.user.emailAddress
+    };
+  } catch {
+    return readSession();
+  }
+}
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(UserReducer, INITIAL_STATE);
 
   useEffect(() => {
-    dispatch(hydrateSession(readSession()));
+    let isMounted = true;
+
+    fetchCurrentSession().then((session) => {
+      if (!isMounted) {
+        return;
+      }
+
+      dispatch(hydrateSession(session));
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   async function login(payload: AuthenticateInput) {
@@ -102,7 +142,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }
 
   function hydrateUserSession() {
-    dispatch(hydrateSession(readSession()));
+    fetchCurrentSession().then((session) => {
+      dispatch(hydrateSession(session));
+    });
   }
 
   return (

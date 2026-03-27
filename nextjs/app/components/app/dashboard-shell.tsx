@@ -22,13 +22,23 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [multiLevelOpen, setMultiLevelOpen] = useState(true);
   const currentYear = new Date().getFullYear();
   const currentLanguage = languages[0];
+  const isHostContext = session?.tenantId == null;
+  const visibleSidebarItems = useMemo(() => {
+    if (!isHostContext) {
+      return sidebarItems;
+    }
+
+    return sidebarItems
+      .filter((item) => item.href === "/app/home" || item.href === "/app/users" || item.href === "/app/tenants")
+      .map((item) => (item.href === "/app/home" ? { ...item, label: "Profile" } : item));
+  }, [isHostContext]);
   const activeLabel = useMemo(
-    () => sidebarItems.find((item) => pathname === item.href)?.label ?? "About",
-    [pathname]
+    () => visibleSidebarItems.find((item) => pathname === item.href)?.label ?? (isHostContext ? "Profile" : "About"),
+    [isHostContext, pathname, visibleSidebarItems]
   );
 
   return (
-    <div className={`shell ${sidebarOpen ? "sidebar-open" : ""}`}>
+    <div className={`shell ${isHostContext ? "host-shell" : ""} ${sidebarOpen ? "sidebar-open" : ""}`}>
       <header className="topbar">
         <div className="topbar-left">
           <button
@@ -40,36 +50,50 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <Icon name="menu" />
           </button>
           <Link href="/app/home" className="top-link">
-            Home page
+            {isHostContext ? "Profile" : "Home page"}
           </Link>
-          <Link href="/app/about" className="top-link">
-            About
-          </Link>
+          {!isHostContext ? (
+            <Link href="/app/about" className="top-link">
+              About
+            </Link>
+          ) : null}
+          {isHostContext ? (
+            <>
+              <Link href="/app/users" className="top-link">
+                Users
+              </Link>
+              <Link href="/app/tenants" className="top-link">
+                Tenants
+              </Link>
+            </>
+          ) : null}
         </div>
         <div className="topbar-right">
-          <div className="menu-wrapper">
-            <button
-              type="button"
-              className="plain-button"
-              onClick={() => {
-                setLanguageOpen((value) => !value);
-                setUserOpen(false);
-              }}
-            >
-              <Flag code={currentLanguage.flag} />
-              <span>{currentLanguage.label}</span>
-            </button>
-            {languageOpen ? (
-              <div className="dropdown">
-                {languages.slice(1).map((language) => (
-                  <button key={language.code} type="button" className="dropdown-item">
-                    <Flag code={language.flag} />
-                    <span>{language.label}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          {!isHostContext ? (
+            <div className="menu-wrapper">
+              <button
+                type="button"
+                className="plain-button"
+                onClick={() => {
+                  setLanguageOpen((value) => !value);
+                  setUserOpen(false);
+                }}
+              >
+                <Flag code={currentLanguage.flag} />
+                <span>{currentLanguage.label}</span>
+              </button>
+              {languageOpen ? (
+                <div className="dropdown">
+                  {languages.slice(1).map((language) => (
+                    <button key={language.code} type="button" className="dropdown-item">
+                      <Flag code={language.flag} />
+                      <span>{language.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="menu-wrapper">
             <button
               type="button"
@@ -116,7 +140,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="side-nav">
-          {sidebarItems.map((item) => {
+          {visibleSidebarItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link key={item.href} href={item.href} className={`side-link ${isActive ? "active" : ""}`}>
@@ -126,29 +150,33 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             );
           })}
 
-          <button
-            type="button"
-            className={`side-link side-toggle ${multiLevelOpen ? "active-parent" : ""}`}
-            onClick={() => setMultiLevelOpen((value) => !value)}
-          >
-            <span className="dot-icon" />
-            <span>Multi Level Menu</span>
-            <Icon name="chevron" className={multiLevelOpen ? "rotated" : ""} />
-          </button>
+          {!isHostContext ? (
+            <>
+              <button
+                type="button"
+                className={`side-link side-toggle ${multiLevelOpen ? "active-parent" : ""}`}
+                onClick={() => setMultiLevelOpen((value) => !value)}
+              >
+                <span className="dot-icon" />
+                <span>Multi Level Menu</span>
+                <Icon name="chevron" className={multiLevelOpen ? "rotated" : ""} />
+              </button>
 
-          {multiLevelOpen ? (
-            <div className="submenu">
-              {multiLevelLinks.map((section) => (
-                <div key={section.label} className="submenu-group">
-                  <div className="submenu-heading">{section.label}</div>
-                  {section.links.map((link) => (
-                    <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="submenu-link">
-                      {link.label}
-                    </a>
+              {multiLevelOpen ? (
+                <div className="submenu">
+                  {multiLevelLinks.map((section) => (
+                    <div key={section.label} className="submenu-group">
+                      <div className="submenu-heading">{section.label}</div>
+                      {section.links.map((link) => (
+                        <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="submenu-link">
+                          {link.label}
+                        </a>
+                      ))}
+                    </div>
                   ))}
                 </div>
-              ))}
-            </div>
+              ) : null}
+            </>
           ) : null}
         </nav>
       </aside>
