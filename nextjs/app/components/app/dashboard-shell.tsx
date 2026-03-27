@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Icon, type IconName } from "@/components/icons";
-import { languages, multiLevelLinks, sidebarItems, versionText } from "@/lib/data";
+import { Icon, type IconName } from "@/app/components/global/icons";
+import { languages, multiLevelLinks, sidebarItems, versionText } from "@/app/lib/data";
 
 function Flag({ code }: { code: string }) {
   return <span className="flag">{code}</span>;

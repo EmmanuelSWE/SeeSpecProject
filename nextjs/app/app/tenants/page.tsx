@@ -1,5 +1,5 @@
-import { DataTableCard } from "@/components/data-table-card";
-import { tenants } from "@/lib/data";
+import { DataTableCard } from "@/app/components/global/data-table-card";
+import { tenants } from "@/app/lib/data";
 
 export default function TenantsPage() {
   return (

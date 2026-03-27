@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Icon } from "@/components/icons";
+import { Icon } from "@/app/components/global/icons";
 
 type RowValue = string | number | boolean;
 
@@ -38,8 +38,7 @@ export function DataTableCard<T extends Record<string, RowValue>>({
     return rows.filter((row) => {
       const statusValue = "isActive" in row ? row.isActive : undefined;
       const matchesQuery =
-        lowered.length === 0 ||
-        Object.values(row).some((value) => String(value).toLowerCase().includes(lowered));
+        lowered.length === 0 || Object.values(row).some((value) => String(value).toLowerCase().includes(lowered));
 
       if (!matchesQuery) {
         return false;
@@ -92,9 +91,25 @@ export function DataTableCard<T extends Record<string, RowValue>>({
           <div className="filter-panel">
             <div className="filter-row">
               <span className="filter-label">Is active</span>
-              <label><input type="radio" checked={statusFilter === "all"} onChange={() => setStatusFilter("all")} /> All</label>
-              <label><input type="radio" checked={statusFilter === "active"} onChange={() => setStatusFilter("active")} /> Yes</label>
-              <label><input type="radio" checked={statusFilter === "inactive"} onChange={() => setStatusFilter("inactive")} /> No</label>
+              <label>
+                <input type="radio" checked={statusFilter === "all"} onChange={() => setStatusFilter("all")} /> All
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  checked={statusFilter === "active"}
+                  onChange={() => setStatusFilter("active")}
+                />{" "}
+                Yes
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  checked={statusFilter === "inactive"}
+                  onChange={() => setStatusFilter("inactive")}
+                />{" "}
+                No
+              </label>
             </div>
             <div className="filter-actions">
               <button type="button" className="primary-button small">

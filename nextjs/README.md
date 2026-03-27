@@ -1,6 +1,6 @@
 # SeeSpec Next.js Frontend
 
-This app mirrors the main Angular frontend structure in a standalone Next.js app.
+This app is the primary Next.js frontend for SeeSpec and is being aligned with the repository product and architecture docs.
 
 ## Routes
 
@@ -14,9 +14,20 @@ This app mirrors the main Angular frontend structure in a standalone Next.js app
 - `/app/tenants`
 - `/app/update-password`
 
+## Structure
+
+- `app/components/`
+  - page-owned and shared UI components
+- `app/lib/`
+  - API helpers, shared data, and service functions
+- `app/account/`
+  - authentication routes
+- `app/app/`
+  - authenticated workspace routes
+
 ## Run
 
 1. Install dependencies with `npm install`
 2. Start the dev server with `npm run dev`
 
-The current implementation matches the Angular project's layout, copy, and navigation with local mock data for the admin tables.
+Set `NEXT_PUBLIC_API_BASE_URL` if the backend is not running at `https://localhost:44311`.

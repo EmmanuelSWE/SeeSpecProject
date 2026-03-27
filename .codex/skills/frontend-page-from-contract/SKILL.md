@@ -25,9 +25,12 @@ Review:
 2. identify required API data
 3. identify role-aware actions and visibility rules
 4. identify Figma frame or documented layout intent
-5. break the page into route entry plus page-owned components
-6. implement page states
-7. add or update Playwright coverage
+5. open the matching Figma frame from `docs/designs/figma-links.md`
+6. export the frame SVG when the page depends on frame geometry or vector framing
+7. break the page into page-owned components before writing the route entry
+8. assemble the route entry from those components
+9. implement page states
+10. add or update Playwright coverage
 
 ## Route rules
 
@@ -38,6 +41,16 @@ Review:
 - prefer readable slugs in route segments
 
 ## Page structure
+
+For each page, define components first:
+
+- shell component
+- header component
+- content section components
+- contextual or side-panel components where needed
+- state components where needed
+
+Then compose the route entry from those components.
 
 For each page, define:
 
@@ -76,11 +89,13 @@ Use `docs/permissions.md` to determine:
 - keep request logic out of page JSX
 - use providers only when state is genuinely shared
 - use typed service functions for API calls
+- send requests through shared Axios instances in `app/lib/api/`
 
 ## Design rules
 
 - follow `docs/ui-spec.md` and the Ember Grid design direction
 - use Figma for layout and spacing when a frame exists
+- export the matching frame SVG when the frame defines vector geometry the page should preserve
 - preserve Angular parity only where that is still a stated requirement
 - keep typography, contrast, spacing, and motion intentional
 

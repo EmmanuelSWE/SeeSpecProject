@@ -1,4 +1,4 @@
-import { AccountShell } from "@/components/account-shell";
+import { AccountShell } from "@/app/components/auth/account-shell";
 
 export default function AccountLayout({
   children

@@ -1,5 +1,5 @@
-import { Icon } from "@/components/icons";
-import { closedPullRequests, dashboardStats, openIssues, summaryStats } from "@/lib/data";
+import { Icon } from "@/app/components/global/icons";
+import { closedPullRequests, dashboardStats, openIssues, summaryStats } from "@/app/lib/data";
 
 export default function HomePage() {
   return (

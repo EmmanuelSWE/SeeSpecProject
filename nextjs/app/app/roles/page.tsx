@@ -1,5 +1,5 @@
-import { DataTableCard } from "@/components/data-table-card";
-import { roles } from "@/lib/data";
+import { DataTableCard } from "@/app/components/global/data-table-card";
+import { roles } from "@/app/lib/data";
 
 export default function RolesPage() {
   return (
