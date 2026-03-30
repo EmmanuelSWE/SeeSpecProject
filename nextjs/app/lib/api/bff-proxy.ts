@@ -72,7 +72,10 @@ export function copyResponseHeaders(source: Headers, target: Headers) {
   source.forEach((value, key) => {
     const normalizedKey = key.toLowerCase();
 
-    if (HOP_BY_HOP_HEADERS.has(normalizedKey)) {
+    if (
+      HOP_BY_HOP_HEADERS.has(normalizedKey) ||
+      normalizedKey === "content-encoding"
+    ) {
       return;
     }
 
