@@ -1,17 +1,31 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendOverviewWorkspace } from "@/app/components/app/backend-overview-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
-import { findBackendBySlug, type BackendRecord } from "@/app/lib/mock-backends";
+import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
+import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
 import { useUserState } from "@/app/lib/providers/userProvider";
 
 export default function BackendOverviewPage() {
     const params = useParams<{ backendSlug: string }>();
     const { session } = useUserState();
-    const [backend, setBackend] = useState<BackendRecord | null>(() => findBackendBySlug(params.backendSlug));
+    const { backend } = useBackendState();
+    const { section, sections } = useSpecSectionState();
+    const { getBackendBySlug, updateBackend } = useBackendActions();
+    const { getSectionsByBackendAndType, createSection, updateSection } = useSpecSectionActions();
+
+    useEffect(() => {
+        getBackendBySlug(params.backendSlug).catch(() => {});
+    }, [getBackendBySlug, params.backendSlug]);
+
+    useEffect(() => {
+        if (backend) {
+            getSectionsByBackendAndType(backend.id, "overview").catch(() => {});
+        }
+    }, [backend, getSectionsByBackendAndType]);
 
     if (!hasPermission(session, APP_PERMISSIONS.backends)) {
         return <AccessPanel title="Backends" message="Your current role does not allow access to backend workspaces." />;
@@ -30,5 +44,43 @@ export default function BackendOverviewPage() {
         );
     }
 
-    return <BackendOverviewWorkspace backend={backend} onBackendChange={setBackend} />;
+    return (
+        <BackendOverviewWorkspace
+            backend={backend}
+            overviewSection={section ?? sections[0] ?? null}
+            canManageRoles={false}
+            onSaveBackend={async (payload) => {
+                await updateBackend({ id: backend.id, ...payload });
+            }}
+            onSaveOverview={async (payload) => {
+                const existingOverview = section ?? sections[0] ?? null;
+
+                if (existingOverview) {
+                    await updateSection({
+                        id: existingOverview.id,
+                        summary: payload.summary,
+                        content: [payload.summary, payload.scope, payload.goals]
+                    });
+                    await getSectionsByBackendAndType(backend.id, "overview");
+                    return;
+                }
+
+                await createSection({
+                    backendId: backend.id,
+                    type: "overview",
+                    title: `${backend.name} Overview`,
+                    summary: payload.summary,
+                    content: [payload.summary, payload.scope, payload.goals],
+                    tags: ["Overview", backend.name]
+                });
+                await getSectionsByBackendAndType(backend.id, "overview");
+            }}
+            onSaveRole={async (role) => {
+                await updateBackend({
+                    id: backend.id,
+                    roles: [...backend.roles, { id: `role-${Date.now()}`, ...role }]
+                });
+            }}
+        />
+    );
 }

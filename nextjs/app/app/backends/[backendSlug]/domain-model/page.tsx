@@ -1,28 +1,34 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { DomainModelWorkspace } from "@/app/components/app/domain-model-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
-import { findBackendBySlug, type BackendRecord } from "@/app/lib/mock-backends";
+import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
+import { useDiagramElementActions, useDiagramElementState } from "@/app/lib/providers/diagramElementProvider";
 import { useUserState } from "@/app/lib/providers/userProvider";
 
 export default function BackendDomainModelPage() {
     const params = useParams<{ backendSlug: string }>();
     const { session } = useUserState();
-    const [backend, setBackend] = useState<BackendRecord | null | undefined>(undefined);
+    const { backend } = useBackendState();
+    const { diagramElements } = useDiagramElementState();
+    const { getBackendBySlug } = useBackendActions();
+    const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
 
     useEffect(() => {
-        setBackend(findBackendBySlug(params.backendSlug));
-    }, [params]);
+        getBackendBySlug(params.backendSlug).catch(() => {});
+    }, [getBackendBySlug, params.backendSlug]);
+
+    useEffect(() => {
+        if (backend) {
+            getDiagramElementsByBackendAndType(backend.id, "domain-model").catch(() => {});
+        }
+    }, [backend?.id, getDiagramElementsByBackendAndType]);
 
     if (!hasPermission(session, APP_PERMISSIONS.domainModel)) {
         return <AccessPanel title="Domain model" message="Your current role does not allow access to the domain model." />;
-    }
-
-    if (backend === undefined) {
-        return null;
     }
 
     if (!backend) {
@@ -38,5 +44,5 @@ export default function BackendDomainModelPage() {
         );
     }
 
-    return <DomainModelWorkspace backend={backend} />;
+    return <DomainModelWorkspace backend={backend} diagram={diagramElements[0] ?? null} />;
 }

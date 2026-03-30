@@ -6,7 +6,8 @@ import { BackendRequirementFormFields, type BackendRequirementFormState } from "
 import { RequirementsDetailPanel } from "@/app/components/app/requirements-detail-panel";
 import { RequirementsSectionList, type RequirementSummary } from "@/app/components/app/requirements-section-list";
 import { RequirementsTraceabilityPanel } from "@/app/components/app/requirements-traceability-panel";
-import { createRequirementNote, createRequirementRecord, type BackendRecord, readBackendRecords, writeBackendRecords } from "@/app/lib/mock-backends";
+import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { CreateSpecSectionInput, SpecSectionDto, UpdateSpecSectionInput } from "@/app/lib/utils/services/spec-section-service";
 
 const EMPTY_REQUIREMENT_FORM: BackendRequirementFormState = {
     code: "",
@@ -21,14 +22,20 @@ const EMPTY_REQUIREMENT_FORM: BackendRequirementFormState = {
 
 export function BackendRequirementsWorkspace({
     backend,
-    onBackendChange
+    overviewSection,
+    requirementSections,
+    onCreateRequirement,
+    onUpdateRequirement
 }: {
-    backend: BackendRecord;
-    onBackendChange: (next: BackendRecord) => void;
+    backend: BackendDto;
+    overviewSection: SpecSectionDto | null;
+    requirementSections: SpecSectionDto[];
+    onCreateRequirement: (payload: CreateSpecSectionInput) => Promise<SpecSectionDto>;
+    onUpdateRequirement: (payload: UpdateSpecSectionInput) => Promise<void>;
 }) {
     const [query, setQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState<"All" | "Draft" | "In Review" | "Approved">("All");
-    const [selectedId, setSelectedId] = useState<string | null>(backend.requirements[0]?.id ?? null);
+    const [selectedId, setSelectedId] = useState<string | null>(requirementSections[0]?.id ?? null);
     const [isLoading, setIsLoading] = useState(true);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [requirementForm, setRequirementForm] = useState<BackendRequirementFormState>(EMPTY_REQUIREMENT_FORM);
@@ -38,73 +45,65 @@ export function BackendRequirementsWorkspace({
         return () => window.clearTimeout(timer);
     }, []);
 
-    const hasOverview = Boolean(backend.overview);
+    const hasOverview = Boolean(overviewSection);
     const effectiveSelectedId =
-        selectedId && backend.requirements.some((requirement) => requirement.id === selectedId)
+        selectedId && requirementSections.some((requirement) => requirement.id === selectedId)
             ? selectedId
-            : backend.requirements[0]?.id ?? null;
+            : requirementSections[0]?.id ?? null;
 
     const filteredRequirements = useMemo(() => {
-        return backend.requirements.filter((item) => {
+        return requirementSections.filter((item) => {
             const matchesQuery =
                 !query ||
                 item.title.toLowerCase().includes(query.toLowerCase()) ||
-                item.code.toLowerCase().includes(query.toLowerCase()) ||
+                (item.code ?? "").toLowerCase().includes(query.toLowerCase()) ||
                 item.tags.some((tag) => tag.toLowerCase().includes(query.toLowerCase()));
 
             const matchesStatus = statusFilter === "All" || item.status === statusFilter;
             return matchesQuery && matchesStatus;
         });
-    }, [backend.requirements, query, statusFilter]);
+    }, [requirementSections, query, statusFilter]);
 
     const activeRequirement = filteredRequirements.find((item) => item.id === effectiveSelectedId) ?? null;
 
-    function persist(updatedBackend: BackendRecord) {
-        const backends = readBackendRecords().map((record) => (record.id === updatedBackend.id ? updatedBackend : record));
-        writeBackendRecords(backends);
-        onBackendChange(updatedBackend);
-    }
-
-    function saveRequirement() {
-        const nextRequirement = createRequirementRecord({
-            code: requirementForm.code,
+    async function saveRequirement() {
+        const createdRequirement = await onCreateRequirement({
+            backendId: backend.id,
+            type: "requirement",
+            code: requirementForm.code || `REQ-${requirementSections.length + 1}`,
             title: requirementForm.title,
+            summary: requirementForm.summary,
+            content: [requirementForm.summary],
+            tags: [requirementForm.category, requirementForm.owner].filter(Boolean),
             category: requirementForm.category,
             owner: requirementForm.owner,
+            status: "Draft",
             priority: requirementForm.priority,
-            summary: requirementForm.summary,
             excerpt: requirementForm.excerpt,
             acceptanceCriteria: requirementForm.acceptanceCriteria
                 .split("\n")
                 .map((line) => line.trim())
-                .filter(Boolean)
+                .filter(Boolean),
+            linkedArtifacts: [],
+            traceItems: [],
+            activityItems: [{ author: requirementForm.owner || "Business Analyst", text: "Created initial requirement draft.", timestamp: "Now" }]
         });
-
-        const updatedBackend = { ...backend, requirements: [...backend.requirements, nextRequirement] };
-        persist(updatedBackend);
-        setSelectedId(nextRequirement.id);
+        setSelectedId(createdRequirement.id);
         setRequirementForm(EMPTY_REQUIREMENT_FORM);
         setIsCreateOpen(false);
     }
 
-    function addReviewNote() {
+    async function addReviewNote() {
         if (!activeRequirement) {
             return;
         }
 
-        persist({
-            ...backend,
-            requirements: backend.requirements.map((requirement) =>
-                requirement.id === activeRequirement.id
-                    ? {
-                          ...requirement,
-                          activityItems: [
-                              createRequirementNote("Project Lead", "Added a review note from the frontend dummy flow."),
-                              ...requirement.activityItems
-                          ]
-                      }
-                    : requirement
-            )
+        await onUpdateRequirement({
+            id: activeRequirement.id,
+            activityItems: [
+                { author: "Project Lead", text: "Added a review note from the frontend dummy flow.", timestamp: "Now" },
+                ...(activeRequirement.activityItems ?? [])
+            ]
         });
     }
 
@@ -203,11 +202,39 @@ export function BackendRequirementsWorkspace({
                             <span className="requirements-count-pill">{filteredRequirements.length}</span>
                         </div>
                         <div className="card-body requirements-rail-body">
-                            <RequirementsSectionList items={filteredRequirements as RequirementSummary[]} activeId={effectiveSelectedId} onSelect={setSelectedId} />
+                            <RequirementsSectionList
+                                items={filteredRequirements.map((section) => ({
+                                    id: section.id,
+                                    code: section.code ?? "",
+                                    title: section.title,
+                                    category: section.category ?? "Core",
+                                    owner: section.owner ?? "Business Analyst",
+                                    status: section.status ?? "Draft",
+                                    priority: section.priority ?? "High",
+                                    updatedAt: section.updatedAt,
+                                    excerpt: section.excerpt ?? section.summary
+                                })) as RequirementSummary[]}
+                                activeId={effectiveSelectedId}
+                                onSelect={setSelectedId}
+                            />
                         </div>
                     </aside>
 
-                    <RequirementsDetailPanel requirement={activeRequirement} canEdit={true} />
+                    <RequirementsDetailPanel
+                        requirement={{
+                            code: activeRequirement.code ?? "",
+                            title: activeRequirement.title,
+                            summary: activeRequirement.summary,
+                            body: activeRequirement.content,
+                            acceptanceCriteria: activeRequirement.acceptanceCriteria ?? [],
+                            linkedArtifacts: activeRequirement.linkedArtifacts ?? [],
+                            tags: activeRequirement.tags,
+                            owner: activeRequirement.owner ?? "Business Analyst",
+                            status: activeRequirement.status ?? "Draft",
+                            updatedAt: activeRequirement.updatedAt
+                        }}
+                        canEdit={true}
+                    />
 
                     <div className="requirements-side-stack">
                         <div className="card requirements-side-card">
@@ -226,13 +253,17 @@ export function BackendRequirementsWorkspace({
                                 </button>
                             </div>
                         </div>
-                        <RequirementsTraceabilityPanel traceItems={activeRequirement.traceItems} activityItems={activeRequirement.activityItems} canComment={true} />
+                        <RequirementsTraceabilityPanel
+                            traceItems={activeRequirement.traceItems ?? []}
+                            activityItems={activeRequirement.activityItems ?? []}
+                            canComment={true}
+                        />
                     </div>
                 </div>
             )}
 
             {isCreateOpen ? (
-                <BackendModal title="Create backend requirement" description="Capture the requirement details for the selected backend. This dummy flow stores the result in local storage." onClose={() => setIsCreateOpen(false)}>
+                <BackendModal title="Create backend requirement" description="Capture the requirement details for the selected backend specification." onClose={() => setIsCreateOpen(false)}>
                     <BackendRequirementFormFields value={requirementForm} onChange={setRequirementForm} />
                     <div className="backend-modal-actions">
                         <button type="button" className="secondary-button" onClick={() => setIsCreateOpen(false)}>

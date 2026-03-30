@@ -1,16 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import type { BackendRecord } from "@/app/lib/mock-backends";
+import type { BackendDto } from "@/app/lib/utils/services/backend-service";
 
 export function BackendsTable({
     backends,
     onCreate,
     onEdit
 }: {
-    backends: BackendRecord[];
+    backends: BackendDto[];
     onCreate: () => void;
-    onEdit: (backend: BackendRecord) => void;
+    onEdit: (backend: BackendDto) => void;
 }) {
     return (
         <section className="page-section backend-page">

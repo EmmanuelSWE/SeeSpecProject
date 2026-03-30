@@ -1,21 +1,44 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { UseCaseDiagramWorkspace } from "@/app/components/app/usecase-diagram-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
-import { findBackendBySlug, findUseCaseBySlug, type BackendRecord, type BackendUseCaseRecord } from "@/app/lib/mock-backends";
+import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
+import { useDiagramElementActions, useDiagramElementState } from "@/app/lib/providers/diagramElementProvider";
+import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
 import { useUserState } from "@/app/lib/providers/userProvider";
 
 export default function BackendUseCaseDiagramPage() {
     const params = useParams<{ backendSlug: string; useCaseSlug: string }>();
     const { session } = useUserState();
-    const [backend] = useState<BackendRecord | null>(() => findBackendBySlug(params.backendSlug));
-    const [useCase] = useState<BackendUseCaseRecord | null>(() => {
-        const nextBackend = findBackendBySlug(params.backendSlug);
-        return nextBackend ? findUseCaseBySlug(nextBackend, params.useCaseSlug) : null;
-    });
+    const { backend } = useBackendState();
+    const { diagramElements } = useDiagramElementState();
+    const { sections } = useSpecSectionState();
+    const { getBackendBySlug } = useBackendActions();
+    const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
+    const { getSectionsByBackendAndType } = useSpecSectionActions();
+
+    useEffect(() => {
+        getBackendBySlug(params.backendSlug).catch(() => {});
+    }, [getBackendBySlug, params.backendSlug]);
+
+    useEffect(() => {
+        if (backend) {
+            getDiagramElementsByBackendAndType(backend.id, "use-case").catch(() => {});
+            getSectionsByBackendAndType(backend.id, "requirement").catch(() => {});
+        }
+    }, [backend?.id, getDiagramElementsByBackendAndType, getSectionsByBackendAndType]);
+
+    const useCase = useMemo(
+        () => diagramElements.find((item) => item.slug === params.useCaseSlug) ?? null,
+        [diagramElements, params.useCaseSlug]
+    );
+    const linkedRequirements = useMemo(
+        () => sections.filter((section) => useCase?.linkedRequirementIds.includes(section.id)),
+        [sections, useCase?.linkedRequirementIds]
+    );
 
     if (!hasPermission(session, APP_PERMISSIONS.usecaseDiagrams)) {
         return <AccessPanel title="Use Case Diagrams" message="Your current role does not allow access to use case diagrams." />;
@@ -34,5 +57,5 @@ export default function BackendUseCaseDiagramPage() {
         );
     }
 
-    return <UseCaseDiagramWorkspace backend={backend} useCase={useCase} />;
+    return <UseCaseDiagramWorkspace backend={backend} useCase={useCase} linkedRequirements={linkedRequirements} />;
 }
