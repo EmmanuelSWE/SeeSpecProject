@@ -2,10 +2,11 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using CodingValidationResult = SeeSpec.Domains.CodingManagement.ValidationResult;
 
-namespace SeeSpec.Domains.CodingManagement.Dtos
+namespace SeeSpec.Services.ValidationResultService.DTO
 {
-    [AutoMapFrom(typeof(ValidationResult))]
+    [AutoMap(typeof(CodingValidationResult))]
     public class ValidationResultDto : EntityDto<Guid>
     {
         public Guid BackendId { get; set; }
@@ -24,3 +25,4 @@ namespace SeeSpec.Domains.CodingManagement.Dtos
         public string DetailsJson { get; set; }
     }
 }
+
