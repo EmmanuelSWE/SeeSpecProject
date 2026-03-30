@@ -1449,6 +1449,276 @@ button, input { font: inherit; }
   min-height: 380px;
 }
 
+.requirements-status-active,
+.requirements-status-approved {
+  background: rgba(34, 197, 94, 0.14);
+  color: #86efac;
+}
+
+.requirements-status-planned,
+.requirements-status-draft {
+  background: rgba(59, 130, 246, 0.16);
+  color: #93c5fd;
+}
+
+.requirements-status-maintenance,
+.requirements-status-in-review {
+  background: rgba(249, 115, 22, 0.14);
+  color: #fdba74;
+}
+
+.backend-page,
+.backend-overview-page {
+  gap: 18px;
+}
+
+.backend-page-blurred > *:not(.backend-modal-layer) {
+  filter: blur(10px);
+}
+
+.backend-hero-card,
+.backend-table-card,
+.backend-overview-card,
+.backend-role-card,
+.backend-summary-card,
+.backend-state-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(22, 22, 22, 0.94) 0%, rgba(14, 16, 14, 0.92) 100%);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+}
+
+.backend-hero-body,
+.backend-table-header,
+.backend-overview-grid,
+.backend-summary-grid,
+.backend-table-actions,
+.backend-role-heading,
+.backend-inline-actions,
+.backend-modal-actions,
+.backend-hero-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.backend-hero-body,
+.backend-table-header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.backend-hero-copy,
+.backend-overview-copy,
+.backend-blocked-state,
+.backend-role-item,
+.backend-table-primary,
+.backend-table-secondary,
+.backend-quick-actions,
+.backend-form-field {
+  display: grid;
+  gap: 8px;
+}
+
+.backend-hero-copy h1,
+.backend-table-header h3,
+.backend-modal-header h2 {
+  margin: 0;
+  color: #fafaf9;
+}
+
+.backend-hero-copy p,
+.backend-overview-copy p,
+.backend-blocked-state p,
+.backend-modal-header p,
+.backend-role-item p,
+.backend-role-item small,
+.backend-table-primary span,
+.backend-table-secondary span {
+  margin: 0;
+  color: #d6d3d1;
+  line-height: 1.6;
+}
+
+.backend-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.backend-summary-card .card-body {
+  display: grid;
+  gap: 10px;
+}
+
+.backend-summary-card span {
+  color: #a8a29e;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.backend-summary-card strong {
+  color: #fafaf9;
+  font-size: 1.75rem;
+}
+
+.backend-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.9fr);
+  align-items: start;
+}
+
+.backend-overview-body,
+.backend-role-body,
+.backend-role-list {
+  display: grid;
+  gap: 16px;
+}
+
+.backend-overview-copy,
+.backend-role-item,
+.backend-blocked-state,
+.backend-table-primary,
+.backend-table-secondary {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.backend-overview-copy strong,
+.backend-role-item strong,
+.backend-blocked-state strong,
+.backend-table-primary strong {
+  color: #fafaf9;
+}
+
+.backend-role-heading {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.backend-role-heading span {
+  color: #fdba74;
+  font-size: 0.84rem;
+}
+
+.backend-quick-actions,
+.backend-inline-actions {
+  grid-template-columns: 1fr;
+}
+
+.backend-table-actions,
+.backend-hero-actions,
+.backend-inline-actions,
+.backend-modal-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.backend-table .secondary-button,
+.backend-table .requirements-action-button {
+  text-decoration: none;
+}
+
+.is-disabled-link {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.backend-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.backend-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(7, 10, 8, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.backend-modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(760px, 100%);
+  max-height: min(88vh, 920px);
+  overflow: auto;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(22, 22, 22, 0.98) 0%, rgba(14, 16, 14, 0.98) 100%);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+}
+
+.backend-modal-header,
+.backend-modal-body {
+  padding: 20px 22px;
+}
+
+.backend-modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.backend-modal-close {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #fafaf9;
+  font: inherit;
+  cursor: pointer;
+}
+
+.backend-form-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.backend-form-field span {
+  color: #d6d3d1;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.backend-form-field input,
+.backend-form-field textarea,
+.backend-form-field select {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(12, 15, 14, 0.72);
+  color: #fafaf9;
+  font: inherit;
+  outline: 0;
+}
+
+.backend-form-field textarea {
+  resize: vertical;
+  min-height: 124px;
+}
+
+.backend-form-field input:focus,
+.backend-form-field textarea:focus,
+.backend-form-field select:focus {
+  border-color: rgba(249, 115, 22, 0.3);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
+}
+
+.backend-form-field input::placeholder,
+.backend-form-field textarea::placeholder {
+  color: rgba(214, 211, 209, 0.72);
+}
+
 @keyframes requirements-shimmer {
   from {
     background-position: 200% 0;
@@ -1691,6 +1961,10 @@ button, input { font: inherit; }
 @media (max-width: 1100px) {
   .hero-grid, .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .management-grid { grid-template-columns: 1fr; }
+  .backend-overview-grid,
+  .backend-summary-grid {
+    grid-template-columns: 1fr;
+  }
   .requirements-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1735,6 +2009,12 @@ button, input { font: inherit; }
     width: 100%;
   }
   .requirements-grid {
+    grid-template-columns: 1fr;
+  }
+  .backend-hero-body,
+  .backend-table-header,
+  .backend-hero-actions {
+    display: grid;
     grid-template-columns: 1fr;
   }
   .requirements-side-stack {

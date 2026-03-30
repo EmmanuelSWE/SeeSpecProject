@@ -1,0 +1,257 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import {
+    BackendFormFields,
+    type BackendFormState,
+    BackendOverviewFormFields,
+    type OverviewFormState,
+    BackendRoleFormFields,
+    type BackendRoleFormState
+} from "@/app/components/app/backend-form-fields";
+import { BackendModal } from "@/app/components/app/backend-modal";
+import { createRoleRecord, type BackendRecord, readBackendRecords, writeBackendRecords } from "@/app/lib/mock-backends";
+
+type ModalState = "edit-backend" | "overview" | "role" | null;
+
+function toBackendFormState(backend: BackendRecord): BackendFormState {
+    return {
+        name: backend.name,
+        framework: backend.framework,
+        runtimeVersion: backend.runtimeVersion,
+        repositoryUrl: backend.repositoryUrl,
+        description: backend.description,
+        status: backend.status
+    };
+}
+
+function toOverviewFormState(backend: BackendRecord): OverviewFormState {
+    return backend.overview ?? { summary: "", scope: "", goals: "" };
+}
+
+export function BackendOverviewWorkspace({
+    backend,
+    onBackendChange
+}: {
+    backend: BackendRecord;
+    onBackendChange: (next: BackendRecord) => void;
+}) {
+    const [modal, setModal] = useState<ModalState>(null);
+    const [backendForm, setBackendForm] = useState<BackendFormState>(() => toBackendFormState(backend));
+    const [overviewForm, setOverviewForm] = useState<OverviewFormState>(() => toOverviewFormState(backend));
+    const [roleForm, setRoleForm] = useState<BackendRoleFormState>({
+        roleName: "Project Lead",
+        assignedTo: "",
+        emailAddress: "",
+        note: ""
+    });
+
+    const hasOverview = Boolean(backend.overview);
+    const summaryCards = useMemo(
+        () => [
+            { label: "Project roles", value: String(backend.roles.length) },
+            { label: "Requirements", value: String(backend.requirements.length) },
+            { label: "Status", value: backend.status }
+        ],
+        [backend]
+    );
+
+    function persist(updatedBackend: BackendRecord) {
+        const backends = readBackendRecords().map((record) => (record.id === updatedBackend.id ? updatedBackend : record));
+        writeBackendRecords(backends);
+        onBackendChange(updatedBackend);
+    }
+
+    function saveBackend() {
+        persist({ ...backend, ...backendForm });
+        setModal(null);
+    }
+
+    function saveOverview() {
+        persist({ ...backend, overview: overviewForm });
+        setModal(null);
+    }
+
+    function saveRole() {
+        persist({ ...backend, roles: [...backend.roles, createRoleRecord(roleForm)] });
+        setRoleForm({ roleName: "Project Lead", assignedTo: "", emailAddress: "", note: "" });
+        setModal(null);
+    }
+
+    return (
+        <section className={`page-section backend-overview-page ${modal ? "backend-page-blurred" : ""}`}>
+            <div className="card backend-hero-card">
+                <div className="card-body backend-hero-body">
+                    <div className="backend-hero-copy">
+                        <span className="requirements-eyebrow">Backend Overview</span>
+                        <h1>{backend.name}</h1>
+                        <p>{backend.description}</p>
+                    </div>
+                    <div className="backend-hero-actions">
+                        <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => {
+                                setBackendForm(toBackendFormState(backend));
+                                setModal("edit-backend");
+                            }}
+                        >
+                            Edit backend
+                        </button>
+                        <Link
+                            href={hasOverview ? `/app/backends/${backend.slug}/requirements` : "#"}
+                            className={`requirements-action-button ${hasOverview ? "" : "is-disabled-link"}`}
+                            aria-disabled={!hasOverview}
+                            onClick={(event) => {
+                                if (!hasOverview) {
+                                    event.preventDefault();
+                                }
+                            }}
+                        >
+                            Open requirements
+                        </Link>
+                    </div>
+                </div>
+            </div>
+
+            <div className="backend-summary-grid">
+                {summaryCards.map((card) => (
+                    <div key={card.label} className="card backend-summary-card">
+                        <div className="card-body">
+                            <span>{card.label}</span>
+                            <strong>{card.value}</strong>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="backend-overview-grid">
+                <div className="card backend-overview-card">
+                    <div className="card-header backend-table-header">
+                        <div>
+                            <span className="requirements-eyebrow">System Overview</span>
+                            <h3>What the system should do</h3>
+                        </div>
+                        <button
+                            type="button"
+                            className="requirements-action-button"
+                            onClick={() => {
+                                setOverviewForm(toOverviewFormState(backend));
+                                setModal("overview");
+                            }}
+                        >
+                            {hasOverview ? "Edit overview" : "Create overview"}
+                        </button>
+                    </div>
+                    <div className="card-body backend-overview-body">
+                        {backend.overview ? (
+                            <>
+                                <div className="backend-overview-copy">
+                                    <strong>System summary</strong>
+                                    <p>{backend.overview.summary}</p>
+                                </div>
+                                <div className="backend-overview-copy">
+                                    <strong>Scope</strong>
+                                    <p>{backend.overview.scope}</p>
+                                </div>
+                                <div className="backend-overview-copy">
+                                    <strong>Goals</strong>
+                                    <p>{backend.overview.goals}</p>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="backend-blocked-state">
+                                <strong>Overview required</strong>
+                                <p>
+                                    Define the backend overview first. Requirements, diagrams, and project role work stay
+                                    disabled until the system overview is created.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="card backend-role-card">
+                    <div className="card-header backend-table-header">
+                        <div>
+                            <span className="requirements-eyebrow">Project Roles</span>
+                            <h3>Assigned workspace roles</h3>
+                        </div>
+                        <button type="button" className="requirements-action-button" disabled={!hasOverview} onClick={() => setModal("role")}>
+                            Add role
+                        </button>
+                    </div>
+                    <div className="card-body backend-role-body">
+                        {!hasOverview ? (
+                            <div className="backend-blocked-state">
+                                <strong>Role setup is locked</strong>
+                                <p>Create the overview first, then assign the project roles for this backend.</p>
+                            </div>
+                        ) : backend.roles.length === 0 ? (
+                            <div className="backend-blocked-state">
+                                <strong>No roles configured yet</strong>
+                                <p>Add the tenant admin, project lead, business analyst, and system architect as needed.</p>
+                            </div>
+                        ) : (
+                            <div className="backend-role-list">
+                                {backend.roles.map((role) => (
+                                    <article key={role.id} className="backend-role-item">
+                                        <div className="backend-role-heading">
+                                            <strong>{role.roleName}</strong>
+                                            <span>{role.emailAddress}</span>
+                                        </div>
+                                        <p>{role.assignedTo}</p>
+                                        <small>{role.note}</small>
+                                    </article>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {modal === "edit-backend" ? (
+                <BackendModal title="Edit backend" description="Update the backend metadata while keeping the current workspace routing intact." onClose={() => setModal(null)}>
+                    <BackendFormFields value={backendForm} onChange={setBackendForm} />
+                    <div className="backend-modal-actions">
+                        <button type="button" className="secondary-button" onClick={() => setModal(null)}>
+                            Cancel
+                        </button>
+                        <button type="button" className="requirements-action-button" onClick={saveBackend}>
+                            Save backend
+                        </button>
+                    </div>
+                </BackendModal>
+            ) : null}
+
+            {modal === "overview" ? (
+                <BackendModal title={hasOverview ? "Edit system overview" : "Create system overview"} description="This overview gates the rest of the backend workspace." onClose={() => setModal(null)}>
+                    <BackendOverviewFormFields value={overviewForm} onChange={setOverviewForm} />
+                    <div className="backend-modal-actions">
+                        <button type="button" className="secondary-button" onClick={() => setModal(null)}>
+                            Cancel
+                        </button>
+                        <button type="button" className="requirements-action-button" onClick={saveOverview}>
+                            Save overview
+                        </button>
+                    </div>
+                </BackendModal>
+            ) : null}
+
+            {modal === "role" ? (
+                <BackendModal title="Add project role" description="Define the people responsible for this backend before continuing into requirements and diagrams." onClose={() => setModal(null)}>
+                    <BackendRoleFormFields value={roleForm} onChange={setRoleForm} />
+                    <div className="backend-modal-actions">
+                        <button type="button" className="secondary-button" onClick={() => setModal(null)}>
+                            Cancel
+                        </button>
+                        <button type="button" className="requirements-action-button" onClick={saveRole}>
+                            Save role
+                        </button>
+                    </div>
+                </BackendModal>
+            ) : null}
+        </section>
+    );
+}

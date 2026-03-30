@@ -26,7 +26,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const isTenantAdmin = isTenantAdminSession(session);
   const tenantSidebarPermissionMap: Record<string, string | null> = {
     "/app/home": APP_PERMISSIONS.dashboard,
-    "/app/requirements": APP_PERMISSIONS.requirements,
+    "/app/backends": APP_PERMISSIONS.backends,
     "/app/assignments": APP_PERMISSIONS.assignments,
     "/app/usecase-diagrams": APP_PERMISSIONS.usecaseDiagrams,
     "/app/domain-model": APP_PERMISSIONS.domainModel,
@@ -52,7 +52,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     });
   }, [isHostContext, isTenantAdmin, session, tenantSidebarPermissionMap]);
   const activeLabel = useMemo(
-    () => visibleSidebarItems.find((item) => pathname === item.href)?.label ?? (isHostContext ? "Profile" : "Workspace"),
+    () =>
+      visibleSidebarItems.find((item) => pathname === item.href)?.label ??
+      (pathname.startsWith("/app/backends") ? "Backends" : isHostContext ? "Profile" : "Workspace"),
     [isHostContext, pathname, visibleSidebarItems]
   );
 
@@ -82,8 +84,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </>
           ) : isTenantAdmin ? (
             <>
-              <Link href="/app/requirements" className="top-link">
-                Requirements
+              <Link href="/app/backends" className="top-link">
+                Backends
               </Link>
               <Link href="/app/assignments" className="top-link">
                 Assignments
@@ -178,7 +180,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         <nav className="side-nav">
           {visibleSidebarItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || (item.href === "/app/backends" && pathname.startsWith("/app/backends/"));
             return (
               <Link key={item.href} href={item.href} className={`side-link ${isActive ? "active" : ""}`}>
                 <Icon name={item.icon as IconName} />

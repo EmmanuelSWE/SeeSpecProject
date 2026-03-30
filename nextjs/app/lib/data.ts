@@ -22,7 +22,7 @@ export const sidebarItems = [
 
 export const tenantAdminSidebarItems = [
   { label: "Dashboard", href: "/app/home", icon: "home" },
-  { label: "Requirements", href: "/app/requirements", icon: "requirements" },
+  { label: "Backends", href: "/app/backends", icon: "code" },
   { label: "Assignments", href: "/app/assignments", icon: "assignments" },
   { label: "Usecase Diagrams", href: "/app/usecase-diagrams", icon: "usecase" },
   { label: "Domain model", href: "/app/domain-model", icon: "domain" },
