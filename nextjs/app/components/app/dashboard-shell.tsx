@@ -9,6 +9,16 @@ import { APP_PERMISSIONS, hasPermission, isTenantAdminSession } from "@/app/lib/
 import { languages, sidebarItems, tenantAdminSidebarItems, versionText } from "@/app/lib/data";
 import { useUserActions, useUserState } from "@/app/lib/providers/userProvider";
 
+const tenantSidebarPermissionMap: Record<string, string | null> = {
+  "/app/home": APP_PERMISSIONS.dashboard,
+  "/app/backends": APP_PERMISSIONS.backends,
+  "/app/assignments": APP_PERMISSIONS.assignments,
+  "/app/domain-model": APP_PERMISSIONS.domainModel,
+  "/app/tenants": APP_PERMISSIONS.tenants,
+  "/app/users": APP_PERMISSIONS.users,
+  "/app/settings": APP_PERMISSIONS.settings
+};
+
 function Flag({ code }: { code: string }) {
   return <span className="flag">{code}</span>;
 }
@@ -24,17 +34,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const currentLanguage = languages[0];
   const isHostContext = session?.tenantId == null;
   const isTenantAdmin = isTenantAdminSession(session);
-  const tenantSidebarPermissionMap: Record<string, string | null> = {
-    "/app/home": APP_PERMISSIONS.dashboard,
-    "/app/requirements": APP_PERMISSIONS.requirements,
-    "/app/assignments": APP_PERMISSIONS.assignments,
-    "/app/usecase-diagrams": APP_PERMISSIONS.usecaseDiagrams,
-    "/app/domain-model": APP_PERMISSIONS.domainModel,
-    "/app/activity-diagram": APP_PERMISSIONS.activityDiagram,
-    "/app/tenants": APP_PERMISSIONS.tenants,
-    "/app/users": APP_PERMISSIONS.users,
-    "/app/settings": APP_PERMISSIONS.settings
-  };
   const visibleSidebarItems = useMemo(() => {
     if (isHostContext) {
       return sidebarItems
@@ -50,9 +49,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       const permission = tenantSidebarPermissionMap[item.href];
       return permission ? hasPermission(session, permission) : false;
     });
-  }, [isHostContext, isTenantAdmin, session, tenantSidebarPermissionMap]);
+  }, [isHostContext, isTenantAdmin, session]);
   const activeLabel = useMemo(
-    () => visibleSidebarItems.find((item) => pathname === item.href)?.label ?? (isHostContext ? "Profile" : "Workspace"),
+    () =>
+      visibleSidebarItems.find((item) => pathname === item.href)?.label ??
+      (pathname.startsWith("/app/backends") ? "Backends" : isHostContext ? "Profile" : "Workspace"),
     [isHostContext, pathname, visibleSidebarItems]
   );
 
@@ -82,8 +83,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </>
           ) : isTenantAdmin ? (
             <>
-              <Link href="/app/requirements" className="top-link">
-                Requirements
+              <Link href="/app/backends" className="top-link">
+                Backends
               </Link>
               <Link href="/app/assignments" className="top-link">
                 Assignments
@@ -178,7 +179,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         <nav className="side-nav">
           {visibleSidebarItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || (item.href === "/app/backends" && pathname.startsWith("/app/backends/"));
             return (
               <Link key={item.href} href={item.href} className={`side-link ${isActive ? "active" : ""}`}>
                 <Icon name={item.icon as IconName} />

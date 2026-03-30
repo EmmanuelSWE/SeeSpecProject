@@ -2,6 +2,7 @@ import type { IUserSession } from "@/app/lib/providers/userProvider/context";
 
 export const APP_PERMISSIONS = {
   dashboard: "Pages.Dashboard",
+  backends: "Pages.Dashboard",
   requirements: "Pages.Requirements",
   assignments: "Pages.Assignments",
   usecaseDiagrams: "Pages.UsecaseDiagrams",
