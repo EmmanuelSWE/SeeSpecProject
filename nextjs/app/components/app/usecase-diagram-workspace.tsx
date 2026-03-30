@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { DrawIoEditor } from "@/app/components/app/draw-io-editor";
 import type { BackendRecord, BackendUseCaseRecord } from "@/app/lib/mock-backends";
 
 function resolveRequirementLinks(backend: BackendRecord, linkedRequirementIds: string[]) {
@@ -86,11 +87,7 @@ export function UseCaseDiagramWorkspace({
                     </div>
                     <div className="card-body usecase-scene-body">
                         <div className="usecase-scene-frame">
-                            <div className="usecase-scene-grid" />
-                            <div className="usecase-scene-overlay">
-                                <strong>{useCase.name}</strong>
-                                <p>This center scene is reserved for the draw.io API editor integration.</p>
-                            </div>
+                            <DrawIoEditor title={`${useCase.name} draw.io editor`} />
                         </div>
                     </div>
                 </article>

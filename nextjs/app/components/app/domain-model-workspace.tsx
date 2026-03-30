@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { DrawIoEditor } from "@/app/components/app/draw-io-editor";
 import type { BackendRecord } from "@/app/lib/mock-backends";
 
 export function DomainModelWorkspace({ backend }: { backend: BackendRecord }) {
@@ -66,11 +67,7 @@ export function DomainModelWorkspace({ backend }: { backend: BackendRecord }) {
                     </div>
                     <div className="card-body usecase-scene-body">
                         <div className="usecase-scene-frame">
-                            <div className="usecase-scene-grid" />
-                            <div className="usecase-scene-overlay">
-                                <strong>{backend.name} domain model</strong>
-                                <p>This center scene is reserved for the draw.io API model editor integration.</p>
-                            </div>
+                            <DrawIoEditor title={`${backend.name} domain model draw.io editor`} />
                         </div>
                     </div>
                 </article>
