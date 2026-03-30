@@ -107,7 +107,7 @@ function mapErrorMessage(error: unknown, fallbackMessage: string) {
 
 export async function getUsers(params: { keyword?: string; isActive?: boolean | null; maxResultCount?: number } = {}) {
   try {
-    const response = await axiosInstance.get<AbpResponse<PagedResult<UserDto>>>("/api/services/app/User/GetAll", {
+    const response = await axiosInstance.get<AbpResponse<PagedResult<UserDto>>>("/services/app/User/GetAll", {
       params: {
         Keyword: params.keyword,
         IsActive: params.isActive ?? undefined,
@@ -123,7 +123,7 @@ export async function getUsers(params: { keyword?: string; isActive?: boolean | 
 
 export async function getUserRoles() {
   try {
-    const response = await axiosInstance.get<AbpResponse<{ items: RoleDto[] }>>("/api/services/app/User/GetRoles");
+    const response = await axiosInstance.get<AbpResponse<{ items: RoleDto[] }>>("/services/app/User/GetRoles");
     return unwrapResponse(response.data).items ?? [];
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to load roles."));
@@ -132,7 +132,7 @@ export async function getUserRoles() {
 
 export async function getRoles(params: { keyword?: string; maxResultCount?: number } = {}) {
   try {
-    const response = await axiosInstance.get<AbpResponse<PagedResult<RoleDto>>>("/api/services/app/Role/GetAll", {
+    const response = await axiosInstance.get<AbpResponse<PagedResult<RoleDto>>>("/services/app/Role/GetAll", {
       params: {
         Keyword: params.keyword,
         MaxResultCount: params.maxResultCount ?? 100
@@ -147,7 +147,7 @@ export async function getRoles(params: { keyword?: string; maxResultCount?: numb
 
 export async function createUser(payload: CreateUserInput) {
   try {
-    const response = await axiosInstance.post<AbpResponse<UserDto>>("/api/services/app/User/Create", payload);
+    const response = await axiosInstance.post<AbpResponse<UserDto>>("/services/app/User/Create", payload);
     return unwrapResponse(response.data);
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to create user."));
@@ -156,7 +156,7 @@ export async function createUser(payload: CreateUserInput) {
 
 export async function updateUser(payload: UpdateUserInput) {
   try {
-    const response = await axiosInstance.put<AbpResponse<UserDto>>("/api/services/app/User/Update", payload);
+    const response = await axiosInstance.put<AbpResponse<UserDto>>("/services/app/User/Update", payload);
     return unwrapResponse(response.data);
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to update user."));
@@ -165,7 +165,7 @@ export async function updateUser(payload: UpdateUserInput) {
 
 export async function deleteUser(id: number) {
   try {
-    await axiosInstance.delete("/api/services/app/User/Delete", {
+    await axiosInstance.delete("/services/app/User/Delete", {
       params: {
         Id: id
       }
@@ -177,7 +177,7 @@ export async function deleteUser(id: number) {
 
 export async function activateUser(id: number) {
   try {
-    await axiosInstance.post("/api/services/app/User/Activate", { id });
+    await axiosInstance.post("/services/app/User/Activate", { id });
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to activate user."));
   }
@@ -185,7 +185,7 @@ export async function activateUser(id: number) {
 
 export async function deactivateUser(id: number) {
   try {
-    await axiosInstance.post("/api/services/app/User/DeActivate", { id });
+    await axiosInstance.post("/services/app/User/DeActivate", { id });
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to deactivate user."));
   }
@@ -193,7 +193,7 @@ export async function deactivateUser(id: number) {
 
 export async function getTenants(params: { keyword?: string; isActive?: boolean | null; maxResultCount?: number } = {}) {
   try {
-    const response = await axiosInstance.get<AbpResponse<PagedResult<TenantDto>>>("/api/services/app/Tenant/GetAll", {
+    const response = await axiosInstance.get<AbpResponse<PagedResult<TenantDto>>>("/services/app/Tenant/GetAll", {
       params: {
         Keyword: params.keyword,
         IsActive: params.isActive ?? undefined,
@@ -209,7 +209,7 @@ export async function getTenants(params: { keyword?: string; isActive?: boolean 
 
 export async function createTenant(payload: CreateTenantInput) {
   try {
-    const response = await axiosInstance.post<AbpResponse<TenantDto>>("/api/services/app/Tenant/Create", payload);
+    const response = await axiosInstance.post<AbpResponse<TenantDto>>("/services/app/Tenant/Create", payload);
     return unwrapResponse(response.data);
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to create tenant."));
@@ -218,7 +218,7 @@ export async function createTenant(payload: CreateTenantInput) {
 
 export async function updateTenant(payload: UpdateTenantInput) {
   try {
-    const response = await axiosInstance.put<AbpResponse<TenantDto>>("/api/services/app/Tenant/Update", payload);
+    const response = await axiosInstance.put<AbpResponse<TenantDto>>("/services/app/Tenant/Update", payload);
     return unwrapResponse(response.data);
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to update tenant."));
@@ -227,7 +227,7 @@ export async function updateTenant(payload: UpdateTenantInput) {
 
 export async function deleteTenant(id: number) {
   try {
-    await axiosInstance.delete("/api/services/app/Tenant/Delete", {
+    await axiosInstance.delete("/services/app/Tenant/Delete", {
       params: {
         Id: id
       }
