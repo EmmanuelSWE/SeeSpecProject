@@ -79,6 +79,9 @@ export function BackendsTable({
                                             <Link href={`/app/backends/${backend.slug}/overview`} className="secondary-button small">
                                                 Open
                                             </Link>
+                                            <Link href={`/app/backends/${backend.slug}/usecase-diagrams`} className="secondary-button small">
+                                                Use cases
+                                            </Link>
                                             <button
                                                 type="button"
                                                 className="secondary-button small"

@@ -1719,6 +1719,130 @@ button, input { font: inherit; }
   color: rgba(214, 211, 209, 0.72);
 }
 
+.usecase-page {
+  gap: 18px;
+}
+
+.domain-model-list-card {
+  color: inherit;
+  text-decoration: none;
+}
+
+.domain-model-list-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(249, 115, 22, 0.24);
+}
+
+.domain-model-list-body strong {
+  color: #fafaf9;
+  font-size: 1.1rem;
+}
+
+.domain-model-list-body p {
+  margin: 0;
+  color: #d6d3d1;
+  line-height: 1.6;
+}
+
+.usecase-hero-card,
+.usecase-summary-card,
+.usecase-scene-card,
+.usecase-linked-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(22, 22, 22, 0.94) 0%, rgba(14, 16, 14, 0.92) 100%);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+}
+
+.usecase-hero-body,
+.usecase-panel-header,
+.usecase-hero-meta,
+.usecase-layout {
+  display: flex;
+  gap: 12px;
+}
+
+.usecase-hero-body,
+.usecase-panel-header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.usecase-hero-copy,
+.usecase-summary-body,
+.usecase-summary-block,
+.usecase-linked-body,
+.usecase-link-list {
+  display: grid;
+  gap: 10px;
+}
+
+.usecase-hero-copy h1,
+.usecase-panel-header h3 {
+  margin: 0;
+  color: #fafaf9;
+}
+
+.usecase-hero-copy p,
+.usecase-summary-block p,
+.usecase-linked-body p {
+  margin: 0;
+  color: #d6d3d1;
+  line-height: 1.6;
+}
+
+.usecase-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1.45fr) 320px;
+  align-items: start;
+}
+
+.usecase-summary-block strong,
+.usecase-scene-overlay strong {
+  color: #fafaf9;
+}
+
+.usecase-scene-body {
+  padding-top: 8px;
+}
+
+.usecase-scene-frame {
+  position: relative;
+  min-height: 620px;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(12, 15, 14, 0.94) 0%, rgba(16, 19, 18, 0.94) 100%);
+}
+
+.usecase-scene-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(249, 115, 22, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(249, 115, 22, 0.08) 1px, transparent 1px);
+  background-size: 36px 36px;
+  opacity: 0.32;
+}
+
+.usecase-scene-overlay {
+  position: absolute;
+  inset: 18px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 12px;
+  border-radius: 18px;
+  border: 1px dashed rgba(249, 115, 22, 0.26);
+  background: radial-gradient(circle at top, rgba(249, 115, 22, 0.1), transparent 38%);
+}
+
+.usecase-scene-overlay p {
+  margin: 0;
+  max-width: 34ch;
+  color: #d6d3d1;
+}
+
 @keyframes requirements-shimmer {
   from {
     background-position: 200% 0;
@@ -1962,7 +2086,8 @@ button, input { font: inherit; }
   .hero-grid, .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .management-grid { grid-template-columns: 1fr; }
   .backend-overview-grid,
-  .backend-summary-grid {
+  .backend-summary-grid,
+  .usecase-layout {
     grid-template-columns: 1fr;
   }
   .requirements-grid {
@@ -2013,7 +2138,9 @@ button, input { font: inherit; }
   }
   .backend-hero-body,
   .backend-table-header,
-  .backend-hero-actions {
+  .backend-hero-actions,
+  .usecase-hero-body,
+  .usecase-panel-header {
     display: grid;
     grid-template-columns: 1fr;
   }

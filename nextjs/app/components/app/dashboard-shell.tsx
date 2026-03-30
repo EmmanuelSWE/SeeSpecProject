@@ -28,9 +28,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     "/app/home": APP_PERMISSIONS.dashboard,
     "/app/backends": APP_PERMISSIONS.backends,
     "/app/assignments": APP_PERMISSIONS.assignments,
-    "/app/usecase-diagrams": APP_PERMISSIONS.usecaseDiagrams,
     "/app/domain-model": APP_PERMISSIONS.domainModel,
-    "/app/activity-diagram": APP_PERMISSIONS.activityDiagram,
     "/app/tenants": APP_PERMISSIONS.tenants,
     "/app/users": APP_PERMISSIONS.users,
     "/app/settings": APP_PERMISSIONS.settings

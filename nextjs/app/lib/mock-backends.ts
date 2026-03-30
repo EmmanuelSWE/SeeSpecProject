@@ -36,6 +36,32 @@ export interface BackendRequirementRecord {
     activityItems: { author: string; text: string; timestamp: string }[];
 }
 
+export interface BackendUseCaseRecord {
+    id: string;
+    slug: string;
+    name: string;
+    description: string;
+    summary: string;
+    actors: string[];
+    dependencies: { slug: string; name: string }[];
+    linkedRequirementIds: string[];
+    updatedAt: string;
+}
+
+export interface BackendDomainEntityRecord {
+    id: string;
+    name: string;
+    description: string;
+    attributes: string[];
+}
+
+export interface BackendDomainRelationshipRecord {
+    id: string;
+    source: string;
+    target: string;
+    label: string;
+}
+
 export interface BackendRecord {
     id: string;
     slug: string;
@@ -49,6 +75,9 @@ export interface BackendRecord {
     overview: BackendOverviewRecord | null;
     roles: BackendRoleRecord[];
     requirements: BackendRequirementRecord[];
+    useCases: BackendUseCaseRecord[];
+    domainEntities: BackendDomainEntityRecord[];
+    domainRelationships: BackendDomainRelationshipRecord[];
 }
 
 const STORAGE_KEY = "seespec.mockBackends";
@@ -111,7 +140,11 @@ const DEFAULT_BACKENDS: BackendRecord[] = [
                 ],
                 linkedArtifacts: [
                     { label: "Approval assignment", href: "/app/assignments", kind: "Task" },
-                    { label: "Payment use cases", href: "/app/usecase-diagrams", kind: "Diagram" }
+                    {
+                        label: "Payment approval use case",
+                        href: "/app/backends/payments-core/usecase-diagrams/payment-approval-flow",
+                        kind: "Diagram"
+                    }
                 ],
                 tags: ["Payments", "Approvals", "Tenant scope"],
                 traceItems: [
@@ -122,6 +155,54 @@ const DEFAULT_BACKENDS: BackendRecord[] = [
                     { author: "Ava Morgan", text: "Confirmed approval boundary with tenant admins.", timestamp: "11:24" }
                 ]
             }
+        ],
+        useCases: [
+            {
+                id: "usecase-001",
+                slug: "payment-approval-flow",
+                name: "Payment Approval Flow",
+                description: "Approvers evaluate invoice requests and move them through validation and settlement decision points.",
+                summary: "This use case captures how a tenant admin and approver review an invoice request before settlement is triggered.",
+                actors: ["Tenant Admin", "Business Analyst", "Settlement Gateway"],
+                dependencies: [{ slug: "invoice-correction-flow", name: "Invoice Correction Flow" }],
+                linkedRequirementIds: ["req-001"],
+                updatedAt: "Today"
+            },
+            {
+                id: "usecase-002",
+                slug: "invoice-correction-flow",
+                name: "Invoice Correction Flow",
+                description: "Analysts correct incomplete billing records before they can be returned to approval.",
+                summary: "This use case covers exception handling for invoice mismatches and manual analyst intervention.",
+                actors: ["Business Analyst", "Project Lead"],
+                dependencies: [],
+                linkedRequirementIds: ["req-001"],
+                updatedAt: "Yesterday"
+            }
+        ],
+        domainEntities: [
+            {
+                id: "entity-001",
+                name: "Invoice",
+                description: "Represents a tenant billing document awaiting approval or settlement.",
+                attributes: ["InvoiceNumber", "TenantId", "Status", "RequestedAmount"]
+            },
+            {
+                id: "entity-002",
+                name: "Approval",
+                description: "Represents the approval decision lifecycle for an invoice request.",
+                attributes: ["ApprovalState", "ApprovedByUserId", "ApprovedAt", "Comment"]
+            },
+            {
+                id: "entity-003",
+                name: "SettlementEvent",
+                description: "Represents a settlement callback or reconciliation outcome from the payment gateway.",
+                attributes: ["ProviderReference", "Outcome", "ProcessedAt"]
+            }
+        ],
+        domainRelationships: [
+            { id: "relationship-001", source: "Invoice", target: "Approval", label: "requires" },
+            { id: "relationship-002", source: "Approval", target: "SettlementEvent", label: "triggers" }
         ]
     },
     {
@@ -136,7 +217,10 @@ const DEFAULT_BACKENDS: BackendRecord[] = [
         description: "Identity and tenant membership orchestration for cross-project onboarding.",
         overview: null,
         roles: [],
-        requirements: []
+        requirements: [],
+        useCases: [],
+        domainEntities: [],
+        domainRelationships: []
     }
 ];
 
@@ -157,8 +241,49 @@ function cloneDefaultBackends() {
             tags: [...requirement.tags],
             traceItems: requirement.traceItems.map((item) => ({ ...item })),
             activityItems: requirement.activityItems.map((item) => ({ ...item }))
-        }))
+        })),
+        useCases: backend.useCases.map((useCase) => ({
+            ...useCase,
+            actors: [...useCase.actors],
+            dependencies: useCase.dependencies.map((dependency) => ({ ...dependency })),
+            linkedRequirementIds: [...useCase.linkedRequirementIds]
+        })),
+        domainEntities: backend.domainEntities.map((entity) => ({ ...entity, attributes: [...entity.attributes] })),
+        domainRelationships: backend.domainRelationships.map((relationship) => ({ ...relationship }))
     }));
+}
+
+function normalizeBackendRecord(record: Partial<BackendRecord>): BackendRecord {
+    return {
+        id: record.id ?? `backend-${Date.now()}`,
+        slug: record.slug ?? slugifyBackendName(record.name ?? "backend"),
+        name: record.name ?? "Unnamed Backend",
+        framework: record.framework ?? "ABP Application",
+        runtimeVersion: record.runtimeVersion ?? ".NET 8",
+        status: record.status ?? "Planned",
+        repositoryUrl: record.repositoryUrl ?? "",
+        updatedAt: record.updatedAt ?? "Just now",
+        description: record.description ?? "",
+        overview: record.overview ?? null,
+        roles: (record.roles ?? []).map((role) => ({ ...role })),
+        requirements: (record.requirements ?? []).map((requirement) => ({
+            ...requirement,
+            body: [...(requirement.body ?? [])],
+            acceptanceCriteria: [...(requirement.acceptanceCriteria ?? [])],
+            linkedArtifacts: (requirement.linkedArtifacts ?? []).map((artifact) => ({ ...artifact })),
+            tags: [...(requirement.tags ?? [])],
+            traceItems: (requirement.traceItems ?? []).map((item) => ({ ...item })),
+            activityItems: (requirement.activityItems ?? []).map((item) => ({ ...item }))
+        })),
+        useCases: (record.useCases ?? []).map((useCase) => ({
+            ...useCase,
+            actors: [...(useCase.actors ?? [])],
+            dependencies: (useCase.dependencies ?? []).map((dependency) => ({ ...dependency })),
+            linkedRequirementIds: [...(useCase.linkedRequirementIds ?? [])]
+        })),
+        domainEntities: (record.domainEntities ?? []).map((entity) => ({ ...entity, attributes: [...(entity.attributes ?? [])] })),
+        domainRelationships: (record.domainRelationships ?? []).map((relationship) => ({ ...relationship }))
+    };
 }
 
 export function slugifyBackendName(name: string) {
@@ -182,7 +307,10 @@ export function readBackendRecords(): BackendRecord[] {
     }
 
     try {
-        return JSON.parse(raw) as BackendRecord[];
+        const parsed = JSON.parse(raw) as Partial<BackendRecord>[];
+        const normalized = parsed.map((record) => normalizeBackendRecord(record));
+        writeBackendRecords(normalized);
+        return normalized;
     } catch {
         const defaults = cloneDefaultBackends();
         writeBackendRecords(defaults);
@@ -200,6 +328,10 @@ export function writeBackendRecords(backends: BackendRecord[]) {
 
 export function findBackendBySlug(slug: string): BackendRecord | null {
     return readBackendRecords().find((backend) => backend.slug === slug) ?? null;
+}
+
+export function findUseCaseBySlug(backend: BackendRecord, useCaseSlug: string) {
+    return backend.useCases.find((useCase) => useCase.slug === useCaseSlug) ?? null;
 }
 
 export function createBackendRecord(input: {
@@ -222,7 +354,10 @@ export function createBackendRecord(input: {
         updatedAt: "Just now",
         overview: null,
         roles: [],
-        requirements: []
+        requirements: [],
+        useCases: [],
+        domainEntities: [],
+        domainRelationships: []
     };
 }
 

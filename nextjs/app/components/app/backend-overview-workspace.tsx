@@ -111,6 +111,18 @@ export function BackendOverviewWorkspace({
                         >
                             Open requirements
                         </Link>
+                        <Link
+                            href={hasOverview ? `/app/backends/${backend.slug}/domain-model` : "#"}
+                            className={`secondary-button ${hasOverview ? "" : "is-disabled-link"}`}
+                            aria-disabled={!hasOverview}
+                            onClick={(event) => {
+                                if (!hasOverview) {
+                                    event.preventDefault();
+                                }
+                            }}
+                        >
+                            Open domain model
+                        </Link>
                     </div>
                 </div>
             </div>
