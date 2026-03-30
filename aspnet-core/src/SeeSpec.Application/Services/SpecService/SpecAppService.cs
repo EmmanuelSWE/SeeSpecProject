@@ -110,18 +110,11 @@ namespace SeeSpec.Services.SpecService
             var sections = specSections.Select(section =>
             {
                 var metadata = ParseSectionMetadata(section.Content);
-
                 // Items are attached in-memory only for the assembled output; no extra persistence model
-                // is introduced for Milestone 2.
+                // is introduced for Milestone 2. We also apply deterministic ordering here because
+                // repository/database return order is not a safe output guarantee.
                 var items = itemsBySectionId.TryGetValue(section.Id, out var groupedItems)
-                    ? groupedItems.Select(item => new AssembledSectionItemDto
-                    {
-                        Id = item.Id,
-                        Label = item.Label,
-                        Position = item.Position,
-                        ItemType = item.ItemType,
-                        Content = ParseItemContent(item.Content)
-                    }).ToList()
+                    ? OrderSectionItems(groupedItems)
                     : new List<AssembledSectionItemDto>();
 
                 return new AssembledSpecSectionDto
@@ -356,6 +349,62 @@ namespace SeeSpec.Services.SpecService
         private static JToken ParseRawContent(string content)
         {
             return ParseItemContent(content);
+        }
+
+        private static List<AssembledSectionItemDto> OrderSectionItems(List<SectionItem> sectionItems)
+        {
+            // Use insertion sort as requested so ordered output is built explicitly in-memory rather
+            // than relying on implicit database ordering or a later generation-time pass.
+            var orderedItems = new List<SectionItem>();
+
+            foreach (var sectionItem in sectionItems)
+            {
+                var insertIndex = orderedItems.Count;
+
+                while (insertIndex > 0 && CompareSectionItems(sectionItem, orderedItems[insertIndex - 1]) < 0)
+                {
+                    insertIndex--;
+                }
+
+                orderedItems.Insert(insertIndex, sectionItem);
+            }
+
+            return orderedItems.Select(item => new AssembledSectionItemDto
+            {
+                Id = item.Id,
+                Label = item.Label,
+                Position = item.Position,
+                ItemType = item.ItemType,
+                Content = ParseItemContent(item.Content)
+            }).ToList();
+        }
+
+        private static int CompareSectionItems(SectionItem left, SectionItem right)
+        {
+            var leftHasExplicitPosition = HasExplicitPosition(left);
+            var rightHasExplicitPosition = HasExplicitPosition(right);
+
+            if (leftHasExplicitPosition && rightHasExplicitPosition)
+            {
+                var byPosition = left.Position.CompareTo(right.Position);
+                return byPosition != 0 ? byPosition : left.Id.CompareTo(right.Id);
+            }
+
+            if (leftHasExplicitPosition != rightHasExplicitPosition)
+            {
+                // Older items may effectively have no explicit order. Keep explicit positions first,
+                // then place unordered legacy items deterministically afterward.
+                return leftHasExplicitPosition ? -1 : 1;
+            }
+
+            // Fallback for older items without explicit ordering: use stable Id ordering only at
+            // assembly time. We do not rewrite persisted rows in this milestone.
+            return left.Id.CompareTo(right.Id);
+        }
+
+        private static bool HasExplicitPosition(SectionItem sectionItem)
+        {
+            return sectionItem.Position > 0;
         }
 
         private static DiagramType? TryParseDiagramType(string value)
