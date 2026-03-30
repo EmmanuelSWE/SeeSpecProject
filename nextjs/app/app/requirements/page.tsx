@@ -1,7 +1,7 @@
- "use client";
+"use client";
 
 import { AccessPanel } from "@/app/components/app/access-panel";
-import { PlaceholderPage } from "@/app/components/app/placeholder-page";
+import { RequirementsWorkspace } from "@/app/components/app/requirements-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
 import { useUserState } from "@/app/lib/providers/userProvider";
 
@@ -12,10 +12,5 @@ export default function RequirementsPage() {
     return <AccessPanel title="Requirements" message="Your current role does not allow access to requirements." />;
   }
 
-  return (
-    <PlaceholderPage
-      title="Requirements"
-      description="Requirements workspace placeholder. This route is reserved for the SVG-driven requirements page."
-    />
-  );
+  return <RequirementsWorkspace session={session} />;
 }
