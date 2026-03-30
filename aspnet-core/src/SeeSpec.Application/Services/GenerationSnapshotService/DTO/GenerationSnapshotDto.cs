@@ -2,10 +2,11 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using SeeSpec.Domains.CodingManagement;
 
-namespace SeeSpec.Domains.CodingManagement.Dtos
+namespace SeeSpec.Services.GenerationSnapshotService.DTO
 {
-    [AutoMapFrom(typeof(GenerationSnapshot))]
+    [AutoMap(typeof(GenerationSnapshot))]
     public class GenerationSnapshotDto : EntityDto<Guid>
     {
         public Guid BackendId { get; set; }
@@ -26,3 +27,4 @@ namespace SeeSpec.Domains.CodingManagement.Dtos
         public string PromptSent { get; set; }
     }
 }
+

@@ -2,10 +2,11 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using SeeSpec.Domains.SpecManagement;
 
-namespace SeeSpec.Domains.SpecManagement.Dtos
+namespace SeeSpec.Services.DiagramElementService.DTO
 {
-    [AutoMapFrom(typeof(DiagramElement))]
+    [AutoMap(typeof(DiagramElement))]
     public class DiagramElementDto : EntityDto<Guid>
     {
         public Guid BackendId { get; set; }
@@ -26,3 +27,4 @@ namespace SeeSpec.Domains.SpecManagement.Dtos
         public string MetadataJson { get; set; }
     }
 }
+

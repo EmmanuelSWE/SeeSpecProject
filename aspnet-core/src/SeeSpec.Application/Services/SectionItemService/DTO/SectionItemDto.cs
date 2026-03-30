@@ -2,10 +2,11 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using SeeSpec.Domains.SpecManagement;
 
-namespace SeeSpec.Domains.SpecManagement.Dtos
+namespace SeeSpec.Services.SectionItemService.DTO
 {
-    [AutoMapFrom(typeof(SectionItem))]
+    [AutoMap(typeof(SectionItem))]
     public class SectionItemDto : EntityDto<Guid>
     {
         public Guid SpecSectionId { get; set; }
@@ -22,3 +23,4 @@ namespace SeeSpec.Domains.SpecManagement.Dtos
         public SectionItemType ItemType { get; set; }
     }
 }
+

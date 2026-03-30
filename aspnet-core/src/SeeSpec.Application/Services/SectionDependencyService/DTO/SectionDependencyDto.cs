@@ -1,10 +1,11 @@
 using System;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using SeeSpec.Domains.SpecManagement;
 
-namespace SeeSpec.Domains.SpecManagement.Dtos
+namespace SeeSpec.Services.SectionDependencyService.DTO
 {
-    [AutoMapFrom(typeof(SectionDependency))]
+    [AutoMap(typeof(SectionDependency))]
     public class SectionDependencyDto : EntityDto<Guid>
     {
         public Guid FromSectionId { get; set; }
@@ -14,3 +15,4 @@ namespace SeeSpec.Domains.SpecManagement.Dtos
         public SectionDependencyType DependencyType { get; set; }
     }
 }
+

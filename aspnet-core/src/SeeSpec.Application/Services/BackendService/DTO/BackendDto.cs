@@ -2,10 +2,11 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using SeeSpec.Domains.ProjectManagement;
 
-namespace SeeSpec.Domains.ProjectManagement.Dtos
+namespace SeeSpec.Services.BackendService.DTO
 {
-    [AutoMapFrom(typeof(Backend))]
+    [AutoMap(typeof(Backend))]
     public class BackendDto : EntityDto<Guid>
     {
         public int TenantId { get; set; }
@@ -34,3 +35,4 @@ namespace SeeSpec.Domains.ProjectManagement.Dtos
         public string RepositoryUrl { get; set; }
     }
 }
+

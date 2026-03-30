@@ -2,10 +2,11 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using SeeSpec.Domains.SpecManagement;
 
-namespace SeeSpec.Domains.SpecManagement.Dtos
+namespace SeeSpec.Services.SpecService.DTO
 {
-    [AutoMapFrom(typeof(Spec))]
+    [AutoMap(typeof(Spec))]
     public class SpecDto : EntityDto<Guid>
     {
         public Guid BackendId { get; set; }
@@ -21,3 +22,4 @@ namespace SeeSpec.Domains.SpecManagement.Dtos
         public SpecStatus Status { get; set; }
     }
 }
+

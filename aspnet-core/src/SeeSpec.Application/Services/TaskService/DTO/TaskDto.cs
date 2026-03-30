@@ -2,10 +2,11 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using SeeSpec.Domains.ProjectManagement;
 
-namespace SeeSpec.Domains.ProjectManagement.Dtos
+namespace SeeSpec.Services.TaskService.DTO
 {
-    [AutoMapFrom(typeof(Task))]
+    [AutoMap(typeof(Task))]
     public class TaskDto : EntityDto<Guid>
     {
         public Guid BackendId { get; set; }
@@ -32,3 +33,4 @@ namespace SeeSpec.Domains.ProjectManagement.Dtos
         public DateTime? DueAt { get; set; }
     }
 }
+

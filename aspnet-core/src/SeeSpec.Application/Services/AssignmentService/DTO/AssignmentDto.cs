@@ -1,10 +1,11 @@
 using System;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using SeeSpec.Domains.ProjectManagement;
 
-namespace SeeSpec.Domains.ProjectManagement.Dtos
+namespace SeeSpec.Services.AssignmentService.DTO
 {
-    [AutoMapFrom(typeof(Assignment))]
+    [AutoMap(typeof(Assignment))]
     public class AssignmentDto : EntityDto<Guid>
     {
         public Guid BackendId { get; set; }
@@ -18,3 +19,4 @@ namespace SeeSpec.Domains.ProjectManagement.Dtos
         public DateTime JoinedAt { get; set; }
     }
 }
+

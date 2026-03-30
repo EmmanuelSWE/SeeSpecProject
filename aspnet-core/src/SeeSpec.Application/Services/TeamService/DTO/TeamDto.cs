@@ -2,10 +2,11 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using Abp.Application.Services.Dto;
 using Abp.AutoMapper;
+using SeeSpec.Domains.ProjectManagement;
 
-namespace SeeSpec.Domains.ProjectManagement.Dtos
+namespace SeeSpec.Services.TeamService.DTO
 {
-    [AutoMapFrom(typeof(Team))]
+    [AutoMap(typeof(Team))]
     public class TeamDto : EntityDto<Guid>
     {
         public Guid BackendId { get; set; }
@@ -18,3 +19,4 @@ namespace SeeSpec.Domains.ProjectManagement.Dtos
         public string Description { get; set; }
     }
 }
+
