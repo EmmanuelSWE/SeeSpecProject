@@ -885,6 +885,172 @@ button, input { font: inherit; }
   background: rgba(23, 27, 24, 0.98);
 }
 
+.tenant-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 16% 12%, rgba(249, 115, 22, 0.09), transparent 18%),
+    radial-gradient(circle at 78% 10%, rgba(255, 255, 255, 0.03), transparent 16%),
+    linear-gradient(180deg, #111711 0%, #0b0f0a 100%);
+}
+
+.tenant-shell .topbar {
+  background: rgba(12, 15, 14, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tenant-shell .top-link,
+.tenant-shell .plain-button,
+.tenant-shell .icon-button,
+.tenant-shell .footer,
+.tenant-shell .footer a,
+.tenant-shell .dropdown-item,
+.tenant-shell .brand,
+.tenant-shell .user-panel,
+.tenant-shell .side-link {
+  color: var(--auth-text-secondary);
+}
+
+.tenant-shell .dropdown {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(16, 19, 18, 0.98);
+  box-shadow: var(--auth-shadow);
+}
+
+.tenant-shell .dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tenant-shell .sidebar {
+  background: linear-gradient(180deg, #161b17 0%, #0f130f 100%);
+  color: var(--auth-text-secondary);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tenant-shell .brand,
+.tenant-shell .user-panel {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.tenant-shell .side-link.active,
+.tenant-shell .side-link:hover {
+  background: linear-gradient(180deg, #f97316 0%, #ea580c 100%);
+  color: #fff7ed;
+}
+
+.tenant-shell .content-area {
+  color: var(--auth-text-primary);
+}
+
+.tenant-shell .content-wrapper {
+  padding: 28px 22px 36px;
+}
+
+.tenant-shell .footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(12, 15, 14, 0.75);
+}
+
+.tenant-shell .info-card,
+.tenant-shell .card,
+.tenant-shell .stat-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(16, 19, 18, 0.94);
+  color: var(--auth-text-primary);
+  box-shadow: var(--auth-shadow);
+}
+
+.tenant-shell .card-header,
+.tenant-shell .card-footer {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.tenant-shell .card-header h3,
+.tenant-shell .info-card strong,
+.tenant-shell .stat-card strong,
+.tenant-shell .data-table th,
+.tenant-shell .data-table td,
+.tenant-shell .host-profile-list dd {
+  color: var(--auth-text-primary);
+}
+
+.tenant-shell .info-card p,
+.tenant-shell .stat-card p,
+.tenant-shell .host-profile-list dt,
+.tenant-shell .data-table a {
+  color: var(--auth-text-secondary);
+}
+
+.tenant-shell .data-table thead th {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tenant-shell .data-table tbody tr {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.tenant-shell .badge {
+  background: rgba(249, 115, 22, 0.12);
+  color: #fdba74;
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+.tenant-shell .info-icon.blue,
+.tenant-shell .info-icon.teal,
+.tenant-shell .info-icon.gold {
+  background: var(--auth-accent-soft);
+  color: var(--auth-accent);
+}
+
+.tenant-shell .stat-card {
+  background:
+    radial-gradient(circle at top right, rgba(249, 115, 22, 0.08), transparent 24%),
+    rgba(16, 19, 18, 0.94);
+}
+
+.tenant-dashboard-hero {
+  background:
+    radial-gradient(circle at top left, rgba(249, 115, 22, 0.14), transparent 24%),
+    linear-gradient(180deg, rgba(16, 19, 18, 0.96) 0%, rgba(12, 15, 14, 0.92) 100%);
+}
+
+.tenant-dashboard-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tenant-info-card,
+.tenant-access-card {
+  min-height: 0;
+}
+
+.tenant-home {
+  gap: 18px;
+}
+
+.tenant-home-hero .card-body {
+  display: grid;
+  gap: 10px;
+}
+
+.tenant-home-hero p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.tenant-role-row {
+  margin-top: 4px;
+}
+
+.tenant-summary-grid {
+  align-items: stretch;
+}
+
+.access-panel .card-body p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.7;
+}
+
 .auth-field-input::placeholder {
   color: #111111;
   opacity: 0.72;

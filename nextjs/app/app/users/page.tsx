@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AccessPanel } from "@/app/components/app/access-panel";
+import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
+import { useUserState } from "@/app/lib/providers/userProvider";
 import {
   activateUser,
   createUser,
@@ -38,6 +41,8 @@ const INITIAL_FORM: UserFormState = {
 };
 
 export default function UsersPage() {
+  const { session } = useUserState();
+  const canViewUsers = hasPermission(session, APP_PERMISSIONS.users);
   const [users, setUsers] = useState<UserDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [query, setQuery] = useState("");
@@ -73,8 +78,13 @@ export default function UsersPage() {
   }, [isActiveFilter, query, users]);
 
   useEffect(() => {
+    if (!canViewUsers) {
+      setIsLoading(false);
+      return;
+    }
+
     void loadData();
-  }, []);
+  }, [canViewUsers]);
 
   async function loadData() {
     setIsLoading(true);
@@ -198,6 +208,14 @@ export default function UsersPage() {
     }));
   }
 
+  function getRoleValue(role: RoleDto) {
+    return role.name;
+  }
+
+  if (!canViewUsers) {
+    return <AccessPanel title="Users" message="Your current tenant role does not allow access to user management." />;
+  }
+
   return (
     <section className="page-section">
       <div className="section-header">
@@ -291,8 +309,8 @@ export default function UsersPage() {
                     <label key={role.id} className="management-toggle">
                       <input
                         type="checkbox"
-                        checked={form.roleNames.includes(role.normalizedName || role.name)}
-                        onChange={() => toggleRole(role.normalizedName || role.name)}
+                        checked={form.roleNames.includes(getRoleValue(role))}
+                        onChange={() => toggleRole(getRoleValue(role))}
                       />
                       <span>{role.displayName}</span>
                     </label>

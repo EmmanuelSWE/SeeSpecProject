@@ -23,6 +23,8 @@ export type AuthenticateResult = {
   userName: string;
   fullName: string;
   emailAddress: string;
+  roleNames?: string[];
+  grantedPermissions?: string[];
 };
 
 export type CurrentLoginInformationsResult = {
@@ -32,6 +34,8 @@ export type CurrentLoginInformationsResult = {
     name: string;
     surname: string;
     emailAddress: string;
+    roleNames: string[];
+    grantedPermissions: string[];
   } | null;
   tenant: {
     id: number;

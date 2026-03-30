@@ -20,6 +20,18 @@ export const sidebarItems = [
   { label: "Users", href: "/app/users", icon: "users" }
 ] as const;
 
+export const tenantAdminSidebarItems = [
+  { label: "Dashboard", href: "/app/home", icon: "home" },
+  { label: "Requirements", href: "/app/requirements", icon: "requirements" },
+  { label: "Assignments", href: "/app/assignments", icon: "assignments" },
+  { label: "Usecase Diagrams", href: "/app/usecase-diagrams", icon: "usecase" },
+  { label: "Domain model", href: "/app/domain-model", icon: "domain" },
+  { label: "Activity Diagram", href: "/app/activity-diagram", icon: "activity" },
+  { label: "Tenants", href: "/app/tenants", icon: "building" },
+  { label: "Users", href: "/app/users", icon: "users" },
+  { label: "Settings", href: "/app/settings", icon: "settings" }
+] as const;
+
 export const multiLevelLinks = [
   {
     label: "ASP.NET Boilerplate",

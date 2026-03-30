@@ -46,6 +46,8 @@ function readSession(): IUserSession | null {
       fullName: string;
       emailAddress: string;
       expireInSeconds: number;
+      roleNames?: string[];
+      grantedPermissions?: string[];
     };
 
     return {
@@ -56,7 +58,9 @@ function readSession(): IUserSession | null {
       tenantId: parsed.tenantId,
       userName: parsed.userName,
       fullName: parsed.fullName,
-      emailAddress: parsed.emailAddress
+      emailAddress: parsed.emailAddress,
+      roleNames: parsed.roleNames ?? [],
+      grantedPermissions: parsed.grantedPermissions ?? []
     };
   } catch {
     return null;
@@ -91,7 +95,9 @@ async function fetchCurrentSession(): Promise<IUserSession | null> {
       tenantId: result.tenant?.id ?? null,
       userName: result.user.userName,
       fullName: `${result.user.name} ${result.user.surname}`.trim(),
-      emailAddress: result.user.emailAddress
+      emailAddress: result.user.emailAddress,
+      roleNames: result.user.roleNames ?? [],
+      grantedPermissions: result.user.grantedPermissions ?? []
     };
   } catch {
     return readSession();
@@ -122,7 +128,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const result = await authenticate(payload);
-      const session = mapLoginResultToSession(result);
+      const session = (await fetchCurrentSession()) ?? mapLoginResultToSession(result);
       dispatch(loginSuccess(session));
       return session;
     } catch (error) {

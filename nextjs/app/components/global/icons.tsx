@@ -3,6 +3,12 @@ export type IconName =
   | "home"
   | "info"
   | "roles"
+  | "requirements"
+  | "assignments"
+  | "usecase"
+  | "domain"
+  | "activity"
+  | "settings"
   | "building"
   | "users"
   | "logout"
@@ -29,6 +35,12 @@ export function Icon({ name, className = "" }: { name: IconName; className?: str
     home: "H",
     info: "i",
     roles: "R",
+    requirements: "Q",
+    assignments: "A",
+    usecase: "U?",
+    domain: "D",
+    activity: "Y",
+    settings: "S",
     building: "B",
     users: "U",
     logout: ">",

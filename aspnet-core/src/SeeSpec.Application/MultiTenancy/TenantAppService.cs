@@ -45,6 +45,7 @@ namespace SeeSpec.MultiTenancy
 
         public override async Task<TenantDto> CreateAsync(CreateTenantDto input)
         {
+            PermissionChecker.Authorize(PermissionNames.Pages_Tenants_Create);
             CheckCreatePermission();
 
             // Create tenant
@@ -93,9 +94,27 @@ namespace SeeSpec.MultiTenancy
 
         protected override IQueryable<Tenant> CreateFilteredQuery(PagedTenantResultRequestDto input)
         {
-            return Repository.GetAll()
+            var query = Repository.GetAll()
                 .WhereIf(!input.Keyword.IsNullOrWhiteSpace(), x => x.TenancyName.Contains(input.Keyword) || x.Name.Contains(input.Keyword))
                 .WhereIf(input.IsActive.HasValue, x => x.IsActive == input.IsActive);
+
+            if (AbpSession.TenantId.HasValue)
+            {
+                query = query.Where(x => x.Id == AbpSession.TenantId.Value);
+            }
+
+            return query;
+        }
+
+        [AbpAuthorize(PermissionNames.Pages_Tenants_Edit)]
+        public override async Task<TenantDto> UpdateAsync(TenantDto input)
+        {
+            if (AbpSession.TenantId.HasValue && input.Id != AbpSession.TenantId.Value)
+            {
+                throw new Abp.Authorization.AbpAuthorizationException("Tenant admins may only edit their own tenant.");
+            }
+
+            return await base.UpdateAsync(input);
         }
 
         protected override void MapToEntity(TenantDto updateInput, Tenant entity)
@@ -108,6 +127,7 @@ namespace SeeSpec.MultiTenancy
 
         public override async Task DeleteAsync(EntityDto<int> input)
         {
+            PermissionChecker.Authorize(PermissionNames.Pages_Tenants_Delete);
             CheckDeletePermission();
 
             var tenant = await _tenantManager.GetByIdAsync(input.Id);
@@ -120,4 +140,3 @@ namespace SeeSpec.MultiTenancy
         }
     }
 }
-

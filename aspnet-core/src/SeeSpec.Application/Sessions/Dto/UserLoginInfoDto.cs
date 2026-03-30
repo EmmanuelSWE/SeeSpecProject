@@ -14,5 +14,9 @@ namespace SeeSpec.Sessions.Dto
         public string UserName { get; set; }
 
         public string EmailAddress { get; set; }
+
+        public string[] RoleNames { get; set; }
+
+        public string[] GrantedPermissions { get; set; }
     }
 }

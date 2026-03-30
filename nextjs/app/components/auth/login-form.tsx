@@ -75,18 +75,33 @@ export function LoginForm() {
     [tenantOptions]
   );
 
+  function getTenantFeedbackLabel(tenantName: string) {
+    if (tenantName === "__host__") {
+      return "Host Tenant";
+    }
+
+    return tenantOptions.find((tenant) => tenant.tenancyName === tenantName)?.name ?? tenantName;
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     try {
       const tenancyName = form.tenantName.trim();
 
-      await login({
+      const session = await login({
         tenancyName: tenancyName && tenancyName !== "__host__" ? tenancyName : undefined,
         userNameOrEmailAddress: form.email,
         password: form.password,
         rememberClient: true
       });
+
+      const tenantLabel =
+        tenancyName && tenancyName !== "__host__"
+          ? tenantOptions.find((tenant) => tenant.tenancyName === tenancyName)?.name ?? tenancyName
+          : "Host Tenant";
+
+      console.log(`user : ${session.userName} logged into tenant : ${tenantLabel}`);
       router.push("/app/home");
     } catch {}
   }
@@ -108,7 +123,7 @@ export function LoginForm() {
             options={tenantSelectOptions}
             onChange={(tenantName) => {
               setTenantError(null);
-              setTenantMessage(tenantName === "__host__" ? "Host tenant selected." : "Tenant selected.");
+              setTenantMessage(`Selected tenant: ${getTenantFeedbackLabel(tenantName)}`);
               setForm((current) => ({ ...current, tenantName }));
             }}
           />

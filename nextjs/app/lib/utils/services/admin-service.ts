@@ -130,6 +130,21 @@ export async function getUserRoles() {
   }
 }
 
+export async function getRoles(params: { keyword?: string; maxResultCount?: number } = {}) {
+  try {
+    const response = await axiosInstance.get<AbpResponse<PagedResult<RoleDto>>>("/api/services/app/Role/GetAll", {
+      params: {
+        Keyword: params.keyword,
+        MaxResultCount: params.maxResultCount ?? 100
+      }
+    });
+
+    return unwrapResponse(response.data);
+  } catch (error) {
+    throw new Error(mapErrorMessage(error, "Unable to load roles."));
+  }
+}
+
 export async function createUser(payload: CreateUserInput) {
   try {
     const response = await axiosInstance.post<AbpResponse<UserDto>>("/api/services/app/User/Create", payload);

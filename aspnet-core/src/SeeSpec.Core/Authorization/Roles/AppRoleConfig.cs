@@ -24,6 +24,27 @@ namespace SeeSpec.Authorization.Roles
                     MultiTenancySides.Tenant
                 )
             );
+
+            roleManagementConfig.StaticRoles.Add(
+                new StaticRoleDefinition(
+                    StaticRoleNames.Tenants.ProjectLead,
+                    MultiTenancySides.Tenant
+                )
+            );
+
+            roleManagementConfig.StaticRoles.Add(
+                new StaticRoleDefinition(
+                    StaticRoleNames.Tenants.BusinessAnalyst,
+                    MultiTenancySides.Tenant
+                )
+            );
+
+            roleManagementConfig.StaticRoles.Add(
+                new StaticRoleDefinition(
+                    StaticRoleNames.Tenants.SystemArchitect,
+                    MultiTenancySides.Tenant
+                )
+            );
         }
     }
 }

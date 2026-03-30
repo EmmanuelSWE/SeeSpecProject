@@ -150,7 +150,7 @@ namespace SeeSpec.Users
         {
             var roleIds = user.Roles.Select(x => x.RoleId).ToArray();
 
-            var roles = _roleManager.Roles.Where(r => roleIds.Contains(r.Id)).Select(r => r.NormalizedName);
+            var roles = _roleManager.Roles.Where(r => roleIds.Contains(r.Id)).Select(r => r.Name);
 
             var userDto = base.MapToEntityDto(user);
             userDto.RoleNames = roles.ToArray();
@@ -248,4 +248,3 @@ namespace SeeSpec.Users
         }
     }
 }
-

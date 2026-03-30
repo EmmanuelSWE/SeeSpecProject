@@ -103,16 +103,29 @@ export default function HomePage() {
   }
 
   return (
-    <section className="page-section">
-      <h1>Home page</h1>
-      <div className="alert-banner">
-        This is a sample Dashboard which doesn&apos;t show any server side data. However, you can develop your own
-        dashboard inspired by this one and its source code.
+    <section className="page-section tenant-home">
+      <div className="card tenant-home-hero tenant-dashboard-hero">
+        <div className="card-body">
+          <span className="host-home-eyebrow">Tenant Workspace</span>
+          <h1>Workspace</h1>
+          <p>
+            Signed in as <strong>{session?.fullName || session?.userName}</strong> for tenant{" "}
+            <strong>{session?.tenantId ?? "-"}</strong>. Visible pages are driven by your backend permissions.
+          </p>
+          <div className="badge-row tenant-role-row">
+            {(session?.roleNames ?? []).map((role) => (
+              <span key={role} className="badge">
+                {role}
+              </span>
+            ))}
+            {(session?.roleNames ?? []).length === 0 ? <span className="badge">Member</span> : null}
+          </div>
+        </div>
       </div>
 
-      <div className="hero-grid">
+      <div className="hero-grid tenant-dashboard-grid">
         {dashboardStats.map((stat, index) => (
-          <article key={stat.title} className={`stat-card ${stat.tone}`}>
+          <article key={stat.title} className={`stat-card ${stat.tone} tenant-stat-card`}>
             <div>
               <strong>{stat.value}</strong>
               <p>{stat.title}</p>
@@ -127,9 +140,9 @@ export default function HomePage() {
         ))}
       </div>
 
-      <div className="summary-grid">
+      <div className="summary-grid tenant-summary-grid">
         {summaryStats.map((stat) => (
-          <article key={stat.label} className="info-card">
+          <article key={stat.label} className="info-card tenant-info-card">
             <div className={`info-icon ${stat.tone}`}>
               <Icon
                 name={
@@ -218,6 +231,7 @@ export default function HomePage() {
           </table>
         </div>
       </div>
+
     </section>
   );
 }

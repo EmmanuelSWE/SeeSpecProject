@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AccessPanel } from "@/app/components/app/access-panel";
+import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
+import { useUserState } from "@/app/lib/providers/userProvider";
 import {
   createTenant,
   deleteTenant,
@@ -19,6 +22,10 @@ type TenantFormState = {
   isActive: boolean;
 };
 
+type TenantTableRow = TenantDto & {
+  isHostTenant?: boolean;
+};
+
 const INITIAL_FORM: TenantFormState = {
   id: null,
   tenancyName: "",
@@ -28,6 +35,11 @@ const INITIAL_FORM: TenantFormState = {
 };
 
 export default function TenantsPage() {
+  const { session } = useUserState();
+  const canViewTenants = session?.tenantId == null || hasPermission(session, APP_PERMISSIONS.tenants);
+  const canCreateTenant = session?.tenantId == null || hasPermission(session, APP_PERMISSIONS.tenantsCreate);
+  const canEditTenant = session?.tenantId == null || hasPermission(session, APP_PERMISSIONS.tenantsEdit);
+  const canDeleteTenant = session?.tenantId == null || hasPermission(session, APP_PERMISSIONS.tenantsDelete);
   const [tenants, setTenants] = useState<TenantDto[]>([]);
   const [query, setQuery] = useState("");
   const [isActiveFilter, setIsActiveFilter] = useState<"all" | "active" | "inactive">("all");
@@ -39,10 +51,24 @@ export default function TenantsPage() {
 
   const isEditing = form.id !== null;
 
+  const tenantRows = useMemo<TenantTableRow[]>(
+    () => [
+      {
+        id: 0,
+        tenancyName: "host",
+        name: "Host Tenant",
+        isActive: true,
+        isHostTenant: true
+      },
+      ...tenants
+    ],
+    [tenants]
+  );
+
   const filteredTenants = useMemo(() => {
     const loweredQuery = query.trim().toLowerCase();
 
-    return tenants.filter((tenant) => {
+    return tenantRows.filter((tenant) => {
       if (loweredQuery && !`${tenant.tenancyName} ${tenant.name}`.toLowerCase().includes(loweredQuery)) {
         return false;
       }
@@ -53,11 +79,16 @@ export default function TenantsPage() {
 
       return isActiveFilter === "active" ? tenant.isActive : !tenant.isActive;
     });
-  }, [isActiveFilter, query, tenants]);
+  }, [isActiveFilter, query, tenantRows]);
 
   useEffect(() => {
+    if (!canViewTenants) {
+      setIsLoading(false);
+      return;
+    }
+
     void loadData();
-  }, []);
+  }, [canViewTenants]);
 
   async function loadData() {
     setIsLoading(true);
@@ -97,6 +128,10 @@ export default function TenantsPage() {
 
     try {
       if (isEditing && form.id !== null) {
+        if (!canEditTenant) {
+          throw new Error("You do not have permission to edit this tenant.");
+        }
+
         const payload: UpdateTenantInput = {
           id: form.id,
           tenancyName: form.tenancyName,
@@ -107,6 +142,10 @@ export default function TenantsPage() {
         await updateTenant(payload);
         setStatusMessage(`Tenant "${form.tenancyName}" updated.`);
       } else {
+        if (!canCreateTenant) {
+          throw new Error("You do not have permission to create tenants.");
+        }
+
         const payload: CreateTenantInput = {
           tenancyName: form.tenancyName,
           name: form.name,
@@ -115,7 +154,9 @@ export default function TenantsPage() {
         };
 
         await createTenant(payload);
-        setStatusMessage(`Tenant "${form.tenancyName}" created.`);
+        setStatusMessage(
+          `Tenant "${form.tenancyName}" created. Admin seeded with email "${form.adminEmailAddress}", password "123456", and role "Tenant Admin".`
+        );
       }
 
       resetForm();
@@ -128,6 +169,11 @@ export default function TenantsPage() {
   }
 
   async function handleDelete(tenant: TenantDto) {
+    if (!canDeleteTenant) {
+      setError("You do not have permission to delete tenants.");
+      return;
+    }
+
     setError(null);
     setStatusMessage(null);
 
@@ -143,13 +189,19 @@ export default function TenantsPage() {
     }
   }
 
+  if (!canViewTenants) {
+    return <AccessPanel title="Tenants" message="Only host-level administrators can access tenant management." />;
+  }
+
   return (
     <section className="page-section">
-      <div className="section-header">
+        <div className="section-header">
         <h1>Tenants</h1>
-        <button type="button" className="primary-button" onClick={resetForm}>
-          {isEditing ? "Create new tenant" : "Clear form"}
-        </button>
+        {canCreateTenant ? (
+          <button type="button" className="primary-button" onClick={resetForm}>
+            {isEditing ? "Create new tenant" : "Clear form"}
+          </button>
+        ) : null}
       </div>
 
       {error ? (
@@ -167,7 +219,7 @@ export default function TenantsPage() {
       <div className="management-grid">
         <div className="card">
           <div className="card-header">
-            <h3>{isEditing ? "Edit tenant" : "Create tenant"}</h3>
+            <h3>{isEditing ? "Edit tenant" : canCreateTenant ? "Create tenant" : "Tenant details"}</h3>
           </div>
           <div className="card-body">
             <form className="management-form" onSubmit={handleSubmit}>
@@ -176,6 +228,7 @@ export default function TenantsPage() {
                 <input
                   value={form.tenancyName}
                   onChange={(event) => setForm((current) => ({ ...current, tenancyName: event.target.value }))}
+                  disabled={!canCreateTenant || isEditing}
                   required
                 />
               </label>
@@ -185,6 +238,7 @@ export default function TenantsPage() {
                 <input
                   value={form.name}
                   onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                  disabled={isEditing ? !canEditTenant : !canCreateTenant}
                   required
                 />
               </label>
@@ -197,6 +251,7 @@ export default function TenantsPage() {
                       type="email"
                       value={form.adminEmailAddress}
                       onChange={(event) => setForm((current) => ({ ...current, adminEmailAddress: event.target.value }))}
+                      disabled={!canCreateTenant}
                       required
                     />
                   </label>
@@ -208,14 +263,23 @@ export default function TenantsPage() {
                   type="checkbox"
                   checked={form.isActive}
                   onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
+                  disabled={isEditing ? !canEditTenant : !canCreateTenant}
                 />
                 <span>Active tenant</span>
               </label>
 
               <div className="management-actions">
-                <button type="submit" className="primary-button" disabled={isSaving}>
-                  {isSaving ? "Saving..." : isEditing ? "Update tenant" : "Create tenant"}
-                </button>
+                {isEditing ? (
+                  canEditTenant ? (
+                    <button type="submit" className="primary-button" disabled={isSaving}>
+                      {isSaving ? "Saving..." : "Update tenant"}
+                    </button>
+                  ) : null
+                ) : canCreateTenant ? (
+                  <button type="submit" className="primary-button" disabled={isSaving}>
+                    {isSaving ? "Saving..." : "Create tenant"}
+                  </button>
+                ) : null}
                 {isEditing ? (
                   <button type="button" className="secondary-button" onClick={resetForm}>
                     Cancel
@@ -271,16 +335,25 @@ export default function TenantsPage() {
                     <tr key={tenant.id}>
                       <td>{tenant.tenancyName}</td>
                       <td>{tenant.name}</td>
-                      <td>{tenant.isActive ? "Active" : "Inactive"}</td>
+                      <td>{tenant.isHostTenant ? "Host" : tenant.isActive ? "Active" : "Inactive"}</td>
                       <td>
-                        <div className="action-row">
-                          <button type="button" className="table-action" onClick={() => startEdit(tenant)}>
-                            Edit
-                          </button>
-                          <button type="button" className="table-action danger" onClick={() => void handleDelete(tenant)}>
-                            Delete
-                          </button>
-                        </div>
+                        {tenant.isHostTenant ? (
+                          <span>System scope</span>
+                        ) : (
+                          <div className="action-row">
+                            {canEditTenant ? (
+                              <button type="button" className="table-action" onClick={() => startEdit(tenant)}>
+                                Edit
+                              </button>
+                            ) : null}
+                            {canDeleteTenant ? (
+                              <button type="button" className="table-action danger" onClick={() => void handleDelete(tenant)}>
+                                Delete
+                              </button>
+                            ) : null}
+                            {!canEditTenant && !canDeleteTenant ? <span>Read only</span> : null}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))

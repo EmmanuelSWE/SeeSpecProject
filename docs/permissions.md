@@ -52,7 +52,7 @@ Permissions are evaluated across these scopes:
 - may create and update requirement-linked tasks when assigned
 - may not edit architecture-only sections unless separately elevated
 
-### Systems Architect
+### System Architect
 
 - edits architecture and domain-oriented sections only
 - may manage diagram-linked structural artifacts
@@ -83,7 +83,7 @@ Standard action verbs used in this document:
 
 ## 6. Matrix
 
-| Resource | Action | Host Admin | Tenant Admin | Project Lead | Business Analyst | Systems Architect | Notes |
+| Resource | Action | Host Admin | Tenant Admin | Project Lead | Business Analyst | System Architect | Notes |
 |---|---|---|---|---|---|---|---|
 | Tenant | view | yes | own tenant only | no | no | no | Host Admin may view all tenants |
 | Tenant | create | yes | no | no | no | no | |
@@ -133,13 +133,13 @@ Editing rules:
 
 - `Project Lead` may edit all section types
 - `Business Analyst` may edit `Requirement`
-- `Systems Architect` may edit `Architecture` and `Domain`
+- `System Architect` may edit `Architecture` and `Domain`
 - `Shared` sections require explicit project policy
 
 Current default for `Shared`:
 
 - `Project Lead` may edit
-- `Business Analyst` and `Systems Architect` are read-only unless the project defines an owner
+- `Business Analyst` and `System Architect` are read-only unless the project defines an owner
 
 ## 8. UI Enforcement Rules
 
@@ -159,6 +159,6 @@ Current default for `Shared`:
 ## 10. Open Decisions To Finalize
 
 - whether Tenant Admin can edit all spec sections by policy or only administer projects
-- whether Business Analyst and Systems Architect can create tasks or only update tasks assigned to them
+- whether Business Analyst and System Architect can create tasks or only update tasks assigned to them
 - whether diagram editing should be split by diagram type in the permission model
-- whether validation can be run by Systems Architect in addition to Project Lead
+- whether validation can be run by System Architect in addition to Project Lead
