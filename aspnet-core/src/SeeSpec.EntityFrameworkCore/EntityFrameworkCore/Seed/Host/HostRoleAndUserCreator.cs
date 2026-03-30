@@ -14,6 +14,12 @@ namespace SeeSpec.EntityFrameworkCore.Seed.Host
 {
     public class HostRoleAndUserCreator
     {
+        private const string HostAdminUserName = AbpUserBase.AdminUserName;
+        private const string HostAdminName = "admin";
+        private const string HostAdminSurname = "admin";
+        private const string HostAdminEmail = "admin@admin.com";
+        private const string HostAdminPassword = "123";
+
         private readonly SeeSpecDbContext _context;
 
         public HostRoleAndUserCreator(SeeSpecDbContext context)
@@ -30,12 +36,21 @@ namespace SeeSpec.EntityFrameworkCore.Seed.Host
         {
             // Admin role for host
 
-            var adminRoleForHost = _context.Roles.IgnoreQueryFilters().FirstOrDefault(r => r.TenantId == null && r.Name == StaticRoleNames.Host.Admin);
+            var adminRoleForHost = _context.Roles.IgnoreQueryFilters()
+                .FirstOrDefault(r => r.TenantId == null && (r.Name == StaticRoleNames.Host.Admin || r.Name == "Admin"));
             if (adminRoleForHost == null)
             {
                 adminRoleForHost = _context.Roles.Add(new Role(null, StaticRoleNames.Host.Admin, StaticRoleNames.Host.Admin) { IsStatic = true, IsDefault = true }).Entity;
-                _context.SaveChanges();
             }
+            else
+            {
+                adminRoleForHost.Name = StaticRoleNames.Host.Admin;
+                adminRoleForHost.DisplayName = StaticRoleNames.Host.Admin;
+                adminRoleForHost.NormalizedName = StaticRoleNames.Host.Admin.ToUpperInvariant();
+                adminRoleForHost.IsStatic = true;
+                adminRoleForHost.IsDefault = true;
+            }
+            _context.SaveChanges();
 
             // Grant all permissions to admin role for host
 
@@ -67,30 +82,43 @@ namespace SeeSpec.EntityFrameworkCore.Seed.Host
 
             // Admin user for host
 
-            var adminUserForHost = _context.Users.IgnoreQueryFilters().FirstOrDefault(u => u.TenantId == null && u.UserName == AbpUserBase.AdminUserName);
+            var adminUserForHost = _context.Users.IgnoreQueryFilters().FirstOrDefault(u => u.TenantId == null && u.UserName == HostAdminUserName);
             if (adminUserForHost == null)
             {
                 var user = new User
                 {
                     TenantId = null,
-                    UserName = AbpUserBase.AdminUserName,
-                    Name = "admin",
-                    Surname = "admin",
-                    EmailAddress = "admin@aspnetboilerplate.com",
+                    UserName = HostAdminUserName,
+                    Name = HostAdminName,
+                    Surname = HostAdminSurname,
+                    EmailAddress = HostAdminEmail,
                     IsEmailConfirmed = true,
                     IsActive = true
                 };
 
-                user.Password = new PasswordHasher<User>(new OptionsWrapper<PasswordHasherOptions>(new PasswordHasherOptions())).HashPassword(user, "123qwe");
+                user.Password = new PasswordHasher<User>(new OptionsWrapper<PasswordHasherOptions>(new PasswordHasherOptions())).HashPassword(user, HostAdminPassword);
                 user.SetNormalizedNames();
 
                 adminUserForHost = _context.Users.Add(user).Entity;
                 _context.SaveChanges();
+            }
 
-                // Assign Admin role to admin user
+            adminUserForHost.Name = HostAdminName;
+            adminUserForHost.Surname = HostAdminSurname;
+            adminUserForHost.EmailAddress = HostAdminEmail;
+            adminUserForHost.IsEmailConfirmed = true;
+            adminUserForHost.IsActive = true;
+            adminUserForHost.Password = new PasswordHasher<User>(new OptionsWrapper<PasswordHasherOptions>(new PasswordHasherOptions()))
+                .HashPassword(adminUserForHost, HostAdminPassword);
+            adminUserForHost.SetNormalizedNames();
+            _context.SaveChanges();
+
+            var hasAdminRole = _context.UserRoles.IgnoreQueryFilters()
+                .Any(ur => ur.TenantId == null && ur.UserId == adminUserForHost.Id && ur.RoleId == adminRoleForHost.Id);
+
+            if (!hasAdminRole)
+            {
                 _context.UserRoles.Add(new UserRole(null, adminUserForHost.Id, adminRoleForHost.Id));
-                _context.SaveChanges();
-
                 _context.SaveChanges();
             }
         }

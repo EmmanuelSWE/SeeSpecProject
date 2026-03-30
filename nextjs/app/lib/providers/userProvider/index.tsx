@@ -1,7 +1,12 @@
 "use client";
 
 import { useContext, useEffect, useReducer } from "react";
-import { authenticate, logout as logoutRequest, type AuthenticateInput } from "@/app/lib/utils/services/auth-service";
+import {
+  authenticate,
+  getCurrentLoginInformations,
+  logout as logoutRequest,
+  type AuthenticateInput
+} from "@/app/lib/utils/services/auth-service";
 import {
   hydrateSession,
   loginError,
@@ -41,6 +46,8 @@ function readSession(): IUserSession | null {
       fullName: string;
       emailAddress: string;
       expireInSeconds: number;
+      roleNames?: string[];
+      grantedPermissions?: string[];
     };
 
     return {
@@ -51,7 +58,9 @@ function readSession(): IUserSession | null {
       tenantId: parsed.tenantId,
       userName: parsed.userName,
       fullName: parsed.fullName,
-      emailAddress: parsed.emailAddress
+      emailAddress: parsed.emailAddress,
+      roleNames: parsed.roleNames ?? [],
+      grantedPermissions: parsed.grantedPermissions ?? []
     };
   } catch {
     return null;
@@ -70,11 +79,48 @@ function mapLoginResultToSession(session: IUserSession): IUserSession {
   };
 }
 
+async function fetchCurrentSession(): Promise<IUserSession | null> {
+  try {
+    const result = await getCurrentLoginInformations();
+
+    if (!result.user) {
+      return null;
+    }
+
+    return {
+      accessToken: "",
+      encryptedAccessToken: "",
+      expireInSeconds: 0,
+      userId: result.user.id,
+      tenantId: result.tenant?.id ?? null,
+      userName: result.user.userName,
+      fullName: `${result.user.name} ${result.user.surname}`.trim(),
+      emailAddress: result.user.emailAddress,
+      roleNames: result.user.roleNames ?? [],
+      grantedPermissions: result.user.grantedPermissions ?? []
+    };
+  } catch {
+    return readSession();
+  }
+}
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(UserReducer, INITIAL_STATE);
 
   useEffect(() => {
-    dispatch(hydrateSession(readSession()));
+    let isMounted = true;
+
+    fetchCurrentSession().then((session) => {
+      if (!isMounted) {
+        return;
+      }
+
+      dispatch(hydrateSession(session));
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   async function login(payload: AuthenticateInput) {
@@ -82,7 +128,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const result = await authenticate(payload);
-      const session = mapLoginResultToSession(result);
+      const session = (await fetchCurrentSession()) ?? mapLoginResultToSession(result);
       dispatch(loginSuccess(session));
       return session;
     } catch (error) {
@@ -102,7 +148,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }
 
   function hydrateUserSession() {
-    dispatch(hydrateSession(readSession()));
+    fetchCurrentSession().then((session) => {
+      dispatch(hydrateSession(session));
+    });
   }
 
   return (

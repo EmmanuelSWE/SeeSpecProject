@@ -1,8 +1,11 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Abp.Configuration;
+using Abp.Authorization;
 using Abp.Zero.Configuration;
 using SeeSpec.Authorization.Accounts.Dto;
 using SeeSpec.Authorization.Users;
+using Microsoft.EntityFrameworkCore;
 
 namespace SeeSpec.Authorization.Accounts
 {
@@ -19,6 +22,24 @@ namespace SeeSpec.Authorization.Accounts
             _userRegistrationManager = userRegistrationManager;
         }
 
+        [AbpAllowAnonymous]
+        public async Task<ActiveTenantLoginOptionDto[]> GetActiveTenantsForLogin()
+        {
+            var tenants = await TenantManager.Tenants
+                .Where(tenant => tenant.IsActive)
+                .OrderBy(tenant => tenant.Name)
+                .Select(tenant => new ActiveTenantLoginOptionDto
+                {
+                    Id = tenant.Id,
+                    TenancyName = tenant.TenancyName,
+                    Name = tenant.Name
+                })
+                .ToArrayAsync();
+
+            return tenants;
+        }
+
+        [AbpAllowAnonymous]
         public async Task<IsTenantAvailableOutput> IsTenantAvailable(IsTenantAvailableInput input)
         {
             var tenant = await TenantManager.FindByTenancyNameAsync(input.TenancyName);
@@ -35,6 +56,7 @@ namespace SeeSpec.Authorization.Accounts
             return new IsTenantAvailableOutput(TenantAvailabilityState.Available, tenant.Id);
         }
 
+        [AbpAllowAnonymous]
         public async Task<RegisterOutput> Register(RegisterInput input)
         {
             var user = await _userRegistrationManager.RegisterAsync(

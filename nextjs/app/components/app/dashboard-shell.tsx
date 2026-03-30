@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Icon, type IconName } from "@/app/components/global/icons";
-import { languages, multiLevelLinks, sidebarItems, versionText } from "@/app/lib/data";
+import { APP_PERMISSIONS, hasPermission, isTenantAdminSession } from "@/app/lib/auth/permissions";
+import { languages, sidebarItems, tenantAdminSidebarItems, versionText } from "@/app/lib/data";
 import { useUserActions, useUserState } from "@/app/lib/providers/userProvider";
 
 function Flag({ code }: { code: string }) {
@@ -19,16 +20,44 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
-  const [multiLevelOpen, setMultiLevelOpen] = useState(true);
   const currentYear = new Date().getFullYear();
   const currentLanguage = languages[0];
+  const isHostContext = session?.tenantId == null;
+  const isTenantAdmin = isTenantAdminSession(session);
+  const tenantSidebarPermissionMap: Record<string, string | null> = {
+    "/app/home": APP_PERMISSIONS.dashboard,
+    "/app/requirements": APP_PERMISSIONS.requirements,
+    "/app/assignments": APP_PERMISSIONS.assignments,
+    "/app/usecase-diagrams": APP_PERMISSIONS.usecaseDiagrams,
+    "/app/domain-model": APP_PERMISSIONS.domainModel,
+    "/app/activity-diagram": APP_PERMISSIONS.activityDiagram,
+    "/app/tenants": APP_PERMISSIONS.tenants,
+    "/app/users": APP_PERMISSIONS.users,
+    "/app/settings": APP_PERMISSIONS.settings
+  };
+  const visibleSidebarItems = useMemo(() => {
+    if (isHostContext) {
+      return sidebarItems
+        .filter((item) => item.href === "/app/home" || item.href === "/app/users" || item.href === "/app/tenants")
+        .map((item) => (item.href === "/app/home" ? { ...item, label: "Profile" } : item));
+    }
+
+    if (isTenantAdmin) {
+      return tenantAdminSidebarItems;
+    }
+
+    return tenantAdminSidebarItems.filter((item) => {
+      const permission = tenantSidebarPermissionMap[item.href];
+      return permission ? hasPermission(session, permission) : false;
+    });
+  }, [isHostContext, isTenantAdmin, session, tenantSidebarPermissionMap]);
   const activeLabel = useMemo(
-    () => sidebarItems.find((item) => pathname === item.href)?.label ?? "About",
-    [pathname]
+    () => visibleSidebarItems.find((item) => pathname === item.href)?.label ?? (isHostContext ? "Profile" : "Workspace"),
+    [isHostContext, pathname, visibleSidebarItems]
   );
 
   return (
-    <div className={`shell ${sidebarOpen ? "sidebar-open" : ""}`}>
+    <div className={`shell ${isHostContext ? "host-shell" : "tenant-shell"} ${sidebarOpen ? "sidebar-open" : ""}`}>
       <header className="topbar">
         <div className="topbar-left">
           <button
@@ -40,36 +69,68 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <Icon name="menu" />
           </button>
           <Link href="/app/home" className="top-link">
-            Home page
+            {isHostContext ? "Profile" : "Workspace"}
           </Link>
-          <Link href="/app/about" className="top-link">
-            About
-          </Link>
+          {isHostContext ? (
+            <>
+              <Link href="/app/users" className="top-link">
+                Users
+              </Link>
+              <Link href="/app/tenants" className="top-link">
+                Tenants
+              </Link>
+            </>
+          ) : isTenantAdmin ? (
+            <>
+              <Link href="/app/requirements" className="top-link">
+                Requirements
+              </Link>
+              <Link href="/app/assignments" className="top-link">
+                Assignments
+              </Link>
+              <Link href="/app/settings" className="top-link">
+                Settings
+              </Link>
+            </>
+          ) : visibleSidebarItems.length > 1 ? (
+            <>
+              {visibleSidebarItems
+                .filter((item) => item.href !== "/app/home")
+                .slice(0, 3)
+                .map((item) => (
+                  <Link key={item.href} href={item.href} className="top-link">
+                    {item.label}
+                  </Link>
+                ))}
+            </>
+          ) : null}
         </div>
         <div className="topbar-right">
-          <div className="menu-wrapper">
-            <button
-              type="button"
-              className="plain-button"
-              onClick={() => {
-                setLanguageOpen((value) => !value);
-                setUserOpen(false);
-              }}
-            >
-              <Flag code={currentLanguage.flag} />
-              <span>{currentLanguage.label}</span>
-            </button>
-            {languageOpen ? (
-              <div className="dropdown">
-                {languages.slice(1).map((language) => (
-                  <button key={language.code} type="button" className="dropdown-item">
-                    <Flag code={language.flag} />
-                    <span>{language.label}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          {!isHostContext ? (
+            <div className="menu-wrapper">
+              <button
+                type="button"
+                className="plain-button"
+                onClick={() => {
+                  setLanguageOpen((value) => !value);
+                  setUserOpen(false);
+                }}
+              >
+                <Flag code={currentLanguage.flag} />
+                <span>{currentLanguage.label}</span>
+              </button>
+              {languageOpen ? (
+                <div className="dropdown">
+                  {languages.slice(1).map((language) => (
+                    <button key={language.code} type="button" className="dropdown-item">
+                      <Flag code={language.flag} />
+                      <span>{language.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="menu-wrapper">
             <button
               type="button"
@@ -116,7 +177,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="side-nav">
-          {sidebarItems.map((item) => {
+          {visibleSidebarItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link key={item.href} href={item.href} className={`side-link ${isActive ? "active" : ""}`}>
@@ -126,30 +187,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             );
           })}
 
-          <button
-            type="button"
-            className={`side-link side-toggle ${multiLevelOpen ? "active-parent" : ""}`}
-            onClick={() => setMultiLevelOpen((value) => !value)}
-          >
-            <span className="dot-icon" />
-            <span>Multi Level Menu</span>
-            <Icon name="chevron" className={multiLevelOpen ? "rotated" : ""} />
-          </button>
-
-          {multiLevelOpen ? (
-            <div className="submenu">
-              {multiLevelLinks.map((section) => (
-                <div key={section.label} className="submenu-group">
-                  <div className="submenu-heading">{section.label}</div>
-                  {section.links.map((link) => (
-                    <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="submenu-link">
-                      {link.label}
-                    </a>
-                  ))}
-                </div>
-              ))}
-            </div>
-          ) : null}
         </nav>
       </aside>
 
