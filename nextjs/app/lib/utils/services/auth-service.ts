@@ -52,7 +52,7 @@ export type ActiveTenantLoginOption = {
 
 export async function authenticate(payload: AuthenticateInput) {
   try {
-    const response = await axiosInstance.post<AuthenticateResult>("/api/TokenAuth/Authenticate", payload);
+    const response = await axiosInstance.post<AuthenticateResult>("/TokenAuth/Authenticate", payload);
     return response.data;
   } catch (error) {
     if (
@@ -83,7 +83,7 @@ export async function authenticate(payload: AuthenticateInput) {
 
 export async function checkTenantAvailability(tenancyName: string) {
   try {
-    const response = await axiosInstance.post<{ result: TenantAvailabilityResult }>("/api/services/app/Account/IsTenantAvailable", {
+    const response = await axiosInstance.post<{ result: TenantAvailabilityResult }>("/services/app/Account/IsTenantAvailable", {
       tenancyName
     });
 
@@ -96,7 +96,7 @@ export async function checkTenantAvailability(tenancyName: string) {
 export async function getActiveTenantsForLogin() {
   try {
     const response = await axiosInstance.get<{ result: ActiveTenantLoginOption[] }>(
-      "/api/services/app/Account/GetActiveTenantsForLogin"
+      "/services/app/Account/GetActiveTenantsForLogin"
     );
 
     return response.data.result;
@@ -121,12 +121,12 @@ export async function getActiveTenantsForLogin() {
 }
 
 export async function logout() {
-  await axiosInstance.post("/api/TokenAuth/Logout");
+  await axiosInstance.post("/TokenAuth/Logout");
 }
 
 export async function getCurrentLoginInformations() {
   const response = await axiosInstance.get<{ result: CurrentLoginInformationsResult }>(
-    "/api/services/app/Session/GetCurrentLoginInformations"
+    "/services/app/Session/GetCurrentLoginInformations"
   );
 
   return response.data.result;

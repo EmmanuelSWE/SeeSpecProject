@@ -30,4 +30,17 @@ This app is the primary Next.js frontend for SeeSpec and is being aligned with t
 1. Install dependencies with `npm install`
 2. Start the dev server with `npm run dev`
 
-Set `NEXT_PUBLIC_API_BASE_URL` if the backend is not running at `https://localhost:44311`.
+## API Proxy
+
+The frontend now uses a same-origin BFF proxy under `/api`.
+
+- Browser requests go to `/api/...`
+- Next.js forwards them server-side to `BACKEND_API_BASE_URL`
+- The browser should not call Render directly
+- `NEXT_PUBLIC_API_BASE_URL` is no longer required
+
+Required environment variable:
+
+```env
+BACKEND_API_BASE_URL=https://your-api-name.onrender.com
+```
