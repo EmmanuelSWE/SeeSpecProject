@@ -2,9 +2,19 @@
 
 import Link from "next/link";
 import { DrawIoEditor } from "@/app/components/app/draw-io-editor";
-import type { BackendRecord } from "@/app/lib/mock-backends";
+import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
 
-export function DomainModelWorkspace({ backend }: { backend: BackendRecord }) {
+export function DomainModelWorkspace({
+    backend,
+    diagram
+}: {
+    backend: BackendDto;
+    diagram: DiagramElementDto | null;
+}) {
+    const entities = diagram?.entities ?? [];
+    const relationships = diagram?.relationships ?? [];
+
     return (
         <section className="page-section usecase-page">
             <div className="card usecase-hero-card">
@@ -12,11 +22,11 @@ export function DomainModelWorkspace({ backend }: { backend: BackendRecord }) {
                     <div className="usecase-hero-copy">
                         <span className="requirements-eyebrow">Domain Model</span>
                         <h1>{backend.name}</h1>
-                        <p>Review the backend entities and their relationships before wiring the draw.io model scene.</p>
+                        <p>{diagram?.description || "Review the backend entities and their relationships before wiring the draw.io model scene."}</p>
                     </div>
                     <div className="usecase-hero-meta">
-                        <span className="badge">{backend.domainEntities.length} entities</span>
-                        <span className="badge">{backend.domainRelationships.length} relationships</span>
+                        <span className="badge">{entities.length} entities</span>
+                        <span className="badge">{relationships.length} relationships</span>
                     </div>
                 </div>
             </div>
@@ -33,7 +43,7 @@ export function DomainModelWorkspace({ backend }: { backend: BackendRecord }) {
                         <div className="usecase-summary-block">
                             <strong>Entities</strong>
                             <div className="usecase-link-list">
-                                {backend.domainEntities.map((entity) => (
+                                {entities.map((entity) => (
                                     <div key={entity.id} className="requirements-link-card">
                                         <span>Entity</span>
                                         <strong>{entity.name}</strong>
@@ -45,7 +55,7 @@ export function DomainModelWorkspace({ backend }: { backend: BackendRecord }) {
                         <div className="usecase-summary-block">
                             <strong>Relationships</strong>
                             <div className="usecase-link-list">
-                                {backend.domainRelationships.map((relationship) => (
+                                {relationships.map((relationship) => (
                                     <div key={relationship.id} className="requirements-link-card">
                                         <span>Relationship</span>
                                         <strong>

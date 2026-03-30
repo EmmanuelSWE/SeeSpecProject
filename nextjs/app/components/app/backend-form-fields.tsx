@@ -1,6 +1,6 @@
 "use client";
 
-import type { BackendRoleName, BackendRecord, BackendOverviewRecord } from "@/app/lib/mock-backends";
+import type { BackendDto, BackendOverviewDto, BackendRoleName } from "@/app/lib/utils/services/backend-service";
 
 export function BackendInputField({
     label,
@@ -55,7 +55,7 @@ export function BackendSelectField<TValue extends string>({
 }
 
 export type BackendFormState = Pick<
-    BackendRecord,
+    BackendDto,
     "name" | "framework" | "runtimeVersion" | "repositoryUrl" | "description" | "status"
 >;
 
@@ -74,7 +74,7 @@ export function BackendFormFields({
             <BackendSelectField
                 label="Status"
                 value={value.status}
-                options={["Active", "Planned", "Maintenance"] as const}
+                options={["Draft", "Active", "Archived"] as const}
                 onChange={(status) => onChange({ ...value, status })}
             />
             <BackendInputField
@@ -95,7 +95,7 @@ export function BackendFormFields({
     );
 }
 
-export type OverviewFormState = BackendOverviewRecord;
+export type OverviewFormState = BackendOverviewDto;
 
 export function BackendOverviewFormFields({
     value,

@@ -11,11 +11,12 @@ import {
     type BackendRoleFormState
 } from "@/app/components/app/backend-form-fields";
 import { BackendModal } from "@/app/components/app/backend-modal";
-import { createRoleRecord, type BackendRecord, readBackendRecords, writeBackendRecords } from "@/app/lib/mock-backends";
+import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-service";
 
 type ModalState = "edit-backend" | "overview" | "role" | null;
 
-function toBackendFormState(backend: BackendRecord): BackendFormState {
+function toBackendFormState(backend: BackendDto): BackendFormState {
     return {
         name: backend.name,
         framework: backend.framework,
@@ -26,20 +27,34 @@ function toBackendFormState(backend: BackendRecord): BackendFormState {
     };
 }
 
-function toOverviewFormState(backend: BackendRecord): OverviewFormState {
-    return backend.overview ?? { summary: "", scope: "", goals: "" };
+function toOverviewFormState(overviewSection: SpecSectionDto | null): OverviewFormState {
+    return overviewSection
+        ? {
+              summary: overviewSection.content[0] ?? overviewSection.summary,
+              scope: overviewSection.content[1] ?? "",
+              goals: overviewSection.content[2] ?? ""
+          }
+        : { summary: "", scope: "", goals: "" };
 }
 
 export function BackendOverviewWorkspace({
     backend,
-    onBackendChange
+    overviewSection,
+    canManageRoles,
+    onSaveBackend,
+    onSaveOverview,
+    onSaveRole
 }: {
-    backend: BackendRecord;
-    onBackendChange: (next: BackendRecord) => void;
+    backend: BackendDto;
+    overviewSection: SpecSectionDto | null;
+    canManageRoles: boolean;
+    onSaveBackend: (next: BackendFormState) => Promise<void>;
+    onSaveOverview: (next: OverviewFormState) => Promise<void>;
+    onSaveRole: (role: BackendRoleFormState) => Promise<void>;
 }) {
     const [modal, setModal] = useState<ModalState>(null);
     const [backendForm, setBackendForm] = useState<BackendFormState>(() => toBackendFormState(backend));
-    const [overviewForm, setOverviewForm] = useState<OverviewFormState>(() => toOverviewFormState(backend));
+    const [overviewForm, setOverviewForm] = useState<OverviewFormState>(() => toOverviewFormState(overviewSection));
     const [roleForm, setRoleForm] = useState<BackendRoleFormState>({
         roleName: "Project Lead",
         assignedTo: "",
@@ -47,7 +62,7 @@ export function BackendOverviewWorkspace({
         note: ""
     });
 
-    const hasOverview = Boolean(backend.overview);
+    const hasOverview = Boolean(overviewSection);
     const summaryCards = useMemo(
         () => [
             { label: "Project roles", value: String(backend.roles.length) },
@@ -57,24 +72,18 @@ export function BackendOverviewWorkspace({
         [backend]
     );
 
-    function persist(updatedBackend: BackendRecord) {
-        const backends = readBackendRecords().map((record) => (record.id === updatedBackend.id ? updatedBackend : record));
-        writeBackendRecords(backends);
-        onBackendChange(updatedBackend);
-    }
-
-    function saveBackend() {
-        persist({ ...backend, ...backendForm });
+    async function saveBackend() {
+        await onSaveBackend(backendForm);
         setModal(null);
     }
 
-    function saveOverview() {
-        persist({ ...backend, overview: overviewForm });
+    async function saveOverview() {
+        await onSaveOverview(overviewForm);
         setModal(null);
     }
 
-    function saveRole() {
-        persist({ ...backend, roles: [...backend.roles, createRoleRecord(roleForm)] });
+    async function saveRole() {
+        await onSaveRole(roleForm);
         setRoleForm({ roleName: "Project Lead", assignedTo: "", emailAddress: "", note: "" });
         setModal(null);
     }
@@ -149,7 +158,7 @@ export function BackendOverviewWorkspace({
                             type="button"
                             className="requirements-action-button"
                             onClick={() => {
-                                setOverviewForm(toOverviewFormState(backend));
+                                setOverviewForm(toOverviewFormState(overviewSection));
                                 setModal("overview");
                             }}
                         >
@@ -157,19 +166,19 @@ export function BackendOverviewWorkspace({
                         </button>
                     </div>
                     <div className="card-body backend-overview-body">
-                        {backend.overview ? (
+                        {overviewSection ? (
                             <>
                                 <div className="backend-overview-copy">
                                     <strong>System summary</strong>
-                                    <p>{backend.overview.summary}</p>
+                                    <p>{overviewSection.content[0] ?? overviewSection.summary}</p>
                                 </div>
                                 <div className="backend-overview-copy">
                                     <strong>Scope</strong>
-                                    <p>{backend.overview.scope}</p>
+                                    <p>{overviewSection.content[1] ?? ""}</p>
                                 </div>
                                 <div className="backend-overview-copy">
                                     <strong>Goals</strong>
-                                    <p>{backend.overview.goals}</p>
+                                    <p>{overviewSection.content[2] ?? ""}</p>
                                 </div>
                             </>
                         ) : (
@@ -190,7 +199,7 @@ export function BackendOverviewWorkspace({
                             <span className="requirements-eyebrow">Project Roles</span>
                             <h3>Assigned workspace roles</h3>
                         </div>
-                        <button type="button" className="requirements-action-button" disabled={!hasOverview} onClick={() => setModal("role")}>
+                        <button type="button" className="requirements-action-button" disabled={!hasOverview || !canManageRoles} onClick={() => setModal("role")}>
                             Add role
                         </button>
                     </div>
@@ -203,7 +212,11 @@ export function BackendOverviewWorkspace({
                         ) : backend.roles.length === 0 ? (
                             <div className="backend-blocked-state">
                                 <strong>No roles configured yet</strong>
-                                <p>Add the tenant admin, project lead, business analyst, and system architect as needed.</p>
+                                <p>
+                                    {canManageRoles
+                                        ? "Add the tenant admin, project lead, business analyst, and system architect as needed."
+                                        : "Role persistence is waiting on a dedicated backend endpoint, so this area is read-only for now."}
+                                </p>
                             </div>
                         ) : (
                             <div className="backend-role-list">

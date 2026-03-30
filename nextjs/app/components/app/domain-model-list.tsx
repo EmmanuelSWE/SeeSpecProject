@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import type { BackendRecord } from "@/app/lib/mock-backends";
+import type { BackendDto } from "@/app/lib/utils/services/backend-service";
 
-export function DomainModelList({ backends }: { backends: BackendRecord[] }) {
+export function DomainModelList({ backends }: { backends: BackendDto[] }) {
     return (
         <section className="page-section backend-page">
             <div className="card backend-hero-card">

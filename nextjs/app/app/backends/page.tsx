@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendFormFields, type BackendFormState } from "@/app/components/app/backend-form-fields";
 import { BackendModal } from "@/app/components/app/backend-modal";
 import { BackendsTable } from "@/app/components/app/backends-table";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
-import { createBackendRecord, type BackendRecord, readBackendRecords, writeBackendRecords } from "@/app/lib/mock-backends";
+import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import { useUserState } from "@/app/lib/providers/userProvider";
 
 const EMPTY_BACKEND_FORM: BackendFormState = {
@@ -15,15 +15,20 @@ const EMPTY_BACKEND_FORM: BackendFormState = {
     runtimeVersion: ".NET 8",
     repositoryUrl: "",
     description: "",
-    status: "Planned"
+    status: "Draft"
 };
 
 export default function BackendsPage() {
     const { session } = useUserState();
-    const [backends, setBackends] = useState<BackendRecord[]>(() => readBackendRecords());
-    const [selectedBackend, setSelectedBackend] = useState<BackendRecord | null>(null);
+    const { backends } = useBackendState();
+    const { getBackends, createBackend, updateBackend } = useBackendActions();
+    const [selectedBackend, setSelectedBackend] = useState<(typeof backends)[number] | null>(null);
     const [form, setForm] = useState<BackendFormState>(EMPTY_BACKEND_FORM);
     const [mode, setMode] = useState<"create" | "edit" | null>(null);
+
+    useEffect(() => {
+        getBackends().catch(() => {});
+    }, [getBackends]);
 
     if (!hasPermission(session, APP_PERMISSIONS.backends)) {
         return <AccessPanel title="Backends" message="Your current role does not allow access to backend workspaces." />;
@@ -35,7 +40,7 @@ export default function BackendsPage() {
         setMode("create");
     }
 
-    function openEdit(backend: BackendRecord) {
+    function openEdit(backend: (typeof backends)[number]) {
         setSelectedBackend(backend);
         setForm({
             name: backend.name,
@@ -53,27 +58,16 @@ export default function BackendsPage() {
         setSelectedBackend(null);
     }
 
-    function persist(next: BackendRecord[]) {
-        writeBackendRecords(next);
-        setBackends(next);
-    }
-
-    function saveBackend() {
+    async function saveBackend() {
         if (mode === "create") {
-            persist([...backends, createBackendRecord(form)]);
+            await createBackend(form);
         }
 
         if (mode === "edit" && selectedBackend) {
-            persist(
-                backends.map((backend) =>
-                    backend.id === selectedBackend.id
-                        ? {
-                              ...backend,
-                              ...form
-                          }
-                        : backend
-                )
-            );
+            await updateBackend({
+                id: selectedBackend.id,
+                ...form
+            });
         }
 
         closeModal();

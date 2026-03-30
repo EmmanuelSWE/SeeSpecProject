@@ -2,21 +2,19 @@
 
 import Link from "next/link";
 import { DrawIoEditor } from "@/app/components/app/draw-io-editor";
-import type { BackendRecord, BackendUseCaseRecord } from "@/app/lib/mock-backends";
-
-function resolveRequirementLinks(backend: BackendRecord, linkedRequirementIds: string[]) {
-    return backend.requirements.filter((requirement) => linkedRequirementIds.includes(requirement.id));
-}
+import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
+import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-service";
 
 export function UseCaseDiagramWorkspace({
     backend,
-    useCase
+    useCase,
+    linkedRequirements
 }: {
-    backend: BackendRecord;
-    useCase: BackendUseCaseRecord;
+    backend: BackendDto;
+    useCase: DiagramElementDto;
+    linkedRequirements: SpecSectionDto[];
 }) {
-    const linkedRequirements = resolveRequirementLinks(backend, useCase.linkedRequirementIds);
-
     return (
         <section className="page-section usecase-page">
             <div className="card usecase-hero-card">
