@@ -25,7 +25,7 @@ function getBackendBaseUrl() {
 
 export function buildBackendUrl(request: NextRequest, path: string[]) {
   const pathname = path.join("/");
-  const backendUrl = new URL(`${getBackendBaseUrl()}/${pathname}`);
+  const backendUrl = new URL(`${getBackendBaseUrl()}/api/${pathname}`);
 
   request.nextUrl.searchParams.forEach((value, key) => {
     backendUrl.searchParams.append(key, value);
@@ -98,4 +98,3 @@ export function copyResponseHeaders(source: Headers, target: Headers) {
     target.append("set-cookie", singleCookie);
   }
 }
-
