@@ -99,6 +99,8 @@ export async function getActiveTenantsForLogin() {
       "/services/app/Account/GetActiveTenantsForLogin"
     );
 
+    console.log(response.data);
+
     return response.data.result;
   } catch (error) {
     if (
