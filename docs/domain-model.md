@@ -129,6 +129,13 @@ Allowed `SectionType` values:
 - `Domain`
 - `Shared`
 
+Allowed `OwnerRole` values:
+
+- `ProjectLead`
+- `BusinessAnalyst`
+- `SystemArchitect`
+- `Shared`
+
 ## 3.9 SectionItem
 
 Purpose:
@@ -143,7 +150,13 @@ Suggested fields:
 - `Content`
 - `Position`
 - `ItemType`
-- ``
+
+Allowed `ItemType` values:
+
+- `Paragraph`
+- `Bullet`
+- `TableRow`
+- `ChecklistItem`
 
 ## 3.10 SectionDependency
 
@@ -157,6 +170,12 @@ Suggested fields:
 - `FromSectionId`
 - `ToSectionId`
 - `DependencyType`
+
+Allowed `DependencyType` values:
+
+- `DependsOn`
+- `Blocks`
+- `RelatesTo`
 
 ## 3.11 DiagramElement
 
@@ -174,6 +193,12 @@ Suggested fields:
 - `Name`
 - `MetadataJson`
 
+Allowed `DiagramType` values:
+
+- `UseCase`
+- `DomainModel`
+- `Activity`
+
 ## 3.12 Task
 
 Purpose:
@@ -190,7 +215,8 @@ Suggested fields:
 - `Priority`
 - `CreatedByUserId`
 - `AssignedToUserId`
-- `Teamid`
+- `TeamId`
+- `SpecSectionId`
 - `DueAt`
 
 Allowed `Status` values:
@@ -239,7 +265,7 @@ Suggested fields:
 - `Status`
 - `Summary`
 - `AffectedSectionIdsJson`
-- `prompt sent`
+- `PromptSent`
 
 Allowed `Mode` values:
 
@@ -280,6 +306,8 @@ Suggested fields:
 - `Spec` 1 -> many `SpecSection`
 - `SpecSection` 1 -> many `SectionItem`
 - `SpecSection` many -> many `SpecSection` through `SectionDependency`
+- `SpecSection` 1 -> many `DiagramElement`
+- `SpecSection` 1 -> many `Task` (optional link)
 - `Backend` 1 -> many `GenerationSnapshot`
 - `GenerationSnapshot` 1 -> many `Note`
 - `GenerationSnapshot` 1 -> many `ValidationResult`
