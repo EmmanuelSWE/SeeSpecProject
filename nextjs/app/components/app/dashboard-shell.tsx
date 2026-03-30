@@ -9,6 +9,16 @@ import { APP_PERMISSIONS, hasPermission, isTenantAdminSession } from "@/app/lib/
 import { languages, sidebarItems, tenantAdminSidebarItems, versionText } from "@/app/lib/data";
 import { useUserActions, useUserState } from "@/app/lib/providers/userProvider";
 
+const tenantSidebarPermissionMap: Record<string, string | null> = {
+  "/app/home": APP_PERMISSIONS.dashboard,
+  "/app/backends": APP_PERMISSIONS.backends,
+  "/app/assignments": APP_PERMISSIONS.assignments,
+  "/app/domain-model": APP_PERMISSIONS.domainModel,
+  "/app/tenants": APP_PERMISSIONS.tenants,
+  "/app/users": APP_PERMISSIONS.users,
+  "/app/settings": APP_PERMISSIONS.settings
+};
+
 function Flag({ code }: { code: string }) {
   return <span className="flag">{code}</span>;
 }
@@ -24,15 +34,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const currentLanguage = languages[0];
   const isHostContext = session?.tenantId == null;
   const isTenantAdmin = isTenantAdminSession(session);
-  const tenantSidebarPermissionMap: Record<string, string | null> = {
-    "/app/home": APP_PERMISSIONS.dashboard,
-    "/app/backends": APP_PERMISSIONS.backends,
-    "/app/assignments": APP_PERMISSIONS.assignments,
-    "/app/domain-model": APP_PERMISSIONS.domainModel,
-    "/app/tenants": APP_PERMISSIONS.tenants,
-    "/app/users": APP_PERMISSIONS.users,
-    "/app/settings": APP_PERMISSIONS.settings
-  };
   const visibleSidebarItems = useMemo(() => {
     if (isHostContext) {
       return sidebarItems
@@ -48,7 +49,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       const permission = tenantSidebarPermissionMap[item.href];
       return permission ? hasPermission(session, permission) : false;
     });
-  }, [isHostContext, isTenantAdmin, session, tenantSidebarPermissionMap]);
+  }, [isHostContext, isTenantAdmin, session]);
   const activeLabel = useMemo(
     () =>
       visibleSidebarItems.find((item) => pathname === item.href)?.label ??

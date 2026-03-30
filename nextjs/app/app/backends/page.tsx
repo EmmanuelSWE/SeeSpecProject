@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendFormFields, type BackendFormState } from "@/app/components/app/backend-form-fields";
 import { BackendModal } from "@/app/components/app/backend-modal";
@@ -20,14 +20,10 @@ const EMPTY_BACKEND_FORM: BackendFormState = {
 
 export default function BackendsPage() {
     const { session } = useUserState();
-    const [backends, setBackends] = useState<BackendRecord[]>([]);
+    const [backends, setBackends] = useState<BackendRecord[]>(() => readBackendRecords());
     const [selectedBackend, setSelectedBackend] = useState<BackendRecord | null>(null);
     const [form, setForm] = useState<BackendFormState>(EMPTY_BACKEND_FORM);
     const [mode, setMode] = useState<"create" | "edit" | null>(null);
-
-    useEffect(() => {
-        setBackends(readBackendRecords());
-    }, []);
 
     if (!hasPermission(session, APP_PERMISSIONS.backends)) {
         return <AccessPanel title="Backends" message="Your current role does not allow access to backend workspaces." />;

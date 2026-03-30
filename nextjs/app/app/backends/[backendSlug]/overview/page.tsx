@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendOverviewWorkspace } from "@/app/components/app/backend-overview-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
@@ -11,26 +11,10 @@ import { useUserState } from "@/app/lib/providers/userProvider";
 export default function BackendOverviewPage() {
     const params = useParams<{ backendSlug: string }>();
     const { session } = useUserState();
-    const [backend, setBackend] = useState<BackendRecord | null | undefined>(undefined);
-
-    useEffect(() => {
-        setBackend(findBackendBySlug(params.backendSlug));
-    }, [params]);
+    const [backend, setBackend] = useState<BackendRecord | null>(() => findBackendBySlug(params.backendSlug));
 
     if (!hasPermission(session, APP_PERMISSIONS.backends)) {
         return <AccessPanel title="Backends" message="Your current role does not allow access to backend workspaces." />;
-    }
-
-    if (backend === undefined) {
-        return (
-            <section className="page-section">
-                <div className="card backend-state-card">
-                    <div className="card-body backend-blocked-state">
-                        <strong>Loading backend workspace...</strong>
-                    </div>
-                </div>
-            </section>
-        );
     }
 
     if (backend === null) {

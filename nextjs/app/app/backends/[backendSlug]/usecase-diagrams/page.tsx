@@ -11,11 +11,7 @@ export default function BackendUseCaseIndexPage() {
     const params = useParams<{ backendSlug: string }>();
     const router = useRouter();
     const { session } = useUserState();
-    const [backend, setBackend] = useState<BackendRecord | null | undefined>(undefined);
-
-    useEffect(() => {
-        setBackend(findBackendBySlug(params.backendSlug));
-    }, [params]);
+    const [backend] = useState<BackendRecord | null>(() => findBackendBySlug(params.backendSlug));
 
     useEffect(() => {
         if (backend && backend.useCases.length > 0) {
@@ -25,10 +21,6 @@ export default function BackendUseCaseIndexPage() {
 
     if (!hasPermission(session, APP_PERMISSIONS.usecaseDiagrams)) {
         return <AccessPanel title="Use Case Diagrams" message="Your current role does not allow access to use case diagrams." />;
-    }
-
-    if (backend === undefined) {
-        return null;
     }
 
     if (!backend || backend.useCases.length === 0) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { UseCaseDiagramWorkspace } from "@/app/components/app/usecase-diagram-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
@@ -11,21 +11,14 @@ import { useUserState } from "@/app/lib/providers/userProvider";
 export default function BackendUseCaseDiagramPage() {
     const params = useParams<{ backendSlug: string; useCaseSlug: string }>();
     const { session } = useUserState();
-    const [backend, setBackend] = useState<BackendRecord | null | undefined>(undefined);
-    const [useCase, setUseCase] = useState<BackendUseCaseRecord | null | undefined>(undefined);
-
-    useEffect(() => {
+    const [backend] = useState<BackendRecord | null>(() => findBackendBySlug(params.backendSlug));
+    const [useCase] = useState<BackendUseCaseRecord | null>(() => {
         const nextBackend = findBackendBySlug(params.backendSlug);
-        setBackend(nextBackend);
-        setUseCase(nextBackend ? findUseCaseBySlug(nextBackend, params.useCaseSlug) : null);
-    }, [params]);
+        return nextBackend ? findUseCaseBySlug(nextBackend, params.useCaseSlug) : null;
+    });
 
     if (!hasPermission(session, APP_PERMISSIONS.usecaseDiagrams)) {
         return <AccessPanel title="Use Case Diagrams" message="Your current role does not allow access to use case diagrams." />;
-    }
-
-    if (backend === undefined || useCase === undefined) {
-        return null;
     }
 
     if (!backend || !useCase) {

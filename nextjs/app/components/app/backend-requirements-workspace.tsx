@@ -38,11 +38,11 @@ export function BackendRequirementsWorkspace({
         return () => window.clearTimeout(timer);
     }, []);
 
-    useEffect(() => {
-        setSelectedId(backend.requirements[0]?.id ?? null);
-    }, [backend.requirements]);
-
     const hasOverview = Boolean(backend.overview);
+    const effectiveSelectedId =
+        selectedId && backend.requirements.some((requirement) => requirement.id === selectedId)
+            ? selectedId
+            : backend.requirements[0]?.id ?? null;
 
     const filteredRequirements = useMemo(() => {
         return backend.requirements.filter((item) => {
@@ -57,7 +57,7 @@ export function BackendRequirementsWorkspace({
         });
     }, [backend.requirements, query, statusFilter]);
 
-    const activeRequirement = filteredRequirements.find((item) => item.id === selectedId) ?? null;
+    const activeRequirement = filteredRequirements.find((item) => item.id === effectiveSelectedId) ?? null;
 
     function persist(updatedBackend: BackendRecord) {
         const backends = readBackendRecords().map((record) => (record.id === updatedBackend.id ? updatedBackend : record));
@@ -203,7 +203,7 @@ export function BackendRequirementsWorkspace({
                             <span className="requirements-count-pill">{filteredRequirements.length}</span>
                         </div>
                         <div className="card-body requirements-rail-body">
-                            <RequirementsSectionList items={filteredRequirements as RequirementSummary[]} activeId={selectedId} onSelect={setSelectedId} />
+                            <RequirementsSectionList items={filteredRequirements as RequirementSummary[]} activeId={effectiveSelectedId} onSelect={setSelectedId} />
                         </div>
                     </aside>
 
