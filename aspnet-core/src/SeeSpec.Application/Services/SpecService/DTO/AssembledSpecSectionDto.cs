@@ -23,6 +23,12 @@ namespace SeeSpec.Services.SpecService.DTO
 
         public int Version { get; set; }
 
+        public bool IsIndependent { get; set; }
+
+        public IReadOnlyList<Guid> DependencySectionIds { get; set; }
+
+        public IReadOnlyList<Guid> DependentSectionIds { get; set; }
+
         public IReadOnlyList<AssembledSectionItemDto> Items { get; set; }
     }
 }

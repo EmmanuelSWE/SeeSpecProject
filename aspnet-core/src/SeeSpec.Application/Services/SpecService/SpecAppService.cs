@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Abp.Application.Services;
 using Abp.Application.Services.Dto;
 using Abp.Authorization;
+using Abp.UI;
 using Abp.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
@@ -19,15 +20,18 @@ namespace SeeSpec.Services.SpecService
     {
         private readonly IRepository<SpecSection, Guid> _specSectionRepository;
         private readonly IRepository<SectionItem, Guid> _sectionItemRepository;
+        private readonly IRepository<SectionDependency, Guid> _sectionDependencyRepository;
 
         public SpecAppService(
             IRepository<Spec, Guid> repository,
             IRepository<SpecSection, Guid> specSectionRepository,
-            IRepository<SectionItem, Guid> sectionItemRepository)
+            IRepository<SectionItem, Guid> sectionItemRepository,
+            IRepository<SectionDependency, Guid> sectionDependencyRepository)
             : base(repository)
         {
             _specSectionRepository = specSectionRepository;
             _sectionItemRepository = sectionItemRepository;
+            _sectionDependencyRepository = sectionDependencyRepository;
         }
 
         public async Task<AssembledSpecDto> SaveContentAsync(SaveSpecContentDto input)
@@ -88,8 +92,6 @@ namespace SeeSpec.Services.SpecService
         private async Task<AssembledSpecDto> AssembleSpecAsync(Guid specId)
         {
             var spec = await Repository.GetAsync(specId);
-
-            // Deterministic assembly: prefer explicit order, then stable id fallback.
             var specSections = await _specSectionRepository.GetAll()
                 .Where(section => section.SpecId == specId)
                 .OrderBy(section => section.Order)
@@ -102,40 +104,39 @@ namespace SeeSpec.Services.SpecService
                 .OrderBy(item => item.Position)
                 .ThenBy(item => item.Id)
                 .ToListAsync();
+            var sectionDependencies = await _sectionDependencyRepository.GetAll()
+                .Where(dependency => sectionIds.Contains(dependency.FromSectionId) && sectionIds.Contains(dependency.ToSectionId))
+                .ToListAsync();
 
-            var itemsBySectionId = sectionItems
-                .GroupBy(item => item.SpecSectionId)
-                .ToDictionary(group => group.Key, group => group.ToList());
+            // Build the dependency graph once in memory so dependency traversal, ordering, cycle
+            // detection, and independent-section analysis all operate on the same runtime model.
+            var graph = BuildSectionGraph(specSections, sectionItems, sectionDependencies);
+            // Independent sections are captured explicitly now so future parallel processing can
+            // reuse the analysis result without rebuilding the graph semantics elsewhere.
+            var independentSectionIds = graph.Values
+                .Where(node => node.DependencySectionIds.Count == 0)
+                .Select(node => node.Section.Id)
+                .ToList();
+            var orderedNodes = TopologicallyOrderGraph(graph);
 
-            var sections = specSections.Select(section =>
+            var sections = orderedNodes.Select(node =>
             {
-                var metadata = ParseSectionMetadata(section.Content);
-
-                // Items are attached in-memory only for the assembled output; no extra persistence model
-                // is introduced for Milestone 2.
-                var items = itemsBySectionId.TryGetValue(section.Id, out var groupedItems)
-                    ? groupedItems.Select(item => new AssembledSectionItemDto
-                    {
-                        Id = item.Id,
-                        Label = item.Label,
-                        Position = item.Position,
-                        ItemType = item.ItemType,
-                        Content = ParseItemContent(item.Content)
-                    }).ToList()
-                    : new List<AssembledSectionItemDto>();
-
+                var metadata = ParseSectionMetadata(node.Section.Content);
                 return new AssembledSpecSectionDto
                 {
-                    Id = section.Id,
+                    Id = node.Section.Id,
                     InputType = metadata.InputType,
                     DiagramType = metadata.DiagramType,
-                    Title = section.Title,
-                    Slug = section.Slug,
-                    SectionType = section.SectionType,
-                    OwnerRole = section.OwnerRole,
-                    Order = section.Order,
-                    Version = section.Version,
-                    Items = items
+                    Title = node.Section.Title,
+                    Slug = node.Section.Slug,
+                    SectionType = node.Section.SectionType,
+                    OwnerRole = node.Section.OwnerRole,
+                    Order = node.Section.Order,
+                    Version = node.Section.Version,
+                    IsIndependent = node.DependencySectionIds.Count == 0,
+                    DependencySectionIds = node.DependencySectionIds,
+                    DependentSectionIds = node.DependentSectionIds,
+                    Items = EmitOrderedItems(node.ItemsByPosition)
                 };
             }).ToList();
 
@@ -146,6 +147,7 @@ namespace SeeSpec.Services.SpecService
                 Title = spec.Title,
                 Version = spec.Version,
                 Status = spec.Status,
+                IndependentSectionIds = independentSectionIds,
                 Sections = sections
             };
         }
@@ -358,6 +360,199 @@ namespace SeeSpec.Services.SpecService
             return ParseItemContent(content);
         }
 
+        private static Dictionary<int, List<AssembledSectionItemDto>> BuildItemDictionary(List<SectionItem> sectionItems)
+        {
+            var orderedItems = new List<SectionItem>();
+
+            foreach (var sectionItem in sectionItems)
+            {
+                var insertIndex = orderedItems.Count;
+
+                while (insertIndex > 0 && CompareSectionItems(sectionItem, orderedItems[insertIndex - 1]) < 0)
+                {
+                    insertIndex--;
+                }
+
+                orderedItems.Insert(insertIndex, sectionItem);
+            }
+
+            var itemsByPosition = new Dictionary<int, List<AssembledSectionItemDto>>();
+            var nextFallbackPosition = orderedItems
+                .Where(HasExplicitPosition)
+                .Select(item => item.Position)
+                .DefaultIfEmpty(0)
+                .Max();
+
+            foreach (var item in orderedItems)
+            {
+                var resolvedPosition = HasExplicitPosition(item) ? item.Position : ++nextFallbackPosition;
+                if (!itemsByPosition.TryGetValue(resolvedPosition, out var bucket))
+                {
+                    bucket = new List<AssembledSectionItemDto>();
+                    itemsByPosition[resolvedPosition] = bucket;
+                }
+
+                bucket.Add(new AssembledSectionItemDto
+                {
+                    Id = item.Id,
+                    Label = item.Label,
+                    Position = resolvedPosition,
+                    ItemType = item.ItemType,
+                    Content = ParseItemContent(item.Content)
+                });
+            }
+
+            return itemsByPosition;
+        }
+
+        private static List<AssembledSectionItemDto> EmitOrderedItems(Dictionary<int, List<AssembledSectionItemDto>> itemsByPosition)
+        {
+            return itemsByPosition
+                .OrderBy(entry => entry.Key)
+                .SelectMany(entry => entry.Value)
+                .ToList();
+        }
+
+        private static Dictionary<Guid, SectionGraphNode> BuildSectionGraph(
+            List<SpecSection> specSections,
+            List<SectionItem> sectionItems,
+            List<SectionDependency> sectionDependencies)
+        {
+            var itemsBySectionId = sectionItems
+                .GroupBy(item => item.SpecSectionId)
+                .ToDictionary(group => group.Key, group => group.ToList());
+
+            var graph = specSections.ToDictionary(
+                section => section.Id,
+                section => new SectionGraphNode
+                {
+                    Section = section,
+                    ItemsByPosition = itemsBySectionId.TryGetValue(section.Id, out var groupedItems)
+                        ? BuildItemDictionary(groupedItems)
+                        : new Dictionary<int, AssembledSectionItemDto>()
+                });
+
+            foreach (var dependency in sectionDependencies)
+            {
+                if (!graph.TryGetValue(dependency.FromSectionId, out var dependentNode) ||
+                    !graph.TryGetValue(dependency.ToSectionId, out var dependencyNode))
+                {
+                    continue;
+                }
+
+                // The declared dependency remains one-directional. A FromSection points at the
+                // section it depends on, so the runtime graph stores the parent -> dependent edge
+                // as ToSection -> FromSection for safe topological emission.
+                if (!dependentNode.DependencySectionIds.Contains(dependency.ToSectionId))
+                {
+                    dependentNode.DependencySectionIds.Add(dependency.ToSectionId);
+                }
+
+                if (!dependencyNode.DependentSectionIds.Contains(dependency.FromSectionId))
+                {
+                    dependencyNode.DependentSectionIds.Add(dependency.FromSectionId);
+                }
+            }
+
+            return graph;
+        }
+
+        private static List<SectionGraphNode> TopologicallyOrderGraph(Dictionary<Guid, SectionGraphNode> graph)
+        {
+            var remainingInDegree = graph.ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.DependencySectionIds.Count);
+            var orderedNodes = new List<SectionGraphNode>();
+
+            // Topological sort is required so every section is emitted only after its prerequisites.
+            // Eligible nodes are tie-broken deterministically by section order, then by stable Id.
+            var readyNodes = graph.Values
+                .Where(node => remainingInDegree[node.Section.Id] == 0)
+                .OrderBy(node => node.Section.Order)
+                .ThenBy(node => node.Section.Id)
+                .ToList();
+
+            while (readyNodes.Count > 0)
+            {
+                var current = readyNodes[0];
+                readyNodes.RemoveAt(0);
+                orderedNodes.Add(current);
+
+                foreach (var dependentSectionId in current.DependentSectionIds.OrderBy(id => id))
+                {
+                    remainingInDegree[dependentSectionId]--;
+
+                    if (remainingInDegree[dependentSectionId] == 0)
+                    {
+                        InsertReadyNode(readyNodes, graph[dependentSectionId]);
+                    }
+                }
+            }
+
+            if (orderedNodes.Count != graph.Count)
+            {
+                // Cycles block assembly entirely because continuing would produce dependency-invalid
+                // output with no deterministic safe ordering.
+                throw new UserFriendlyException("Section dependency cycle detected. Specification assembly is blocked until the cycle is removed.");
+            }
+
+            return orderedNodes;
+        }
+
+        private static void InsertReadyNode(List<SectionGraphNode> readyNodes, SectionGraphNode node)
+        {
+            var insertIndex = readyNodes.Count;
+
+            while (insertIndex > 0 && CompareSectionNodes(node, readyNodes[insertIndex - 1]) < 0)
+            {
+                insertIndex--;
+            }
+
+            readyNodes.Insert(insertIndex, node);
+        }
+
+        private static int CompareSectionNodes(SectionGraphNode left, SectionGraphNode right)
+        {
+            var byOrder = left.Section.Order.CompareTo(right.Section.Order);
+
+            if (byOrder != 0)
+            {
+                return byOrder;
+            }
+
+            // When several sections are simultaneously eligible, use a stable tie-breaker so the
+            // same dependency graph always produces the same topological order.
+            return left.Section.Id.CompareTo(right.Section.Id);
+        }
+
+        private static int CompareSectionItems(SectionItem left, SectionItem right)
+        {
+            var leftHasExplicitPosition = HasExplicitPosition(left);
+            var rightHasExplicitPosition = HasExplicitPosition(right);
+
+            if (leftHasExplicitPosition && rightHasExplicitPosition)
+            {
+                var byPosition = left.Position.CompareTo(right.Position);
+                return byPosition != 0 ? byPosition : left.Id.CompareTo(right.Id);
+            }
+
+            if (leftHasExplicitPosition != rightHasExplicitPosition)
+            {
+                // Older items may effectively have no explicit order. Keep explicit positions first,
+                // then place unordered legacy items deterministically afterward.
+                return leftHasExplicitPosition ? -1 : 1;
+            }
+
+            // Fallback for older items without explicit ordering: use stable Id ordering only at
+            // assembly time. We do not rewrite persisted rows in this milestone.
+            return left.Id.CompareTo(right.Id);
+        }
+
+        private static bool HasExplicitPosition(SectionItem sectionItem)
+        {
+            return sectionItem.Position > 0;
+        }
+
         private static DiagramType? TryParseDiagramType(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -544,6 +739,17 @@ namespace SeeSpec.Services.SpecService
             public string InputType { get; set; }
 
             public DiagramType? DiagramType { get; set; }
+        }
+
+        private sealed class SectionGraphNode
+        {
+            public SpecSection Section { get; set; }
+
+            public Dictionary<int, List<AssembledSectionItemDto>> ItemsByPosition { get; set; }
+
+            public List<Guid> DependencySectionIds { get; } = new List<Guid>();
+
+            public List<Guid> DependentSectionIds { get; } = new List<Guid>();
         }
     }
 }
