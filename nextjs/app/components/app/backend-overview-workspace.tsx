@@ -11,12 +11,12 @@ import {
     type BackendRoleFormState
 } from "@/app/components/app/backend-form-fields";
 import { BackendModal } from "@/app/components/app/backend-modal";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-service";
 
 type ModalState = "edit-backend" | "overview" | "role" | null;
 
-function toBackendFormState(backend: BackendDto): BackendFormState {
+function toBackendFormState(backend: BackendRecord): BackendFormState {
     return {
         name: backend.name,
         framework: backend.framework,
@@ -46,7 +46,7 @@ export function BackendOverviewWorkspace({
     onSaveOverview,
     onSaveRole
 }: {
-    backend: BackendDto;
+    backend: BackendRecord;
     overviewSection: SpecSectionDto | null;
     roleSections: SpecSectionDto[];
     canManageRoles: boolean;

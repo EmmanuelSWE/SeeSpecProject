@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { SemanticSvgDiagramEditor } from "@/app/components/app/semantic-svg-diagram-editor";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
 
 export function DomainModelWorkspace({
     backend,
     diagram
 }: {
-    backend: BackendDto;
+    backend: BackendRecord;
     diagram: DiagramElementDto | null;
 }) {
     const entities = diagram?.entities ?? [];

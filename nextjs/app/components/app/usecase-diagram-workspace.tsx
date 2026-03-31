@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { SemanticSvgDiagramEditor } from "@/app/components/app/semantic-svg-diagram-editor";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
 import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-service";
 
@@ -11,7 +11,7 @@ export function UseCaseDiagramWorkspace({
     useCase,
     linkedRequirements
 }: {
-    backend: BackendDto;
+    backend: BackendRecord;
     useCase: DiagramElementDto;
     linkedRequirements: SpecSectionDto[];
 }) {

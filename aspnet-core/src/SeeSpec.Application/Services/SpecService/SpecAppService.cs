@@ -10,6 +10,7 @@ using Abp.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using BackendEntity = SeeSpec.Domains.ProjectManagement.Backend;
 using SeeSpec.Domains.SpecManagement;
 using SeeSpec.Services.SpecService.DTO;
 
@@ -18,26 +19,45 @@ namespace SeeSpec.Services.SpecService
     [AbpAuthorize]
     public class SpecAppService : AsyncCrudAppService<Spec, SpecDto, Guid, PagedAndSortedResultRequestDto, SpecDto, SpecDto>, ISpecAppService
     {
+        private readonly IRepository<BackendEntity, Guid> _backendRepository;
         private readonly IRepository<SpecSection, Guid> _specSectionRepository;
         private readonly IRepository<SectionItem, Guid> _sectionItemRepository;
         private readonly IRepository<SectionDependency, Guid> _sectionDependencyRepository;
 
         public SpecAppService(
             IRepository<Spec, Guid> repository,
+            IRepository<BackendEntity, Guid> backendRepository,
             IRepository<SpecSection, Guid> specSectionRepository,
             IRepository<SectionItem, Guid> sectionItemRepository,
             IRepository<SectionDependency, Guid> sectionDependencyRepository)
             : base(repository)
         {
+            _backendRepository = backendRepository;
             _specSectionRepository = specSectionRepository;
             _sectionItemRepository = sectionItemRepository;
             _sectionDependencyRepository = sectionDependencyRepository;
+        }
+
+        public override async Task<SpecDto> CreateAsync(SpecDto input)
+        {
+            Spec existingSpec = await Repository.FirstOrDefaultAsync(item => item.BackendId == input.BackendId);
+            if (existingSpec != null)
+            {
+                existingSpec.Title = input.Title;
+                existingSpec.Version = input.Version;
+                existingSpec.Status = input.Status;
+                Spec updatedSpec = await Repository.UpdateAsync(existingSpec);
+                return MapToEntityDto(updatedSpec);
+            }
+
+            return await base.CreateAsync(input);
         }
 
         public async Task<AssembledSpecDto> SaveContentAsync(SaveSpecContentDto input)
         {
             var spec = await Repository.GetAsync(input.SpecId);
             var normalizedInputType = NormalizeInputType(input.InputType);
+            await EnsureCanonicalStructureInternalAsync(spec);
 
             // Reuse an existing section when appropriate, otherwise create the minimum new section
             // needed for this saved frontend payload.
@@ -80,6 +100,7 @@ namespace SeeSpec.Services.SpecService
             }
 
             await CurrentUnitOfWork.SaveChangesAsync();
+            await EnsureDiagramLinkingAsync(spec, specSection, normalizedInputType, input.DiagramType, interpretedItems);
 
             return await AssembleSpecAsync(spec.Id);
         }
@@ -87,6 +108,15 @@ namespace SeeSpec.Services.SpecService
         public async Task<AssembledSpecDto> AssembleAsync(EntityDto<Guid> input)
         {
             return await AssembleSpecAsync(input.Id);
+        }
+
+        public async Task<AssembledSpecDto> EnsureCanonicalStructureAsync(EntityDto<Guid> input)
+        {
+            BackendEntity backend = await _backendRepository.GetAsync(input.Id);
+            Spec spec = await GetOrCreateSpecAsync(backend);
+            await EnsureCanonicalStructureInternalAsync(spec);
+            await CurrentUnitOfWork.SaveChangesAsync();
+            return await AssembleSpecAsync(spec.Id);
         }
 
         private async Task<AssembledSpecDto> AssembleSpecAsync(Guid specId)
@@ -199,6 +229,289 @@ namespace SeeSpec.Services.SpecService
             });
         }
 
+        private async Task<Spec> GetOrCreateSpecAsync(BackendEntity backend)
+        {
+            Spec spec = await Repository.FirstOrDefaultAsync(item => item.BackendId == backend.Id);
+            if (spec != null)
+            {
+                return spec;
+            }
+
+            // Specs stay the single source of truth, so every backend gets its canonical spec home
+            // before services create sections, items, or dependency links under it.
+            return await Repository.InsertAsync(new Spec
+            {
+                BackendId = backend.Id,
+                Title = string.Format("{0} Specification", backend.Name),
+                Version = "1.0",
+                Status = SpecStatus.Draft
+            });
+        }
+
+        private async Task EnsureCanonicalStructureInternalAsync(Spec spec)
+        {
+            List<SpecSection> sections = await _specSectionRepository.GetAll()
+                .Where(section => section.SpecId == spec.Id)
+                .ToListAsync();
+
+            SpecSection overviewSection = await EnsureSectionAsync(
+                spec,
+                sections,
+                "overview",
+                "System Overview",
+                SectionType.Shared,
+                SectionOwnerRole.ProjectLead,
+                1);
+            SpecSection requirementsSection = await EnsureSectionAsync(
+                spec,
+                sections,
+                "requirements",
+                "Requirements",
+                SectionType.Requirement,
+                SectionOwnerRole.BusinessAnalyst,
+                2);
+            SpecSection useCaseSection = await EnsureSectionAsync(
+                spec,
+                sections,
+                "use-case-diagram",
+                "Use Case Diagram",
+                SectionType.Requirement,
+                SectionOwnerRole.BusinessAnalyst,
+                3);
+            SpecSection activitySection = await EnsureSectionAsync(
+                spec,
+                sections,
+                "activity-flow",
+                "Activity Flow",
+                SectionType.Architecture,
+                SectionOwnerRole.SystemArchitect,
+                4);
+            SpecSection domainSection = await EnsureSectionAsync(
+                spec,
+                sections,
+                "domain-model",
+                "Domain Model",
+                SectionType.Domain,
+                SectionOwnerRole.SystemArchitect,
+                5);
+
+            await EnsureDependencyAsync(useCaseSection.Id, requirementsSection.Id, SectionDependencyType.DependsOn);
+            await EnsureDependencyAsync(activitySection.Id, useCaseSection.Id, SectionDependencyType.DependsOn);
+            await EnsureDependencyAsync(domainSection.Id, requirementsSection.Id, SectionDependencyType.DependsOn);
+
+            await EnsureDiagramSectionItemAsync(useCaseSection.Id, "diagram", DiagramType.UseCase);
+            await EnsureDiagramSectionItemAsync(domainSection.Id, "diagram", DiagramType.DomainModel);
+            await EnsureOverviewItemAsync(overviewSection.Id);
+        }
+
+        private async Task<SpecSection> EnsureSectionAsync(
+            Spec spec,
+            List<SpecSection> sections,
+            string slug,
+            string title,
+            SectionType sectionType,
+            SectionOwnerRole ownerRole,
+            int order)
+        {
+            SpecSection existingSection = sections.FirstOrDefault(section => string.Equals(section.Slug, slug, StringComparison.OrdinalIgnoreCase));
+            if (existingSection != null)
+            {
+                existingSection.Title = title;
+                existingSection.SectionType = sectionType;
+                existingSection.OwnerRole = ownerRole;
+                existingSection.Order = order;
+                return await _specSectionRepository.UpdateAsync(existingSection);
+            }
+
+            SpecSection createdSection = await _specSectionRepository.InsertAsync(new SpecSection
+            {
+                SpecId = spec.Id,
+                Title = title,
+                Slug = slug,
+                SectionType = sectionType,
+                Order = order,
+                Content = BuildSectionMetadataJson(MapInputTypeForSlug(slug), MapDiagramTypeForSlug(slug), "{}"),
+                OwnerRole = ownerRole,
+                Version = 1
+            });
+
+            sections.Add(createdSection);
+            return createdSection;
+        }
+
+        private async Task EnsureDependencyAsync(Guid fromSectionId, Guid toSectionId, SectionDependencyType dependencyType)
+        {
+            SectionDependency existingDependency = await _sectionDependencyRepository.FirstOrDefaultAsync(
+                dependency => dependency.FromSectionId == fromSectionId
+                    && dependency.ToSectionId == toSectionId
+                    && dependency.DependencyType == dependencyType);
+            if (existingDependency != null)
+            {
+                return;
+            }
+
+            // Dependency links stay explicit in the canonical section graph so assembly and
+            // topological ordering read the same service-created structure everywhere.
+            await _sectionDependencyRepository.InsertAsync(new SectionDependency
+            {
+                FromSectionId = fromSectionId,
+                ToSectionId = toSectionId,
+                DependencyType = dependencyType
+            });
+        }
+
+        private async Task EnsureOverviewItemAsync(Guid specSectionId)
+        {
+            SectionItem existingItem = await _sectionItemRepository.FirstOrDefaultAsync(
+                item => item.SpecSectionId == specSectionId && item.Label == "summary");
+            if (existingItem != null)
+            {
+                return;
+            }
+
+            await _sectionItemRepository.InsertAsync(new SectionItem
+            {
+                SpecSectionId = specSectionId,
+                Label = "summary",
+                Position = 1,
+                ItemType = SectionItemType.Paragraph,
+                Content = new JObject
+                {
+                    ["text"] = string.Empty
+                }.ToString(Formatting.None)
+            });
+        }
+
+        private async Task EnsureDiagramSectionItemAsync(Guid specSectionId, string label, DiagramType diagramType)
+        {
+            SectionItem existingItem = await _sectionItemRepository.FirstOrDefaultAsync(
+                item => item.SpecSectionId == specSectionId && item.Label == label);
+            if (existingItem != null)
+            {
+                return;
+            }
+
+            await _sectionItemRepository.InsertAsync(new SectionItem
+            {
+                SpecSectionId = specSectionId,
+                Label = label,
+                Position = 1,
+                ItemType = SectionItemType.Paragraph,
+                Content = new JObject
+                {
+                    ["diagramType"] = diagramType.ToString(),
+                    ["value"] = new JObject()
+                }.ToString(Formatting.None)
+            });
+        }
+
+        private async Task EnsureDiagramLinkingAsync(
+            Spec spec,
+            SpecSection specSection,
+            string normalizedInputType,
+            DiagramType? diagramType,
+            IReadOnlyCollection<InterpretedSectionItem> interpretedItems)
+        {
+            if (!string.Equals(normalizedInputType, "diagram", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(normalizedInputType, "diagram-input", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (diagramType != DiagramType.UseCase)
+            {
+                return;
+            }
+
+            InterpretedSectionItem diagramItem = interpretedItems.FirstOrDefault(item => string.Equals(item.Label, "diagram", StringComparison.OrdinalIgnoreCase));
+            if (diagramItem == null)
+            {
+                return;
+            }
+
+            SpecSection activitySection = await _specSectionRepository.GetAll()
+                .FirstAsync(section => section.SpecId == spec.Id && section.Slug == "activity-flow");
+            SectionItem persistedUseCaseDiagram = await _sectionItemRepository.GetAll()
+                .Where(item => item.SpecSectionId == specSection.Id && item.Label == "diagram")
+                .OrderBy(item => item.Position)
+                .ThenBy(item => item.Id)
+                .FirstAsync();
+
+            JToken diagramValue = diagramItem.Content["value"];
+            JObject diagramObject = diagramValue as JObject ?? new JObject();
+            JArray useCaseNodes = ExtractUseCaseNodes(diagramObject);
+            JArray activityLinks = new JArray();
+            HashSet<string> activeLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (JObject useCaseNode in useCaseNodes.OfType<JObject>())
+            {
+                string useCaseId = ResolveUseCaseNodeId(useCaseNode);
+                string useCaseName = (useCaseNode["label"]?.Value<string>() ?? useCaseNode["name"]?.Value<string>() ?? "Use Case").Trim();
+                string activityLabel = BuildActivityDiagramLabel(specSection.Id, useCaseId);
+                activeLabels.Add(activityLabel);
+
+                SectionItem activityItem = await _sectionItemRepository.FirstOrDefaultAsync(
+                    item => item.SpecSectionId == activitySection.Id && item.Label == activityLabel);
+                if (activityItem == null)
+                {
+                    activityItem = await _sectionItemRepository.InsertAsync(new SectionItem
+                    {
+                        SpecSectionId = activitySection.Id,
+                        Label = activityLabel,
+                        Position = await ComputeNextItemPositionAsync(activitySection.Id),
+                        ItemType = SectionItemType.Paragraph,
+                        // Activity diagrams remain canonical SectionItems and link back to the
+                        // owning use-case node by ID so later flows never need an orphan side model.
+                        Content = new JObject
+                        {
+                            ["diagramType"] = DiagramType.Activity.ToString(),
+                            ["useCaseId"] = useCaseId,
+                            ["useCaseName"] = useCaseName,
+                            ["sourceSectionId"] = specSection.Id,
+                            ["value"] = new JObject()
+                        }.ToString(Formatting.None)
+                    });
+                }
+
+                activityLinks.Add(new JObject
+                {
+                    ["useCaseId"] = useCaseId,
+                    ["activityDiagramItemId"] = activityItem.Id
+                });
+            }
+
+            await DeleteStaleActivityItemsAsync(activitySection.Id, specSection.Id, activeLabels);
+
+            JObject persistedContent = ParseItemContent(persistedUseCaseDiagram.Content) as JObject ?? new JObject();
+            persistedContent["activityLinks"] = activityLinks;
+            persistedUseCaseDiagram.Content = persistedContent.ToString(Formatting.None);
+            await _sectionItemRepository.UpdateAsync(persistedUseCaseDiagram);
+        }
+
+        private async Task<int> ComputeNextItemPositionAsync(Guid specSectionId)
+        {
+            int? maxPosition = await _sectionItemRepository.GetAll()
+                .Where(item => item.SpecSectionId == specSectionId)
+                .Select(item => (int?)item.Position)
+                .MaxAsync();
+
+            return (maxPosition ?? 0) + 1;
+        }
+
+        private async Task DeleteStaleActivityItemsAsync(Guid activitySectionId, Guid sourceSectionId, IReadOnlyCollection<string> activeLabels)
+        {
+            List<SectionItem> staleItems = await _sectionItemRepository.GetAll()
+                .Where(item => item.SpecSectionId == activitySectionId)
+                .ToListAsync();
+
+            foreach (SectionItem staleItem in staleItems.Where(item =>
+                item.Label.StartsWith(BuildActivityDiagramPrefix(sourceSectionId), StringComparison.OrdinalIgnoreCase)
+                && !activeLabels.Contains(item.Label)))
+            {
+                await _sectionItemRepository.DeleteAsync(staleItem);
+            }
+        }
+
         private async Task<int> ComputeNextOrderAsync(Guid specId)
         {
             var maxOrder = await _specSectionRepository.GetAll()
@@ -277,6 +590,38 @@ namespace SeeSpec.Services.SpecService
                     return diagramType.HasValue ? $"{diagramType.Value.ToString().ToLowerInvariant()}-diagram" : "diagram";
                 default:
                     return "spec-section";
+            }
+        }
+
+        private static string MapInputTypeForSlug(string slug)
+        {
+            switch (slug)
+            {
+                case "overview":
+                    return "overview";
+                case "requirements":
+                    return "requirement";
+                case "use-case-diagram":
+                case "activity-flow":
+                case "domain-model":
+                    return "diagram";
+                default:
+                    return "content";
+            }
+        }
+
+        private static DiagramType? MapDiagramTypeForSlug(string slug)
+        {
+            switch (slug)
+            {
+                case "use-case-diagram":
+                    return DiagramType.UseCase;
+                case "activity-flow":
+                    return DiagramType.Activity;
+                case "domain-model":
+                    return DiagramType.DomainModel;
+                default:
+                    return null;
             }
         }
 
@@ -705,6 +1050,66 @@ namespace SeeSpec.Services.SpecService
                     }
                 }
             };
+        }
+
+        private static JArray ExtractUseCaseNodes(JObject diagramObject)
+        {
+            if (diagramObject["useCases"] is JArray useCases)
+            {
+                return useCases;
+            }
+
+            if (diagramObject["nodes"] is JArray graphNodes)
+            {
+                return new JArray(graphNodes
+                    .OfType<JObject>()
+                    .Where(node =>
+                    {
+                        string nodeType = node["nodeType"]?.Value<string>() ?? node["type"]?.Value<string>();
+                        return string.Equals(nodeType, "use-case", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(nodeType, "usecase", StringComparison.OrdinalIgnoreCase);
+                    }));
+            }
+
+            return new JArray();
+        }
+
+        private static string ResolveUseCaseNodeId(JObject useCaseNode)
+        {
+            string existingId = useCaseNode["id"]?.Value<string>();
+            if (!string.IsNullOrWhiteSpace(existingId))
+            {
+                return existingId.Trim();
+            }
+
+            string fallbackLabel = useCaseNode["label"]?.Value<string>() ?? useCaseNode["name"]?.Value<string>() ?? Guid.NewGuid().ToString("N");
+            return BuildStableItemKey(fallbackLabel);
+        }
+
+        private static string BuildActivityDiagramLabel(Guid sourceSectionId, string useCaseId)
+        {
+            return string.Format("{0}{1}", BuildActivityDiagramPrefix(sourceSectionId), BuildStableItemKey(useCaseId));
+        }
+
+        private static string BuildActivityDiagramPrefix(Guid sourceSectionId)
+        {
+            return string.Format("activity:{0}:", sourceSectionId.ToString("N"));
+        }
+
+        private static string BuildStableItemKey(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return Guid.NewGuid().ToString("N");
+            }
+
+            var normalizedCharacters = value
+                .Trim()
+                .ToLowerInvariant()
+                .Select(character => char.IsLetterOrDigit(character) ? character : '-')
+                .ToArray();
+            var normalized = new string(normalizedCharacters).Trim('-');
+            return string.IsNullOrWhiteSpace(normalized) ? Guid.NewGuid().ToString("N") : normalized;
         }
 
         private static InterpretedSectionItem BuildParagraphItem(string label, JToken token)

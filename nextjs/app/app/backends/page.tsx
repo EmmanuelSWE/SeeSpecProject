@@ -6,6 +6,7 @@ import { BackendFormFields, type BackendFormState } from "@/app/components/app/b
 import { BackendModal } from "@/app/components/app/backend-modal";
 import { BackendsTable } from "@/app/components/app/backends-table";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import { useUserState } from "@/app/lib/providers/userProvider";
 
@@ -21,10 +22,14 @@ const EMPTY_BACKEND_FORM: BackendFormState = {
 export default function BackendsPage() {
     const { session } = useUserState();
     const { backends } = useBackendState();
-    const { getBackends, createBackend, updateBackend } = useBackendActions();
-    const [selectedBackend, setSelectedBackend] = useState<(typeof backends)[number] | null>(null);
+    const { getBackends, createBackend, updateBackend, uploadBackendArchive } = useBackendActions();
+    const [selectedBackend, setSelectedBackend] = useState<BackendRecord | null>(null);
     const [form, setForm] = useState<BackendFormState>(EMPTY_BACKEND_FORM);
     const [mode, setMode] = useState<"create" | "edit" | null>(null);
+    const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
+    const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [uploadFeedback, setUploadFeedback] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
     useEffect(() => {
         getBackends().catch(() => {});
@@ -58,6 +63,17 @@ export default function BackendsPage() {
         setSelectedBackend(null);
     }
 
+    function openUpload() {
+        setSelectedUploadFile(null);
+        setUploadFeedback(null);
+        setIsUploadModalOpen(true);
+    }
+
+    function closeUploadModal() {
+        setIsUploadModalOpen(false);
+        setSelectedUploadFile(null);
+    }
+
     async function saveBackend() {
         if (mode === "create") {
             await createBackend(form);
@@ -73,9 +89,49 @@ export default function BackendsPage() {
         closeModal();
     }
 
+    async function uploadBackend() {
+        if (!selectedUploadFile) {
+            setUploadFeedback({
+                kind: "error",
+                message: "Select a backend archive before uploading."
+            });
+            return;
+        }
+
+        setIsUploading(true);
+        setUploadFeedback(null);
+
+        try {
+            const result = await uploadBackendArchive(selectedUploadFile);
+            await getBackends(true);
+            setUploadFeedback({
+                kind: "success",
+                message: `${result.name} uploaded successfully and added to the workspace list.`
+            });
+            closeUploadModal();
+        } catch (error) {
+            setUploadFeedback({
+                kind: "error",
+                message: error instanceof Error ? error.message : "Unable to upload backend archive."
+            });
+        } finally {
+            setIsUploading(false);
+        }
+    }
+
     return (
         <>
-            <BackendsTable backends={backends} onCreate={openCreate} onEdit={openEdit} />
+            {uploadFeedback ? (
+                <section className="page-section">
+                    <div className="card backend-state-card">
+                        <div className="card-body backend-blocked-state">
+                            <strong>{uploadFeedback.kind === "success" ? "Upload complete." : "Upload failed."}</strong>
+                            <p>{uploadFeedback.message}</p>
+                        </div>
+                    </div>
+                </section>
+            ) : null}
+            <BackendsTable backends={backends} onCreate={openCreate} onEdit={openEdit} onUpload={openUpload} />
             {mode ? (
                 <BackendModal title={mode === "create" ? "Create backend" : "Edit backend"} description="Keep the route clean by using a generated backend slug while the internal id stays hidden." onClose={closeModal}>
                     <BackendFormFields value={form} onChange={setForm} />
@@ -85,6 +141,36 @@ export default function BackendsPage() {
                         </button>
                         <button type="button" className="requirements-action-button" onClick={saveBackend}>
                             {mode === "create" ? "Create backend" : "Save backend"}
+                        </button>
+                    </div>
+                </BackendModal>
+            ) : null}
+            {isUploadModalOpen ? (
+                <BackendModal
+                    title="Upload backend archive"
+                    description="Upload a zipped ABP backend archive. The backend is validated on the server, imported, and then reloaded into this workspace list."
+                    onClose={closeUploadModal}
+                >
+                    <div className="backend-form-grid">
+                        <label className="backend-form-field">
+                            <span>Archive file</span>
+                            <input
+                                type="file"
+                                accept=".zip"
+                                onChange={(event) => {
+                                    const nextFile = event.target.files?.[0] ?? null;
+                                    setSelectedUploadFile(nextFile);
+                                }}
+                            />
+                        </label>
+                    </div>
+                    {uploadFeedback?.kind === "error" ? <p>{uploadFeedback.message}</p> : null}
+                    <div className="backend-modal-actions">
+                        <button type="button" className="secondary-button" onClick={closeUploadModal} disabled={isUploading}>
+                            Cancel
+                        </button>
+                        <button type="button" className="requirements-action-button" onClick={uploadBackend} disabled={isUploading || selectedUploadFile === null}>
+                            {isUploading ? "Uploading..." : "Upload backend"}
                         </button>
                     </div>
                 </BackendModal>

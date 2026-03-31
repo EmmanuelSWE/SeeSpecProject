@@ -38,6 +38,16 @@ type DisplayedRender = {
   graphHash: string;
 };
 
+type DiagramScopedNodeSelection = {
+  diagramElementId: string;
+  nodeId: string;
+};
+
+type DiagramScopedMessage = {
+  diagramElementId: string;
+  message: string;
+};
+
 const renderedDiagramCache = new Map<string, DisplayedRender>();
 
 function parseSemanticTarget(value: string | null): ParsedSelectionTarget | null {
@@ -200,12 +210,9 @@ export function SemanticSvgDiagramEditor({
   const sceneRef = useRef<HTMLDivElement | null>(null);
   const lastRenderedHashRef = useRef<string | null>(null);
   const pendingRenderHashRef = useRef<string | null>(null);
-  const [draftValue, setDraftValue] = useState("");
-  const [displayedRender, setDisplayedRender] = useState<DisplayedRender | null>(null);
-  const [newlyCreatedNodeId, setNewlyCreatedNodeId] = useState<string | null>(null);
-  const [controllerMessage, setControllerMessage] = useState(
-    "Enable edit mode to begin controller-style semantic editing."
-  );
+  const [draftOverride, setDraftOverride] = useState<string | null>(null);
+  const [newlyCreatedSelection, setNewlyCreatedSelection] = useState<DiagramScopedNodeSelection | null>(null);
+  const [controllerMessageOverride, setControllerMessageOverride] = useState<DiagramScopedMessage | null>(null);
 
   const toEditorMessage = useCallback((error: unknown, fallback: string) => {
     return error instanceof Error ? error.message : fallback;
@@ -216,6 +223,54 @@ export function SemanticSvgDiagramEditor({
     () => orderedNodes.find((node) => selection?.kind === "node" && node.id === selection.id) ?? null,
     [orderedNodes, selection]
   );
+  const draftValue = draftOverride ?? inlineEditor.value;
+  const newlyCreatedNodeId =
+    newlyCreatedSelection?.diagramElementId === diagramElementId ? newlyCreatedSelection.nodeId : null;
+  const displayedRender = useMemo(() => {
+    if (renderedDiagram?.svg && graph && renderedDiagram.graphHash === graph.graphHash) {
+      return {
+        diagramElementId,
+        svg: renderedDiagram.svg,
+        graphHash: renderedDiagram.graphHash
+      };
+    }
+
+    if (!graph) {
+      return null;
+    }
+
+    const cachedRender = renderedDiagramCache.get(graph.graphHash);
+    if (!cachedRender || cachedRender.diagramElementId !== diagramElementId) {
+      return null;
+    }
+
+    return cachedRender;
+  }, [diagramElementId, graph, renderedDiagram]);
+  const controllerMessage = useMemo(() => {
+    const currentOverride =
+      controllerMessageOverride?.diagramElementId === diagramElementId
+        ? controllerMessageOverride.message
+        : null;
+    if (currentOverride) {
+      return currentOverride;
+    }
+
+    if (editorMode === "view") {
+      return "Enable edit mode to begin controller-style semantic editing.";
+    }
+
+    if (inlineEditor.isOpen) {
+      return inlineEditor.targetId
+        ? "Step 2: typing for the selected semantic target."
+        : "Step 2: typing a new semantic node.";
+    }
+
+    if (selection) {
+      return `Step 1: current graph location is ${selection.kind} ${selection.id}.`;
+    }
+
+    return "Step 1: edit mode is active. Use Arrow to navigate or Ctrl + Arrow to travel/create.";
+  }, [controllerMessageOverride, diagramElementId, editorMode, inlineEditor.isOpen, inlineEditor.targetId, selection]);
   const sanitizedSvg = useMemo(() => {
     if (!displayedRender || displayedRender.diagramElementId !== diagramElementId) {
       return "";
@@ -238,32 +293,7 @@ export function SemanticSvgDiagramEditor({
   useEffect(() => {
     lastRenderedHashRef.current = null;
     pendingRenderHashRef.current = null;
-    setDisplayedRender(null);
-    setNewlyCreatedNodeId(null);
   }, [diagramElementId]);
-
-  useEffect(() => {
-    setDraftValue(inlineEditor.value);
-  }, [inlineEditor.value, inlineEditor.targetId]);
-
-  useEffect(() => {
-    if (editorMode === "view") {
-      setControllerMessage("Enable edit mode to begin controller-style semantic editing.");
-      return;
-    }
-
-    if (inlineEditor.isOpen) {
-      setControllerMessage(inlineEditor.targetId ? "Step 2: typing for the selected semantic target." : "Step 2: typing a new semantic node.");
-      return;
-    }
-
-    if (selection) {
-      setControllerMessage(`Step 1: current graph location is ${selection.kind} ${selection.id}.`);
-      return;
-    }
-
-    setControllerMessage("Step 1: edit mode is active. Use Arrow to navigate or Ctrl + Arrow to travel/create.");
-  }, [editorMode, inlineEditor.isOpen, inlineEditor.targetId, selection]);
 
   useEffect(() => {
     if (!selection || !graph) {
@@ -286,16 +316,12 @@ export function SemanticSvgDiagramEditor({
       return;
     }
 
-    setDisplayedRender({
-      diagramElementId,
-      svg: renderedDiagram.svg,
-      graphHash: renderedDiagram.graphHash
-    });
     renderedDiagramCache.set(renderedDiagram.graphHash, {
       diagramElementId,
       svg: renderedDiagram.svg,
       graphHash: renderedDiagram.graphHash
     });
+    lastRenderedHashRef.current = renderedDiagram.graphHash;
     pendingRenderHashRef.current = null;
   }, [diagramElementId, graph, renderedDiagram]);
 
@@ -307,7 +333,6 @@ export function SemanticSvgDiagramEditor({
     const cachedRender = renderedDiagramCache.get(graph.graphHash);
     if (cachedRender && cachedRender.diagramElementId === diagramElementId) {
       lastRenderedHashRef.current = cachedRender.graphHash;
-      setDisplayedRender(cachedRender);
       return;
     }
 
@@ -334,8 +359,7 @@ export function SemanticSvgDiagramEditor({
     };
   }, [diagramElementId, graph, renderSvg]);
 
-  const commitInlineEdit = useCallback(
-    async (memberCommit: boolean) => {
+  const commitInlineEdit = useCallback(async (memberCommit: boolean) => {
       if (!inlineEditor.targetKind) {
         return;
       }
@@ -351,7 +375,8 @@ export function SemanticSvgDiagramEditor({
             nodeType: selectedNode?.nodeType ?? defaultNodeType
           });
           setSelection({ kind: "node", id: inlineEditor.targetId });
-          setNewlyCreatedNodeId(null);
+          setNewlyCreatedSelection(null);
+          setDraftOverride(null);
           closeInlineEditor();
           setEditorMode("navigate");
           return;
@@ -367,7 +392,8 @@ export function SemanticSvgDiagramEditor({
             memberKind: "function"
           });
           setSelection({ kind: "node", id: inlineEditor.targetId });
-          setNewlyCreatedNodeId(null);
+          setNewlyCreatedSelection(null);
+          setDraftOverride(null);
           closeInlineEditor();
           setEditorMode("navigate");
           return;
@@ -382,7 +408,8 @@ export function SemanticSvgDiagramEditor({
             value: draftValue
           });
           setSelection({ kind: "edge", id: inlineEditor.targetId });
-          setNewlyCreatedNodeId(null);
+          setNewlyCreatedSelection(null);
+          setDraftOverride(null);
           closeInlineEditor();
           setEditorMode("navigate");
           return;
@@ -399,36 +426,41 @@ export function SemanticSvgDiagramEditor({
             memberKind: memberCommit ? "function" : "property"
           });
           setSelection({ kind: "node", id: selection.id });
-          setNewlyCreatedNodeId(null);
+          setNewlyCreatedSelection(null);
+          setDraftOverride(null);
           closeInlineEditor();
           setEditorMode("navigate");
         }
       } catch (error) {
-        setControllerMessage(toEditorMessage(error, "Unable to commit the semantic change."));
+        setControllerMessageOverride({
+          diagramElementId,
+          message: toEditorMessage(error, "Unable to commit the semantic change.")
+        });
       }
-    },
-    [
-      allowMembers,
-      applySemanticAction,
-      closeInlineEditor,
-      defaultNodeType,
-      diagramElementId,
-      draftValue,
-      inlineEditor.targetId,
-      inlineEditor.targetKind,
-      selectedNode?.nodeType,
-      selection,
-      setEditorMode,
-      setSelection,
-      toEditorMessage
-    ]
-  );
+  }, [
+    allowMembers,
+    applySemanticAction,
+    closeInlineEditor,
+    defaultNodeType,
+    diagramElementId,
+    draftValue,
+    inlineEditor.targetId,
+    inlineEditor.targetKind,
+    selectedNode,
+    selection,
+    setEditorMode,
+    setSelection,
+    toEditorMessage
+  ]);
 
   const handleSceneClick = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
       if (editorMode === "view") {
         event.preventDefault();
-        setControllerMessage("Use the Edit button above the diagram before interacting with the semantic graph.");
+        setControllerMessageOverride({
+          diagramElementId,
+          message: "Use the Edit button above the diagram before interacting with the semantic graph."
+        });
         return;
       }
 
@@ -437,21 +469,30 @@ export function SemanticSvgDiagramEditor({
 
       if (!target) {
         setSelection(null);
-        setControllerMessage("No semantic target selected. Press Enter to create a node.");
+        setControllerMessageOverride({
+          diagramElementId,
+          message: "No semantic target selected. Press Enter to create a node."
+        });
         return;
       }
 
       event.preventDefault();
       setSelection(target);
-      setNewlyCreatedNodeId(null);
-      setControllerMessage(`Selected ${target.kind}. Press Enter to type or Ctrl + Arrow to travel.`);
+      setNewlyCreatedSelection(null);
+      setControllerMessageOverride({
+        diagramElementId,
+        message: `Selected ${target.kind}. Press Enter to type or Ctrl + Arrow to travel.`
+      });
     },
-    [editorMode, setSelection]
+    [diagramElementId, editorMode, setSelection]
   );
 
   const handleCreateNode = useCallback(async () => {
     if (editorMode === "view") {
-      setControllerMessage("Use Edit diagram before creating semantic nodes.");
+      setControllerMessageOverride({
+        diagramElementId,
+        message: "Use Edit diagram before creating semantic nodes."
+      });
       return;
     }
 
@@ -469,14 +510,21 @@ export function SemanticSvgDiagramEditor({
       });
       const nextNode = createdGraph.nodes[createdGraph.nodes.length - 1] ?? null;
       closeInlineEditor();
+      setDraftOverride(null);
       if (nextNode) {
         setSelection({ kind: "node", id: nextNode.id });
-        setNewlyCreatedNodeId(nextNode.id);
-        setControllerMessage(`Created node ${nextNode.label}. Controller focus stays here.`);
+        setNewlyCreatedSelection({ diagramElementId, nodeId: nextNode.id });
+        setControllerMessageOverride({
+          diagramElementId,
+          message: `Created node ${nextNode.label}. Controller focus stays here.`
+        });
       }
       setEditorMode("navigate");
     } catch (error) {
-      setControllerMessage(toEditorMessage(error, "Unable to create the semantic node."));
+      setControllerMessageOverride({
+        diagramElementId,
+        message: toEditorMessage(error, "Unable to create the semantic node.")
+      });
     }
   }, [
     applySemanticAction,
@@ -495,21 +543,30 @@ export function SemanticSvgDiagramEditor({
   const handleControllerTravel = useCallback(
     async (direction: DiagramDirection) => {
       if (!graph || selection?.kind !== "node") {
-        setControllerMessage("Select a node before using controller travel.");
+        setControllerMessageOverride({
+          diagramElementId,
+          message: "Select a node before using controller travel."
+        });
         return;
       }
 
       const currentTarget = getDirectionalTarget(graph, selection.id, direction);
       if (currentTarget) {
         setSelection({ kind: "node", id: currentTarget.nodeId });
-        setNewlyCreatedNodeId(null);
+        setNewlyCreatedSelection(null);
         setEditorMode("navigate");
-        setControllerMessage(`Moved ${direction} along the directed graph to ${currentTarget.nodeId}.`);
+        setControllerMessageOverride({
+          diagramElementId,
+          message: `Moved ${direction} along the directed graph to ${currentTarget.nodeId}.`
+        });
         return;
       }
 
       if (graph.diagramType === 2) {
-        setControllerMessage(getRelationshipRequirementMessage(graph.diagramType));
+        setControllerMessageOverride({
+          diagramElementId,
+          message: getRelationshipRequirementMessage(graph.diagramType)
+        });
         return;
       }
 
@@ -537,11 +594,17 @@ export function SemanticSvgDiagramEditor({
         });
         await renderSvg(diagramElementId);
         setSelection({ kind: "node", id: createdNode.id });
-        setNewlyCreatedNodeId(createdNode.id);
+        setNewlyCreatedSelection({ diagramElementId, nodeId: createdNode.id });
         setEditorMode("navigate");
-        setControllerMessage(`${getRelationshipRequirementMessage(graph.diagramType)} Created and linked ${createdNode.label}.`);
+        setControllerMessageOverride({
+          diagramElementId,
+          message: `${getRelationshipRequirementMessage(graph.diagramType)} Created and linked ${createdNode.label}.`
+        });
       } catch (error) {
-        setControllerMessage(toEditorMessage(error, "Unable to travel or create in that direction."));
+        setControllerMessageOverride({
+          diagramElementId,
+          message: toEditorMessage(error, "Unable to travel or create in that direction.")
+        });
       }
     },
     [applySemanticAction, defaultNodeType, diagramElementId, graph, renderSvg, selection, setEditorMode, setSelection, toEditorMessage]
@@ -557,29 +620,38 @@ export function SemanticSvgDiagramEditor({
         if (event.key === "Enter") {
           event.preventDefault();
           setEditorMode("edit");
-          setControllerMessage("Edit mode enabled. Select a node and press Enter to type.");
+          setControllerMessageOverride({
+            diagramElementId,
+            message: "Edit mode enabled. Select a node and press Enter to type."
+          });
         }
         return;
       }
 
       if (event.key === "Escape") {
-        setDraftValue("");
+        setDraftOverride(null);
         closeInlineEditor();
         setEditorMode("view");
-        setNewlyCreatedNodeId(null);
-        setControllerMessage("Edit mode closed.");
+        setNewlyCreatedSelection(null);
+        setControllerMessageOverride({
+          diagramElementId,
+          message: "Edit mode closed."
+        });
         return;
       }
 
       if (inlineEditor.isOpen && event.key === "Backspace") {
         event.preventDefault();
-        setDraftValue((currentValue) => currentValue.slice(0, Math.max(currentValue.length - 1, 0)));
+        setDraftOverride((currentValue) => {
+          const nextValue = currentValue ?? inlineEditor.value;
+          return nextValue.slice(0, Math.max(nextValue.length - 1, 0));
+        });
         return;
       }
 
       if (inlineEditor.isOpen && isTextEntryKey(event)) {
         event.preventDefault();
-        setDraftValue((currentValue) => currentValue + event.key);
+        setDraftOverride((currentValue) => `${currentValue ?? inlineEditor.value}${event.key}`);
         return;
       }
 
@@ -589,9 +661,15 @@ export function SemanticSvgDiagramEditor({
             try {
               pendingRenderHashRef.current = graph.graphHash;
               await renderSvg(diagramElementId);
-              setControllerMessage("Validated and refreshed the current semantic graph.");
+              setControllerMessageOverride({
+                diagramElementId,
+                message: "Validated and refreshed the current semantic graph."
+              });
             } catch (error) {
-              setControllerMessage(toEditorMessage(error, "Unable to validate and refresh the current diagram."));
+              setControllerMessageOverride({
+                diagramElementId,
+                message: toEditorMessage(error, "Unable to validate and refresh the current diagram.")
+              });
             }
           }
           return;
@@ -622,9 +700,12 @@ export function SemanticSvgDiagramEditor({
             targetKind: "node",
             targetId: node.id
           });
-          setDraftValue(node.label);
+          setDraftOverride(null);
           setEditorMode("edit");
-          setControllerMessage(`Typing on ${node.label}. Enter commits, Escape cancels.`);
+          setControllerMessageOverride({
+            diagramElementId,
+            message: `Typing on ${node.label}. Enter commits, Escape cancels.`
+          });
           return;
         }
 
@@ -636,9 +717,12 @@ export function SemanticSvgDiagramEditor({
             targetKind: "node",
             targetId: null
           });
-          setDraftValue("");
+          setDraftOverride(null);
           setEditorMode("edit");
-          setControllerMessage("Typing a new semantic node.");
+          setControllerMessageOverride({
+            diagramElementId,
+            message: "Typing a new semantic node."
+          });
         }
         return;
       }
@@ -654,7 +738,10 @@ export function SemanticSvgDiagramEditor({
           if (edge) {
             setSelection({ kind: "edge", id: edge.id });
             setEditorMode("navigate");
-            setControllerMessage(`Selected connected edge ${edge.id}.`);
+            setControllerMessageOverride({
+              diagramElementId,
+              message: `Selected connected edge ${edge.id}.`
+            });
           }
           return;
         }
@@ -685,7 +772,10 @@ export function SemanticSvgDiagramEditor({
         if (nextNode) {
           setSelection({ kind: "node", id: nextNode.id });
           setEditorMode("navigate");
-          setControllerMessage(`Moved focus to ${nextNode.label}.`);
+          setControllerMessageOverride({
+            diagramElementId,
+            message: `Moved focus to ${nextNode.label}.`
+          });
         }
       }
     },
@@ -698,6 +788,7 @@ export function SemanticSvgDiagramEditor({
       handleControllerTravel,
       handleCreateNode,
       inlineEditor.isOpen,
+      inlineEditor.value,
       inlineEditor.targetId,
       openInlineEditor,
       orderedNodes,
@@ -713,54 +804,66 @@ export function SemanticSvgDiagramEditor({
   return (
     <div className="semantic-diagram-shell">
       <div className="semantic-diagram-controls">
-        <div>
-          <span className="requirements-eyebrow">Controls</span>
-          <h3>{title}</h3>
-        </div>
-        <div className="semantic-diagram-toolbar">
-          <button
-            type="button"
-            className={`requirements-action-button ${editorMode === "view" ? "" : "is-active-editor-button"}`}
-            onClick={() => {
-              if (editorMode === "view") {
-                setEditorMode("edit");
-                setControllerMessage("Edit mode enabled. Select a node and press Enter to type.");
-                return;
-              }
+        <div className="semantic-diagram-controls-header">
+          <div>
+            <span className="requirements-eyebrow">Controls</span>
+            <h3>{title}</h3>
+          </div>
+          <div className="semantic-diagram-toolbar">
+            <button
+              type="button"
+              className={`requirements-action-button ${editorMode === "view" ? "" : "is-active-editor-button"}`}
+              onClick={() => {
+                if (editorMode === "view") {
+                  setEditorMode("edit");
+                  setControllerMessageOverride({
+                    diagramElementId,
+                    message: "Edit mode enabled. Select a node and press Enter to type."
+                  });
+                  return;
+                }
 
-              closeInlineEditor();
-              setDraftValue("");
-              setEditorMode("view");
-              setControllerMessage("Edit mode closed.");
-            }}
-          >
-            {editorMode === "view" ? "Edit" : "Exit edit mode"}
-          </button>
+                closeInlineEditor();
+                setDraftOverride(null);
+                setEditorMode("view");
+                setControllerMessageOverride({
+                  diagramElementId,
+                  message: "Edit mode closed."
+                });
+              }}
+            >
+              {editorMode === "view" ? "Edit" : "Exit edit mode"}
+            </button>
+          </div>
         </div>
-        <ul className="semantic-diagram-help-list">
-          <li>Edit {"->"} enable controller mode</li>
-          <li>Arrow keys {"->"} navigate selection</li>
-          <li>Ctrl + Arrow {"->"} travel directed edges or create in direction</li>
-          <li>Alt + Arrow {"->"} select relationships</li>
-          <li>Enter {"->"} open or commit typing</li>
-          <li>Ctrl + Enter {"->"} commit method/function</li>
-          <li>Ctrl + S {"->"} validate and save</li>
-          <li>Escape {"->"} cancel and exit edit mode</li>
-        </ul>
-      </div>
 
-      <div className="semantic-diagram-status-area" aria-live="polite">
-        <span className="semantic-diagram-indicator-label">
-          {inlineEditor.isOpen
-            ? inlineEditor.targetId
-              ? "Editing target"
-              : "Creating node"
-            : selection
-              ? `Selected ${selection.kind}`
-              : "Controller ready"}
-        </span>
-        <strong>{controllerMessage}</strong>
-        <p>{inlineEditor.isOpen ? draftValue || "Type to define the semantic change" : "Use the Edit button to enter semantic command mode."}</p>
+        <details className="semantic-diagram-instructions" open>
+          <summary>Instructions</summary>
+          <ul className="semantic-diagram-help-list">
+            <li>Edit {"->"} enable controller mode</li>
+            <li>Arrow keys {"->"} navigate selection</li>
+            <li>Ctrl + Arrow {"->"} travel directed edges or create in direction</li>
+            <li>Alt + Arrow {"->"} select relationships</li>
+            <li>Enter {"->"} open or commit typing</li>
+            <li>Ctrl + Enter {"->"} commit method/function</li>
+            <li>Ctrl + S {"->"} validate and save</li>
+            <li>Escape {"->"} cancel and exit edit mode</li>
+          </ul>
+        </details>
+
+        <div className="semantic-diagram-status-area" aria-live="polite">
+          <span className="semantic-diagram-indicator-label">
+            {inlineEditor.isOpen
+              ? inlineEditor.targetId
+                ? "Editing target"
+                : "Creating node"
+              : selection
+                ? `Selected ${selection.kind}`
+                : "Controller ready"}
+          </span>
+          <strong>{controllerMessage}</strong>
+          <p>{inlineEditor.isOpen ? draftValue || "Type to define the semantic change" : "Use the Edit button to enter semantic command mode."}</p>
+        </div>
       </div>
 
       <div

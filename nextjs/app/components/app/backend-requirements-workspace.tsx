@@ -7,7 +7,7 @@ import { BackendRequirementFormFields, type BackendRequirementFormState } from "
 import { RequirementsDetailPanel } from "@/app/components/app/requirements-detail-panel";
 import { RequirementsSectionList, type RequirementSummary } from "@/app/components/app/requirements-section-list";
 import { RequirementsTraceabilityPanel } from "@/app/components/app/requirements-traceability-panel";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
 import type { CreateSpecSectionInput, SpecSectionDto, UpdateSpecSectionInput } from "@/app/lib/utils/services/spec-section-service";
 
@@ -35,7 +35,7 @@ export function BackendRequirementsWorkspace({
     onEnsureUseCaseDiagramBinding,
     onEnsureActivityDiagramBinding
 }: {
-    backend: BackendDto;
+    backend: BackendRecord;
     overviewSection: SpecSectionDto | null;
     requirementSections: SpecSectionDto[];
     useCaseDiagrams: DiagramElementDto[];

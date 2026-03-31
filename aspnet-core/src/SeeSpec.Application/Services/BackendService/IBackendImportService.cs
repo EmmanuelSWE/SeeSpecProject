@@ -8,5 +8,7 @@ namespace SeeSpec.Services.BackendService
     public interface IBackendImportService
     {
         Task<BackendUploadResultDto> ImportArchiveAsync(Stream fileStream, string fileName, CancellationToken cancellationToken);
+
+        Task<BackendUploadResultDto> ImportFolderAsync(string folderPath, CancellationToken cancellationToken);
     }
 }

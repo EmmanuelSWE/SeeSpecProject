@@ -19,17 +19,18 @@ export default function BackendRequirementsPage() {
     const { getBackendBySlug } = useBackendActions();
     const { createDiagramElement, getDiagramElementsByBackend, updateDiagramElement } = useDiagramElementActions();
     const { createSection, getSectionsByBackend, updateSection } = useSpecSectionActions();
+    const backendId = backend?.id ?? null;
 
     useEffect(() => {
         getBackendBySlug(params.backendSlug).catch(() => {});
     }, [params.backendSlug, getBackendBySlug]);
 
     useEffect(() => {
-        if (backend) {
-            getSectionsByBackend(backend.id).catch(() => {});
-            getDiagramElementsByBackend(backend.id).catch(() => {});
+        if (backendId !== null) {
+            getSectionsByBackend(backendId).catch(() => {});
+            getDiagramElementsByBackend(backendId).catch(() => {});
         }
-    }, [backend?.id, getDiagramElementsByBackend, getSectionsByBackend]);
+    }, [backendId, getDiagramElementsByBackend, getSectionsByBackend]);
 
     if (!hasPermission(session, APP_PERMISSIONS.requirements)) {
         return <AccessPanel title="Requirements" message="Your current role does not allow access to backend requirements." />;

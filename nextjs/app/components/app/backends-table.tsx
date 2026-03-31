@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 
-function dedupeBackends(backends: BackendDto[]) {
+function dedupeBackends(backends: BackendRecord[]) {
     const seen = new Set<string>();
-    const uniqueBackends: BackendDto[] = [];
+    const uniqueBackends: BackendRecord[] = [];
 
     for (const backend of backends) {
         if (seen.has(backend.id)) {
@@ -22,11 +22,13 @@ function dedupeBackends(backends: BackendDto[]) {
 export function BackendsTable({
     backends,
     onCreate,
-    onEdit
+    onEdit,
+    onUpload
 }: {
-    backends: BackendDto[];
+    backends: BackendRecord[];
     onCreate: () => void;
-    onEdit: (backend: BackendDto) => void;
+    onEdit: (backend: BackendRecord) => void;
+    onUpload: () => void;
 }) {
     const uniqueBackends = dedupeBackends(backends);
 
@@ -44,6 +46,9 @@ export function BackendsTable({
                     </div>
                     <button type="button" className="requirements-action-button" onClick={onCreate}>
                         New backend
+                    </button>
+                    <button type="button" className="secondary-button" onClick={onUpload}>
+                        Upload backend
                     </button>
                 </div>
             </div>

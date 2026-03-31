@@ -11,6 +11,8 @@ namespace SeeSpec.Services.SpecService
         Task<AssembledSpecDto> SaveContentAsync(SaveSpecContentDto input);
 
         Task<AssembledSpecDto> AssembleAsync(EntityDto<Guid> input);
+
+        Task<AssembledSpecDto> EnsureCanonicalStructureAsync(EntityDto<Guid> input);
     }
 }
 

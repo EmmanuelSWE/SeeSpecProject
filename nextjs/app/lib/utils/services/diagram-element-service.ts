@@ -1,9 +1,9 @@
 import { axiosInstance } from "@/app/lib/api/client";
 import { getOne, getPaged, mapErrorMessage, postOne, putOne } from "@/app/lib/utils/services/service-helpers";
 import type {
-  BackendDomainEntityDto,
-  BackendDomainRelationshipDto
-} from "@/app/lib/utils/services/backend-service";
+  BackendDomainEntity,
+  BackendDomainRelationship
+} from "@/app/lib/providers/backendProvider/context";
 
 export type DiagramElementType = "use-case" | "domain-model" | "activity";
 export type DiagramEditorMode = "view" | "navigate" | "edit";
@@ -90,8 +90,8 @@ export type DiagramElementDto = {
   linkedUseCaseSlug: string | null;
   actors: string[];
   dependencies: { slug: string; name: string }[];
-  entities: BackendDomainEntityDto[];
-  relationships: BackendDomainRelationshipDto[];
+  entities: BackendDomainEntity[];
+  relationships: BackendDomainRelationship[];
   updatedAt: string;
   graphHash?: string;
 };
@@ -108,8 +108,8 @@ export type CreateDiagramElementInput = {
   linkedUseCaseSlug?: string | null;
   actors?: string[];
   dependencies?: { slug: string; name: string }[];
-  entities?: BackendDomainEntityDto[];
-  relationships?: BackendDomainRelationshipDto[];
+  entities?: BackendDomainEntity[];
+  relationships?: BackendDomainRelationship[];
 };
 
 export type UpdateDiagramElementInput = Partial<CreateDiagramElementInput> & {
@@ -138,8 +138,8 @@ type DiagramMetadata = {
   linkedUseCaseSlug?: string | null;
   actors?: string[];
   dependencies?: { slug: string; name: string }[];
-  entities?: BackendDomainEntityDto[];
-  relationships?: BackendDomainRelationshipDto[];
+  entities?: BackendDomainEntity[];
+  relationships?: BackendDomainRelationship[];
 };
 
 function parseJson<T>(value?: string | null): T | null {

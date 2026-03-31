@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 
-function dedupeBackends(backends: BackendDto[]) {
+function dedupeBackends(backends: BackendRecord[]) {
     const seen = new Set<string>();
-    const uniqueBackends: BackendDto[] = [];
+    const uniqueBackends: BackendRecord[] = [];
 
     for (const backend of backends) {
         if (seen.has(backend.id)) {
@@ -19,7 +19,7 @@ function dedupeBackends(backends: BackendDto[]) {
     return uniqueBackends;
 }
 
-export function DomainModelList({ backends }: { backends: BackendDto[] }) {
+export function DomainModelList({ backends }: { backends: BackendRecord[] }) {
     const uniqueBackends = dedupeBackends(backends);
 
     return (

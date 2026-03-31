@@ -31,5 +31,16 @@ namespace SeeSpec.Controllers
                 return Ok(await _backendImportService.ImportArchiveAsync(readStream, file.FileName, cancellationToken));
             }
         }
+
+        [HttpPost("import-folder")]
+        public async Task<ActionResult<BackendUploadResultDto>> ImportFolder([FromBody] BackendFolderImportInputDto input, CancellationToken cancellationToken)
+        {
+            if (input == null || string.IsNullOrWhiteSpace(input.FolderPath))
+            {
+                throw new UserFriendlyException("A backend folder path is required.");
+            }
+
+            return Ok(await _backendImportService.ImportFolderAsync(input.FolderPath, cancellationToken));
+        }
     }
 }

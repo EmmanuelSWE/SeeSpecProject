@@ -1,6 +1,10 @@
 "use client";
 
-import type { BackendDto, BackendOverviewDto, BackendRoleName } from "@/app/lib/utils/services/backend-service";
+import type {
+    BackendOverview,
+    BackendRecord,
+    BackendRoleName
+} from "@/app/lib/providers/backendProvider/context";
 
 export function BackendInputField({
     label,
@@ -55,7 +59,7 @@ export function BackendSelectField<TValue extends string>({
 }
 
 export type BackendFormState = Pick<
-    BackendDto,
+    BackendRecord,
     "name" | "framework" | "runtimeVersion" | "repositoryUrl" | "description" | "status"
 >;
 
@@ -95,7 +99,7 @@ export function BackendFormFields({
     );
 }
 
-export type OverviewFormState = BackendOverviewDto;
+export type OverviewFormState = BackendOverview;
 
 export function BackendOverviewFormFields({
     value,

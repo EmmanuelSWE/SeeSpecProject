@@ -19,17 +19,18 @@ export default function BackendUseCaseDiagramPage() {
     const { getBackendBySlug } = useBackendActions();
     const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
     const { getSectionsByBackendAndType } = useSpecSectionActions();
+    const backendId = backend?.id ?? null;
 
     useEffect(() => {
         getBackendBySlug(params.backendSlug).catch(() => {});
     }, [getBackendBySlug, params.backendSlug]);
 
     useEffect(() => {
-        if (backend) {
-            getDiagramElementsByBackendAndType(backend.id, "use-case").catch(() => {});
-            getSectionsByBackendAndType(backend.id, "requirement").catch(() => {});
+        if (backendId !== null) {
+            getDiagramElementsByBackendAndType(backendId, "use-case").catch(() => {});
+            getSectionsByBackendAndType(backendId, "requirement").catch(() => {});
         }
-    }, [backend?.id, getDiagramElementsByBackendAndType, getSectionsByBackendAndType]);
+    }, [backendId, getDiagramElementsByBackendAndType, getSectionsByBackendAndType]);
 
     const useCase = useMemo(
         () =>

@@ -17,16 +17,17 @@ export default function BackendUseCaseIndexPage() {
     const { diagramElements } = useDiagramElementState();
     const { getBackendBySlug } = useBackendActions();
     const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
+    const backendId = backend?.id ?? null;
 
     useEffect(() => {
         getBackendBySlug(params.backendSlug).catch(() => {});
     }, [getBackendBySlug, params.backendSlug]);
 
     useEffect(() => {
-        if (backend) {
-            getDiagramElementsByBackendAndType(backend.id, "use-case").catch(() => {});
+        if (backendId !== null) {
+            getDiagramElementsByBackendAndType(backendId, "use-case").catch(() => {});
         }
-    }, [backend?.id, getDiagramElementsByBackendAndType]);
+    }, [backendId, getDiagramElementsByBackendAndType]);
 
     useEffect(() => {
         if (backend && diagramElements.length > 0) {

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using Abp.Dependency;
 using Abp.Domain.Repositories;
 using Abp.UI;
@@ -14,6 +15,8 @@ using Newtonsoft.Json;
 using BackendEntity = SeeSpec.Domains.ProjectManagement.Backend;
 using BackendStatus = SeeSpec.Domains.ProjectManagement.BackendStatus;
 using SeeSpec.Services.BackendService.DTO;
+using SeeSpec.Services.SpecService;
+using Abp.Application.Services.Dto;
 
 namespace SeeSpec.Services.BackendService
 {
@@ -21,10 +24,12 @@ namespace SeeSpec.Services.BackendService
     {
         private const string TempRootFolderName = "SeeSpecBackendImports";
         private readonly IRepository<BackendEntity, Guid> _backendRepository;
+        private readonly ISpecAppService _specAppService;
 
-        public BackendImportService(IRepository<BackendEntity, Guid> backendRepository)
+        public BackendImportService(IRepository<BackendEntity, Guid> backendRepository, ISpecAppService specAppService)
         {
             _backendRepository = backendRepository;
+            _specAppService = specAppService;
         }
 
         public async Task<BackendUploadResultDto> ImportArchiveAsync(Stream fileStream, string fileName, CancellationToken cancellationToken)
@@ -34,94 +39,122 @@ namespace SeeSpec.Services.BackendService
                 throw new UserFriendlyException("A backend archive file is required.");
             }
 
-            if (!AbpSession.TenantId.HasValue)
+            EnsureTenantContext();
+
+            if (!await LooksLikeZipArchiveAsync(fileStream, cancellationToken))
             {
-                throw new UserFriendlyException("A tenant context is required to import a backend.");
+                throw new UserFriendlyException("The uploaded file must be a valid zip archive.");
             }
 
-            var sanitizedFileName = string.IsNullOrWhiteSpace(fileName) ? "backend.zip" : Path.GetFileName(fileName);
-            var fileExtension = Path.GetExtension(sanitizedFileName);
-            if (!fileExtension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new UserFriendlyException("Only .zip backend archives are supported.");
-            }
-
-            var importId = Guid.NewGuid().ToString("N");
-            var tempRootPath = Path.Combine(Path.GetTempPath(), TempRootFolderName, importId);
-            var archivePath = Path.Combine(tempRootPath, "upload.zip");
-            var extractedPath = Path.Combine(tempRootPath, "extracted");
-
-            Directory.CreateDirectory(tempRootPath);
-            Directory.CreateDirectory(extractedPath);
-
+            var tempWorkspace = CreateTemporaryWorkspace();
             try
             {
-                // Stream the upload directly to temp storage so large archives are not buffered fully in memory.
+                var archivePath = Path.Combine(tempWorkspace.RootPath, "upload.zip");
+                var extractedPath = Path.Combine(tempWorkspace.RootPath, "extracted");
+                Directory.CreateDirectory(extractedPath);
+
+                // Zip input resolves into a temp extracted folder first, then both zip and folder modes
+                // converge into the same workspace-based validation path.
                 using (var archiveWriteStream = new FileStream(archivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous))
                 {
                     await fileStream.CopyToAsync(archiveWriteStream, 81920, cancellationToken);
                 }
 
-                var extractionResult = await ExtractArchiveAsync(archivePath, extractedPath, cancellationToken);
-
-                // Validation stays lightweight and deterministic in this milestone; deeper Roslyn analysis comes later.
-                ValidateArchiveContents(extractionResult);
-
-                var backendName = ResolveBackendName(extractionResult, extractedPath);
-                var backendSlug = await BuildUniqueSlugAsync(backendName, AbpSession.TenantId.Value);
-
-                // Only create the Backend after the uploaded archive is proven to be a valid ABP backend.
-                var backend = await _backendRepository.InsertAsync(new BackendEntity
-                {
-                    TenantId = AbpSession.TenantId.Value,
-                    Name = TrimToLength(backendName, 128),
-                    Slug = backendSlug,
-                    Framework = "ABP",
-                    RuntimeVersion = string.Empty,
-                    Description = "Imported from uploaded archive.",
-                    RepositoryUrl = string.Empty,
-                    Status = BackendStatus.Draft
-                });
-
-                await CurrentUnitOfWork.SaveChangesAsync();
-
-                // The extracted context remains temporary in this milestone so later analysis can reuse it
-                // without committing to permanent file storage yet.
-                await SaveImportContextAsync(tempRootPath, archivePath, extractedPath, extractionResult, backend.Id, cancellationToken);
-
-                return new BackendUploadResultDto
-                {
-                    BackendId = backend.Id,
-                    Name = backend.Name,
-                    Status = backend.Status,
-                    NextAction = "Backend imported and ready for analysis."
-                };
+                await ExtractArchiveAsync(archivePath, extractedPath, cancellationToken);
+                return await ImportResolvedWorkspaceAsync(extractedPath, tempWorkspace.RootPath, cancellationToken);
             }
             catch
             {
-                DeleteDirectoryIfExists(tempRootPath);
+                DeleteDirectoryIfExists(tempWorkspace.RootPath);
                 throw;
             }
         }
 
-        private static async Task<ArchiveExtractionResult> ExtractArchiveAsync(string archivePath, string extractedPath, CancellationToken cancellationToken)
+        public async Task<BackendUploadResultDto> ImportFolderAsync(string folderPath, CancellationToken cancellationToken)
+        {
+            EnsureTenantContext();
+
+            var normalizedFolderPath = NormalizeFolderPath(folderPath);
+            if (!Directory.Exists(normalizedFolderPath))
+            {
+                throw new UserFriendlyException("The supplied backend folder does not exist.");
+            }
+
+            // Direct folder imports reuse the same workspace validation path as extracted zip uploads.
+            return await ImportResolvedWorkspaceAsync(normalizedFolderPath, null, cancellationToken);
+        }
+
+        private void EnsureTenantContext()
+        {
+            if (!AbpSession.TenantId.HasValue)
+            {
+                throw new UserFriendlyException("A tenant context is required to import a backend.");
+            }
+        }
+
+        private async Task<BackendUploadResultDto> ImportResolvedWorkspaceAsync(
+            string workspacePath,
+            string temporaryRootPath,
+            CancellationToken cancellationToken)
+        {
+            var resolvedWorkspacePath = NormalizeFolderPath(workspacePath);
+            var validationResult = await ValidateWorkspaceAsync(resolvedWorkspacePath, cancellationToken);
+            var backendName = ResolveBackendName(validationResult, resolvedWorkspacePath);
+            var backendSlug = await BuildUniqueSlugAsync(backendName, AbpSession.TenantId.Value);
+
+            // Backend creation stays behind successful validation so invalid imports never create records.
+            var backend = await _backendRepository.InsertAsync(new BackendEntity
+            {
+                TenantId = AbpSession.TenantId.Value,
+                Name = TrimToLength(backendName, 128),
+                Slug = backendSlug,
+                Framework = "ABP",
+                RuntimeVersion = string.Empty,
+                Description = "Imported from backend workspace.",
+                RepositoryUrl = string.Empty,
+                Status = BackendStatus.Draft
+            });
+
+            await CurrentUnitOfWork.SaveChangesAsync();
+            await _specAppService.EnsureCanonicalStructureAsync(new EntityDto<Guid>(backend.Id));
+
+            if (!string.IsNullOrWhiteSpace(temporaryRootPath))
+            {
+                await SaveImportContextAsync(temporaryRootPath, resolvedWorkspacePath, validationResult, backend.Id, cancellationToken);
+            }
+
+            return new BackendUploadResultDto
+            {
+                BackendId = backend.Id,
+                Name = backend.Name,
+                Status = backend.Status,
+                NextAction = "Backend imported and ready for analysis."
+            };
+        }
+
+        private static TemporaryWorkspace CreateTemporaryWorkspace()
+        {
+            var importId = Guid.NewGuid().ToString("N");
+            var rootPath = Path.Combine(Path.GetTempPath(), TempRootFolderName, importId);
+            Directory.CreateDirectory(rootPath);
+            return new TemporaryWorkspace
+            {
+                RootPath = rootPath
+            };
+        }
+
+        private static async Task ExtractArchiveAsync(string archivePath, string extractedPath, CancellationToken cancellationToken)
         {
             try
             {
                 using (var archiveStream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous))
                 using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read, false))
                 {
-                    var projectFiles = new List<string>();
-                    var solutionFiles = new List<string>();
-                    var abpProjectDetected = false;
-                    var abpSourceDetected = false;
-
                     foreach (var entry in archive.Entries)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
                         var destinationPath = GetSafeExtractionPath(extractedPath, entry.FullName);
-
                         if (string.IsNullOrEmpty(entry.Name))
                         {
                             Directory.CreateDirectory(destinationPath);
@@ -141,42 +174,7 @@ namespace SeeSpec.Services.BackendService
                         {
                             await entryStream.CopyToAsync(destinationStream, 81920, cancellationToken);
                         }
-
-                        var fileExtension = Path.GetExtension(destinationPath);
-                        if (fileExtension.Equals(".sln", StringComparison.OrdinalIgnoreCase))
-                        {
-                            solutionFiles.Add(destinationPath);
-                            continue;
-                        }
-
-                        if (fileExtension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
-                        {
-                            projectFiles.Add(destinationPath);
-                            var projectContents = await File.ReadAllTextAsync(destinationPath, cancellationToken);
-                            if (!abpProjectDetected && projectContents.IndexOf("Volo.Abp", StringComparison.OrdinalIgnoreCase) >= 0)
-                            {
-                                abpProjectDetected = true;
-                            }
-
-                            continue;
-                        }
-
-                        if (!abpSourceDetected && fileExtension.Equals(".cs", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var sourceContents = await File.ReadAllTextAsync(destinationPath, cancellationToken);
-                            if (sourceContents.IndexOf("using Volo.Abp", StringComparison.OrdinalIgnoreCase) >= 0)
-                            {
-                                abpSourceDetected = true;
-                            }
-                        }
                     }
-
-                    return new ArchiveExtractionResult
-                    {
-                        SolutionFiles = solutionFiles,
-                        ProjectFiles = projectFiles,
-                        HasAbpMarker = abpProjectDetected || abpSourceDetected
-                    };
                 }
             }
             catch (InvalidDataException)
@@ -185,53 +183,144 @@ namespace SeeSpec.Services.BackendService
             }
         }
 
-        private static string GetSafeExtractionPath(string extractedPath, string entryPath)
+        private static async Task<bool> LooksLikeZipArchiveAsync(Stream fileStream, CancellationToken cancellationToken)
         {
-            var normalizedExtractionRoot = Path.GetFullPath(extractedPath);
-            var normalizedExtractionRootWithSeparator = normalizedExtractionRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
-                ? normalizedExtractionRoot
-                : normalizedExtractionRoot + Path.DirectorySeparatorChar;
-            var destinationPath = Path.GetFullPath(Path.Combine(normalizedExtractionRoot, entryPath));
-            if (!destinationPath.StartsWith(normalizedExtractionRootWithSeparator, StringComparison.OrdinalIgnoreCase)
-                && !destinationPath.Equals(normalizedExtractionRoot, StringComparison.OrdinalIgnoreCase))
+            if (!fileStream.CanRead)
             {
-                throw new UserFriendlyException("The uploaded archive contains an unsafe file path.");
+                return false;
             }
 
-            return destinationPath;
+            var originalPosition = fileStream.CanSeek ? fileStream.Position : 0L;
+            var header = new byte[4];
+
+            try
+            {
+                if (fileStream.CanSeek)
+                {
+                    fileStream.Seek(0L, SeekOrigin.Begin);
+                }
+
+                var bytesRead = await fileStream.ReadAsync(header, 0, header.Length, cancellationToken);
+                if (bytesRead < header.Length)
+                {
+                    return false;
+                }
+
+                return header[0] == 0x50
+                    && header[1] == 0x4B
+                    && (
+                        (header[2] == 0x03 && header[3] == 0x04) ||
+                        (header[2] == 0x05 && header[3] == 0x06) ||
+                        (header[2] == 0x07 && header[3] == 0x08)
+                    );
+            }
+            finally
+            {
+                if (fileStream.CanSeek)
+                {
+                    fileStream.Seek(originalPosition, SeekOrigin.Begin);
+                }
+            }
         }
 
-        private static void ValidateArchiveContents(ArchiveExtractionResult extractionResult)
+        private static async Task<WorkspaceValidationResult> ValidateWorkspaceAsync(string workspacePath, CancellationToken cancellationToken)
         {
-            if (extractionResult.SolutionFiles.Count == 0 && extractionResult.ProjectFiles.Count == 0)
+            var solutionFiles = Directory.GetFiles(workspacePath, "*.sln", SearchOption.AllDirectories)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var projectFiles = Directory.GetFiles(workspacePath, "*.csproj", SearchOption.AllDirectories)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (solutionFiles.Count == 0 && projectFiles.Count == 0)
             {
-                throw new UserFriendlyException("The uploaded archive must contain a .sln or .csproj file.");
+                throw new UserFriendlyException("The imported workspace must contain a .sln or .csproj file.");
             }
 
-            if (!extractionResult.HasAbpMarker)
+            // Validation now anchors on the .Core project/folder because that is the stable place where
+            // the backend's core package references identify the ABP stack deterministically.
+            var coreProject = FindCoreProject(projectFiles);
+            if (coreProject == null)
             {
-                throw new UserFriendlyException("The uploaded archive does not appear to contain an ABP backend.");
+                throw new UserFriendlyException("The imported workspace does not contain a .Core project or folder.");
             }
+
+            var packageReferences = await ReadPackageReferencesAsync(coreProject.ProjectPath, cancellationToken);
+            if (packageReferences.Count == 0)
+            {
+                throw new UserFriendlyException("The .Core project does not expose any package references to validate.");
+            }
+
+            // ABP detection is package-based now: any .Core package reference that starts with Abp
+            // is enough to confirm the imported workspace belongs to the ABP stack.
+            var abpPackage = packageReferences.FirstOrDefault(packageName => packageName.StartsWith("Abp", StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrWhiteSpace(abpPackage))
+            {
+                throw new UserFriendlyException("The .Core project does not reference an Abp package.");
+            }
+
+            return new WorkspaceValidationResult
+            {
+                SolutionFiles = solutionFiles,
+                ProjectFiles = projectFiles,
+                CoreProjectPath = coreProject.ProjectPath,
+                CoreDirectoryPath = coreProject.CoreDirectoryPath,
+                DetectedPackages = packageReferences
+            };
         }
 
-        private static string ResolveBackendName(ArchiveExtractionResult extractionResult, string extractedPath)
+        private static CoreProjectMatch FindCoreProject(IReadOnlyCollection<string> projectFiles)
         {
-            if (extractionResult.SolutionFiles.Count > 0)
-            {
-                return Path.GetFileNameWithoutExtension(extractionResult.SolutionFiles[0]);
-            }
+            return projectFiles
+                .Select(projectPath =>
+                {
+                    var projectName = Path.GetFileNameWithoutExtension(projectPath) ?? string.Empty;
+                    var projectDirectory = Path.GetDirectoryName(projectPath) ?? string.Empty;
+                    var directoryName = Path.GetFileName(projectDirectory) ?? string.Empty;
+                    var isCoreProject =
+                        projectName.EndsWith(".Core", StringComparison.OrdinalIgnoreCase) ||
+                        directoryName.EndsWith(".Core", StringComparison.OrdinalIgnoreCase);
 
-            if (extractionResult.ProjectFiles.Count > 0)
-            {
-                return Path.GetFileNameWithoutExtension(extractionResult.ProjectFiles[0]);
-            }
-
-            var rootDirectory = new DirectoryInfo(extractedPath)
-                .GetDirectories()
-                .OrderBy(directory => directory.Name, StringComparer.OrdinalIgnoreCase)
+                    return new CoreProjectMatch
+                    {
+                        ProjectPath = projectPath,
+                        CoreDirectoryPath = projectDirectory,
+                        IsMatch = isCoreProject
+                    };
+                })
+                .Where(match => match.IsMatch)
+                .OrderBy(match => match.ProjectPath, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
+        }
 
-            return rootDirectory != null ? rootDirectory.Name : new DirectoryInfo(extractedPath).Name;
+        private static async Task<List<string>> ReadPackageReferencesAsync(string projectPath, CancellationToken cancellationToken)
+        {
+            var projectXml = await File.ReadAllTextAsync(projectPath, cancellationToken);
+            var document = XDocument.Parse(projectXml, LoadOptions.PreserveWhitespace);
+
+            return document
+                .Descendants()
+                .Where(node => string.Equals(node.Name.LocalName, "PackageReference", StringComparison.Ordinal))
+                .Select(node => (node.Attribute("Include")?.Value ?? string.Empty).Trim())
+                .Where(packageName => !string.IsNullOrWhiteSpace(packageName))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(packageName => packageName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static string ResolveBackendName(WorkspaceValidationResult validationResult, string workspacePath)
+        {
+            if (validationResult.SolutionFiles.Count > 0)
+            {
+                return Path.GetFileNameWithoutExtension(validationResult.SolutionFiles[0]);
+            }
+
+            if (validationResult.ProjectFiles.Count > 0)
+            {
+                return Path.GetFileNameWithoutExtension(validationResult.ProjectFiles[0]);
+            }
+
+            return new DirectoryInfo(workspacePath).Name;
         }
 
         private async Task<string> BuildUniqueSlugAsync(string backendName, int tenantId)
@@ -240,7 +329,7 @@ namespace SeeSpec.Services.BackendService
             var candidateSlug = BuildSlugCandidate(baseSlug, null);
             var suffix = 1;
 
-            while (await _backendRepository.GetAll().AnyAsync(x => x.TenantId == tenantId && x.Slug == candidateSlug))
+            while (await _backendRepository.GetAll().AnyAsync(item => item.TenantId == tenantId && item.Slug == candidateSlug))
             {
                 candidateSlug = BuildSlugCandidate(baseSlug, suffix);
                 suffix++;
@@ -275,12 +364,6 @@ namespace SeeSpec.Services.BackendService
             return string.IsNullOrWhiteSpace(slug) ? string.Format("backend-{0}", Guid.NewGuid().ToString("N")) : slug;
         }
 
-        private static string TrimToLength(string value, int maxLength)
-        {
-            var safeValue = string.IsNullOrWhiteSpace(value) ? "Imported Backend" : value.Trim();
-            return safeValue.Length <= maxLength ? safeValue : safeValue.Substring(0, maxLength);
-        }
-
         private static string BuildSlugCandidate(string baseSlug, int? suffix)
         {
             if (!suffix.HasValue)
@@ -294,21 +377,49 @@ namespace SeeSpec.Services.BackendService
             return string.Concat(trimmedBase, suffixText);
         }
 
+        private static string TrimToLength(string value, int maxLength)
+        {
+            var safeValue = string.IsNullOrWhiteSpace(value) ? "Imported Backend" : value.Trim();
+            return safeValue.Length <= maxLength ? safeValue : safeValue.Substring(0, maxLength);
+        }
+
+        private static string NormalizeFolderPath(string folderPath)
+        {
+            return Path.GetFullPath((folderPath ?? string.Empty).Trim());
+        }
+
+        private static string GetSafeExtractionPath(string extractedPath, string entryPath)
+        {
+            var normalizedExtractionRoot = Path.GetFullPath(extractedPath);
+            var normalizedExtractionRootWithSeparator = normalizedExtractionRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? normalizedExtractionRoot
+                : normalizedExtractionRoot + Path.DirectorySeparatorChar;
+            var destinationPath = Path.GetFullPath(Path.Combine(normalizedExtractionRoot, entryPath));
+            if (!destinationPath.StartsWith(normalizedExtractionRootWithSeparator, StringComparison.OrdinalIgnoreCase)
+                && !destinationPath.Equals(normalizedExtractionRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UserFriendlyException("The uploaded archive contains an unsafe file path.");
+            }
+
+            return destinationPath;
+        }
+
         private static async Task SaveImportContextAsync(
             string tempRootPath,
-            string archivePath,
-            string extractedPath,
-            ArchiveExtractionResult extractionResult,
+            string workspacePath,
+            WorkspaceValidationResult validationResult,
             Guid backendId,
             CancellationToken cancellationToken)
         {
             var context = new ImportContextFile
             {
                 BackendId = backendId,
-                ArchivePath = archivePath,
-                ExtractedPath = extractedPath,
-                SolutionFiles = extractionResult.SolutionFiles,
-                ProjectFiles = extractionResult.ProjectFiles
+                WorkspacePath = workspacePath,
+                SolutionFiles = validationResult.SolutionFiles,
+                ProjectFiles = validationResult.ProjectFiles,
+                CoreProjectPath = validationResult.CoreProjectPath,
+                CoreDirectoryPath = validationResult.CoreDirectoryPath,
+                DetectedPackages = validationResult.DetectedPackages
             };
 
             var contextPath = Path.Combine(tempRootPath, "import-context.json");
@@ -333,26 +444,48 @@ namespace SeeSpec.Services.BackendService
             }
         }
 
-        private sealed class ArchiveExtractionResult
+        private sealed class TemporaryWorkspace
+        {
+            public string RootPath { get; set; }
+        }
+
+        private sealed class CoreProjectMatch
+        {
+            public string ProjectPath { get; set; }
+
+            public string CoreDirectoryPath { get; set; }
+
+            public bool IsMatch { get; set; }
+        }
+
+        private sealed class WorkspaceValidationResult
         {
             public List<string> SolutionFiles { get; set; }
 
             public List<string> ProjectFiles { get; set; }
 
-            public bool HasAbpMarker { get; set; }
+            public string CoreProjectPath { get; set; }
+
+            public string CoreDirectoryPath { get; set; }
+
+            public List<string> DetectedPackages { get; set; }
         }
 
         private sealed class ImportContextFile
         {
             public Guid BackendId { get; set; }
 
-            public string ArchivePath { get; set; }
-
-            public string ExtractedPath { get; set; }
+            public string WorkspacePath { get; set; }
 
             public List<string> SolutionFiles { get; set; }
 
             public List<string> ProjectFiles { get; set; }
+
+            public string CoreProjectPath { get; set; }
+
+            public string CoreDirectoryPath { get; set; }
+
+            public List<string> DetectedPackages { get; set; }
         }
     }
 }
