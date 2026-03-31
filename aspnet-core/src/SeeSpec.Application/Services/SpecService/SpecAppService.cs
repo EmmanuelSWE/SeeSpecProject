@@ -429,7 +429,7 @@ namespace SeeSpec.Services.SpecService
                     Section = section,
                     ItemsByPosition = itemsBySectionId.TryGetValue(section.Id, out var groupedItems)
                         ? BuildItemDictionary(groupedItems)
-                        : new Dictionary<int, AssembledSectionItemDto>()
+                        : new Dictionary<int, List<AssembledSectionItemDto>>()
                 });
 
             foreach (var dependency in sectionDependencies)
