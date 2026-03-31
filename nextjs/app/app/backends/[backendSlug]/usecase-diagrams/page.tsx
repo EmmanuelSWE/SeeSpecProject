@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
+import { StateIllustration } from "@/app/components/app/state-illustration";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import { useDiagramElementActions, useDiagramElementState } from "@/app/lib/providers/diagramElementProvider";
@@ -42,8 +43,20 @@ export default function BackendUseCaseIndexPage() {
             <section className="page-section">
                 <div className="card backend-state-card">
                     <div className="card-body backend-blocked-state">
-                        <strong>No use cases are defined for this backend yet.</strong>
-                        <p>Create or seed backend use cases before opening the diagram workspace.</p>
+                        <StateIllustration
+                            kind="empty"
+                            title="No use case diagrams yet"
+                            message="Create the first requirement, then start the use case diagram from that requirement so the diagram stays scoped correctly."
+                            actions={
+                                <button
+                                    type="button"
+                                    className="requirements-action-button"
+                                    onClick={() => router.push(`/app/backends/${params.backendSlug}/requirements`)}
+                                >
+                                    Go to requirements
+                                </button>
+                            }
+                        />
                     </div>
                 </div>
             </section>

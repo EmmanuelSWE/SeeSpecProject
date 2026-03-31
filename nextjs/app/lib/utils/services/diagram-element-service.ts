@@ -9,6 +9,7 @@ export type DiagramElementType = "use-case" | "domain-model" | "activity";
 export type DiagramEditorMode = "view" | "navigate" | "edit";
 export type DiagramSemanticTargetKind = "node" | "edge" | "member";
 export type DiagramSemanticActionType = "create" | "update" | "delete";
+export type DiagramDirection = "backward" | "forward";
 
 export type DiagramValidationResultDto = {
   isValid: boolean;
@@ -79,6 +80,7 @@ export type DiagramElementDto = {
   id: string;
   backendId: string;
   backendSlug: string;
+  specSectionId: string | null;
   type: DiagramElementType;
   slug: string;
   name: string;
@@ -96,6 +98,7 @@ export type DiagramElementDto = {
 
 export type CreateDiagramElementInput = {
   backendId: string;
+  specSectionId?: string | null;
   type: DiagramElementType;
   slug: string;
   name: string;
@@ -252,6 +255,7 @@ function buildDiagramElementDto(
     id: diagram.id,
     backendId: diagram.backendId,
     backendSlug: backend?.slug ?? "",
+    specSectionId: diagram.specSectionId ?? null,
     type,
     slug: diagram.externalElementKey,
     name: diagram.name,
@@ -354,11 +358,23 @@ export async function getDiagramElementsByBackendAndType(
 
 export async function createDiagramElement(payload: CreateDiagramElementInput): Promise<DiagramElementDto> {
   try {
+    const existingDiagram = (await getDiagramRows()).find(
+      (diagram) => diagram.backendId === payload.backendId && diagram.externalElementKey === payload.slug
+    );
+
+    // Reuse the persisted backend/slug identity so retries and reopen flows update the same diagram instead of violating the unique index.
+    if (existingDiagram) {
+      return await updateDiagramElement({
+        id: existingDiagram.id,
+        ...payload
+      });
+    }
+
     const created = await postOne<DiagramElementApiDto, Omit<DiagramElementApiDto, "id">>(
       "/services/app/DiagramElement/Create",
       {
         backendId: payload.backendId,
-        specSectionId: null,
+        specSectionId: payload.specSectionId ?? null,
         diagramType: diagramTypeToApi(payload.type),
         externalElementKey: payload.slug,
         name: payload.name,
@@ -378,6 +394,7 @@ export async function updateDiagramElement(payload: UpdateDiagramElementInput): 
     const currentDto = await getDiagramElementById(payload.id);
     const updated = await putOne<DiagramElementApiDto, DiagramElementApiDto>("/services/app/DiagramElement/Update", {
       ...current,
+      specSectionId: payload.specSectionId ?? current.specSectionId ?? null,
       diagramType: payload.type ? diagramTypeToApi(payload.type) : current.diagramType,
       externalElementKey: payload.slug ?? current.externalElementKey,
       name: payload.name ?? current.name,

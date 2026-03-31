@@ -29,15 +29,24 @@ export default function BackendActivityDiagramPage() {
 
   const useCase = useMemo(
     () =>
-      diagramElements.find((item) => item.type === "use-case" && item.slug === params.useCaseSlug) ?? null,
-    [diagramElements, params.useCaseSlug]
+      diagramElements.find(
+        (item) =>
+          item.backendId === backend?.id &&
+          item.type === "use-case" &&
+          item.slug === params.useCaseSlug
+      ) ?? null,
+    [backend?.id, diagramElements, params.useCaseSlug]
   );
   const activityDiagram = useMemo(
     () =>
+      // Reopen must bind to the persisted diagram for this backend/use-case pair instead of inventing a blank replacement.
       diagramElements.find(
-        (item) => item.type === "activity" && item.linkedUseCaseSlug === params.useCaseSlug
+        (item) =>
+          item.backendId === backend?.id &&
+          item.type === "activity" &&
+          item.linkedUseCaseSlug === params.useCaseSlug
       ) ?? null,
-    [diagramElements, params.useCaseSlug]
+    [backend?.id, diagramElements, params.useCaseSlug]
   );
 
   if (!hasPermission(session, APP_PERMISSIONS.activityDiagram)) {

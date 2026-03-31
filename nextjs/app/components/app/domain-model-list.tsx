@@ -3,7 +3,25 @@
 import Link from "next/link";
 import type { BackendDto } from "@/app/lib/utils/services/backend-service";
 
+function dedupeBackends(backends: BackendDto[]) {
+    const seen = new Set<string>();
+    const uniqueBackends: BackendDto[] = [];
+
+    for (const backend of backends) {
+        if (seen.has(backend.id)) {
+            continue;
+        }
+
+        seen.add(backend.id);
+        uniqueBackends.push(backend);
+    }
+
+    return uniqueBackends;
+}
+
 export function DomainModelList({ backends }: { backends: BackendDto[] }) {
+    const uniqueBackends = dedupeBackends(backends);
+
     return (
         <section className="page-section backend-page">
             <div className="card backend-hero-card">
@@ -13,12 +31,12 @@ export function DomainModelList({ backends }: { backends: BackendDto[] }) {
                         <h1>Tenant domain models</h1>
                         <p>Review the domain model available for each backend and open the specific model workspace from here.</p>
                     </div>
-                    <span className="requirements-count-pill">{backends.length}</span>
+                    <span className="requirements-count-pill">{uniqueBackends.length}</span>
                 </div>
             </div>
 
             <div className="backend-summary-grid">
-                {backends.map((backend) => (
+                {uniqueBackends.map((backend) => (
                     <Link key={backend.id} href={`/app/backends/${backend.slug}/domain-model`} className="card domain-model-list-card">
                         <div className="card-body domain-model-list-body">
                             <span className="requirements-eyebrow">Backend</span>

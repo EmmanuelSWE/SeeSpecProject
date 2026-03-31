@@ -22,6 +22,9 @@ namespace SeeSpec.Services.DiagramElementService
     [AbpAuthorize]
     public class DiagramElementAppService : AsyncCrudAppService<DiagramElement, DiagramElementDto, Guid, PagedAndSortedResultRequestDto, DiagramElementDto, DiagramElementDto>, IDiagramElementAppService
     {
+        private readonly IRepository<SpecSection, Guid> _specSectionRepository;
+        private readonly IRepository<Spec, Guid> _specRepository;
+
         private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -30,9 +33,43 @@ namespace SeeSpec.Services.DiagramElementService
 
         private static readonly ConcurrentDictionary<string, RenderedDiagramDto> RenderCache = new ConcurrentDictionary<string, RenderedDiagramDto>();
 
-        public DiagramElementAppService(IRepository<DiagramElement, Guid> repository)
+        public DiagramElementAppService(
+            IRepository<DiagramElement, Guid> repository,
+            IRepository<SpecSection, Guid> specSectionRepository,
+            IRepository<Spec, Guid> specRepository)
             : base(repository)
         {
+            _specSectionRepository = specSectionRepository;
+            _specRepository = specRepository;
+        }
+
+        public override async Task<DiagramElementDto> CreateAsync(DiagramElementDto input)
+        {
+            await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
+
+            DiagramElement existingDiagram = await Repository.FirstOrDefaultAsync(
+                item => item.BackendId == input.BackendId && item.ExternalElementKey == input.ExternalElementKey
+            );
+
+            if (existingDiagram != null)
+            {
+                // Create is treated as upsert for the persisted backend/key pair so reopen/retry flows reuse the same diagram record.
+                existingDiagram.SpecSectionId = input.SpecSectionId;
+                existingDiagram.DiagramType = input.DiagramType;
+                existingDiagram.Name = input.Name;
+                existingDiagram.MetadataJson = input.MetadataJson;
+
+                DiagramElement updatedDiagram = await Repository.UpdateAsync(existingDiagram);
+                return MapToEntityDto(updatedDiagram);
+            }
+
+            return await base.CreateAsync(input);
+        }
+
+        public override async Task<DiagramElementDto> UpdateAsync(DiagramElementDto input)
+        {
+            await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
+            return await base.UpdateAsync(input);
         }
 
         public async Task<DiagramGraphDto> GetGraphAsync(GetDiagramGraphDto input)
@@ -55,7 +92,8 @@ namespace SeeSpec.Services.DiagramElementService
                 throw new UserFriendlyException(string.Join(Environment.NewLine, validation.Errors));
             }
 
-            diagram.MetadataJson = SerializeGraph(graph);
+            // Persist both the graph and the linkage metadata so use-case/activity reopen flows do not lose their owning section context after edits.
+            diagram.MetadataJson = SerializeGraph(diagram, graph);
             await Repository.UpdateAsync(diagram);
 
             DiagramGraphDto graphDto = BuildGraphDto(diagram, graph);
@@ -93,7 +131,16 @@ namespace SeeSpec.Services.DiagramElementService
             }
 
             string plantUmlText = BuildPlantUml(diagram, graph);
-            string svg = await RenderPlantUmlSvgAsync(plantUmlText);
+            string svg;
+            try
+            {
+                svg = await RenderPlantUmlSvgAsync(plantUmlText);
+            }
+            catch (Exception)
+            {
+                // SVG must still be returned even when PlantUML is unavailable or rejects emitted text.
+                svg = BuildFallbackSvg(diagram, graph);
+            }
 
             RenderedDiagramDto render = new RenderedDiagramDto
             {
@@ -120,6 +167,12 @@ namespace SeeSpec.Services.DiagramElementService
                 return CreateDefaultGraph(diagram);
             }
 
+            PersistedDiagramMetadata persistedMetadata = DeserializeMetadata<PersistedDiagramMetadata>(diagram.MetadataJson);
+            if (persistedMetadata != null && persistedMetadata.Graph != null)
+            {
+                return NormalizeGraphPayload(diagram, persistedMetadata.Graph);
+            }
+
             RuntimeGraphPayload payload = DeserializeMetadata<RuntimeGraphPayload>(diagram.MetadataJson);
             if (payload != null && payload.Nodes != null && payload.Edges != null)
             {
@@ -129,10 +182,35 @@ namespace SeeSpec.Services.DiagramElementService
             return BuildLegacyGraph(diagram);
         }
 
-        // The semantic graph is the source of truth; MetadataJson only stores its persisted form.
-        private static string SerializeGraph(RuntimeGraph graph)
+        private async Task ValidateSpecSectionLinkAsync(Guid backendId, Guid? specSectionId)
         {
-            RuntimeGraphPayload payload = new RuntimeGraphPayload
+            if (!specSectionId.HasValue)
+            {
+                return;
+            }
+
+            SpecSection specSection = await _specSectionRepository.GetAsync(specSectionId.Value);
+            Spec owningSpec = await _specRepository.GetAsync(specSection.SpecId);
+
+            // Diagram persistence must keep the owning SpecSection link intact so reopen/rehydration can resolve the same content later.
+            if (owningSpec.BackendId != backendId)
+            {
+                throw new UserFriendlyException("The selected diagram section does not belong to the current backend.");
+            }
+        }
+
+        // The semantic graph is the source of truth; MetadataJson only stores its persisted form.
+        private static string SerializeGraph(DiagramElement diagram, RuntimeGraph graph)
+        {
+            PersistedDiagramMetadata metadata = DeserializeMetadata<PersistedDiagramMetadata>(diagram.MetadataJson) ?? new PersistedDiagramMetadata();
+            metadata.Graph = BuildGraphPayload(graph);
+            UpdatePersistedMetadataFromGraph(diagram, metadata, graph);
+            return JsonSerializer.Serialize(metadata, SerializerOptions);
+        }
+
+        private static RuntimeGraphPayload BuildGraphPayload(RuntimeGraph graph)
+        {
+            return new RuntimeGraphPayload
             {
                 Metadata = new Dictionary<string, string>(graph.Metadata),
                 Nodes = graph.Nodes
@@ -173,8 +251,6 @@ namespace SeeSpec.Services.DiagramElementService
                     })
                     .ToList()
             };
-
-            return JsonSerializer.Serialize(payload, SerializerOptions);
         }
 
         private static RuntimeGraph BuildLegacyGraph(DiagramElement diagram)
@@ -771,9 +847,70 @@ namespace SeeSpec.Services.DiagramElementService
 
         private static string ComputeGraphHash(RuntimeGraph graph)
         {
-            string serializedGraph = SerializeGraph(graph);
+            string serializedGraph = JsonSerializer.Serialize(BuildGraphPayload(graph), SerializerOptions);
             byte[] data = SHA256.HashData(Encoding.UTF8.GetBytes(serializedGraph));
             return Convert.ToHexString(data);
+        }
+
+        // Keep the graph payload and the user-facing linkage metadata together so diagram reopen, requirement scoping, and downstream resolution survive later semantic edits.
+        private static void UpdatePersistedMetadataFromGraph(DiagramElement diagram, PersistedDiagramMetadata metadata, RuntimeGraph graph)
+        {
+            metadata.Summary = !string.IsNullOrWhiteSpace(metadata.Summary) ? metadata.Summary : diagram.Name;
+            metadata.Description = !string.IsNullOrWhiteSpace(metadata.Description) ? metadata.Description : diagram.Name;
+
+            switch (diagram.DiagramType)
+            {
+                case DiagramType.DomainModel:
+                    metadata.Entities = graph.Nodes
+                        .OrderBy(node => node.Label, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(node => node.Id, StringComparer.Ordinal)
+                        .Select(node => new LegacyDomainEntity
+                        {
+                            Id = node.Id,
+                            Name = node.Label,
+                            Description = node.Description,
+                            Attributes = node.Members
+                                .OrderBy(member => member.Position)
+                                .ThenBy(member => member.Id, StringComparer.Ordinal)
+                                .Select(member => member.Signature)
+                                .ToList()
+                        })
+                        .ToList();
+                    metadata.Relationships = graph.Edges
+                        .OrderBy(edge => edge.SourceNodeId, StringComparer.Ordinal)
+                        .ThenBy(edge => edge.TargetNodeId, StringComparer.Ordinal)
+                        .Select(edge => new LegacyDomainRelationship
+                        {
+                            Id = edge.Id,
+                            Source = graph.Nodes.FirstOrDefault(node => node.Id == edge.SourceNodeId)?.Label ?? edge.SourceNodeId,
+                            Target = graph.Nodes.FirstOrDefault(node => node.Id == edge.TargetNodeId)?.Label ?? edge.TargetNodeId,
+                            Label = edge.Label
+                        })
+                        .ToList();
+                    break;
+                case DiagramType.Activity:
+                    metadata.Description = graph.Nodes.FirstOrDefault(node => NormalizeToken(node.NodeType) == "action")?.Description ?? metadata.Description;
+                    break;
+                default:
+                    metadata.Actors = graph.Nodes
+                        .Where(node => NormalizeToken(node.NodeType) == "actor")
+                        .OrderBy(node => node.Label, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(node => node.Id, StringComparer.Ordinal)
+                        .Select(node => node.Label)
+                        .ToList();
+                    metadata.Dependencies = graph.Edges
+                        .Where(edge => NormalizeToken(edge.EdgeType) == "dependency")
+                        .OrderBy(edge => edge.SourceNodeId, StringComparer.Ordinal)
+                        .ThenBy(edge => edge.TargetNodeId, StringComparer.Ordinal)
+                        .Select(edge => new LegacyUseCaseDependency
+                        {
+                            Slug = GetNodeMetadataValue(graph.Nodes.FirstOrDefault(node => node.Id == edge.SourceNodeId), "slug") ?? edge.SourceNodeId,
+                            Name = graph.Nodes.FirstOrDefault(node => node.Id == edge.SourceNodeId)?.Label ?? edge.SourceNodeId
+                        })
+                        .ToList();
+                    metadata.Description = graph.Nodes.FirstOrDefault(node => NormalizeToken(node.NodeType) == "use-case")?.Description ?? metadata.Description;
+                    break;
+            }
         }
 
         // PlantUML stays renderer-only; it is derived from the semantic graph instead of becoming editable state.
@@ -984,11 +1121,85 @@ namespace SeeSpec.Services.DiagramElementService
             }
         }
 
+        private static string BuildFallbackSvg(DiagramElement diagram, RuntimeGraph graph)
+        {
+            const int width = 920;
+            int nodeCount = Math.Max(graph.Nodes.Count, 1);
+            int height = Math.Max(260, 120 + (nodeCount * 96));
+            StringBuilder builder = new StringBuilder();
+            builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+            builder.AppendLine("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + width + "\" height=\"" + height + "\" viewBox=\"0 0 " + width + " " + height + "\">");
+            builder.AppendLine("<rect width=\"100%\" height=\"100%\" fill=\"#0c0f0e\" />");
+            builder.AppendLine("<text x=\"40\" y=\"46\" fill=\"#fafaf9\" font-size=\"28\" font-family=\"Segoe UI, sans-serif\" font-weight=\"700\">" + EscapeXml(diagram.Name) + "</text>");
+            builder.AppendLine("<text x=\"40\" y=\"76\" fill=\"#fdba74\" font-size=\"14\" font-family=\"Segoe UI, sans-serif\">Fallback SVG renderer</text>");
+
+            List<RuntimeGraphNode> orderedNodes = graph.Nodes
+                .OrderBy(node => node.Label, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(node => node.Id, StringComparer.Ordinal)
+                .ToList();
+            Dictionary<string, int> nodeYPositions = new Dictionary<string, int>(StringComparer.Ordinal);
+
+            for (int index = 0; index < orderedNodes.Count; index++)
+            {
+                RuntimeGraphNode node = orderedNodes[index];
+                int y = 110 + (index * 96);
+                nodeYPositions[node.Id] = y;
+                string href = BuildSemanticLink("node", node.Id);
+
+                builder.AppendLine("<a href=\"" + EscapeXml(href) + "\">");
+                builder.AppendLine("<rect x=\"40\" y=\"" + y + "\" rx=\"16\" ry=\"16\" width=\"340\" height=\"68\" fill=\"#141917\" stroke=\"#f97316\" stroke-width=\"1.5\" />");
+                builder.AppendLine("<text x=\"64\" y=\"" + (y + 28) + "\" fill=\"#fafaf9\" font-size=\"18\" font-family=\"Segoe UI, sans-serif\" font-weight=\"600\">" + EscapeXml(node.Label) + "</text>");
+                builder.AppendLine("<text x=\"64\" y=\"" + (y + 50) + "\" fill=\"#d6d3d1\" font-size=\"13\" font-family=\"Segoe UI, sans-serif\">" + EscapeXml(node.NodeType) + "</text>");
+                builder.AppendLine("</a>");
+            }
+
+            int edgeBaseX = 420;
+            int edgeWidth = 420;
+            int edgeOffset = 0;
+            foreach (RuntimeGraphEdge edge in graph.Edges.OrderBy(item => item.SourceNodeId, StringComparer.Ordinal).ThenBy(item => item.TargetNodeId, StringComparer.Ordinal))
+            {
+                int sourceY = nodeYPositions.TryGetValue(edge.SourceNodeId, out int sourceValue) ? sourceValue : 110;
+                int targetY = nodeYPositions.TryGetValue(edge.TargetNodeId, out int targetValue) ? targetValue : sourceY + 96;
+                int lineY = Math.Min(sourceY, targetY) + 34;
+                int textY = lineY - 8 + edgeOffset;
+                string href = BuildSemanticLink("edge", edge.Id);
+
+                builder.AppendLine("<a href=\"" + EscapeXml(href) + "\">");
+                builder.AppendLine("<line x1=\"" + edgeBaseX + "\" y1=\"" + lineY + "\" x2=\"" + (edgeBaseX + edgeWidth) + "\" y2=\"" + (targetY + 34) + "\" stroke=\"#60a5fa\" stroke-width=\"2\" />");
+                builder.AppendLine("<text x=\"" + edgeBaseX + "\" y=\"" + textY + "\" fill=\"#93c5fd\" font-size=\"13\" font-family=\"Segoe UI, sans-serif\">" + EscapeXml(string.IsNullOrWhiteSpace(edge.Label) ? edge.EdgeType : edge.Label) + "</text>");
+                builder.AppendLine("</a>");
+                edgeOffset = (edgeOffset + 12) % 24;
+            }
+
+            builder.AppendLine("</svg>");
+            return builder.ToString();
+        }
+
+        private static string EscapeXml(string value)
+        {
+            return (value ?? string.Empty)
+                .Replace("&", "&amp;")
+                .Replace("<", "&lt;")
+                .Replace(">", "&gt;")
+                .Replace("\"", "&quot;")
+                .Replace("'", "&apos;");
+        }
+
         private static string BuildStableId(string prefix, string source)
         {
             string normalizedSource = string.IsNullOrWhiteSpace(source) ? Guid.NewGuid().ToString("N") : source.Trim().ToLowerInvariant();
             byte[] data = SHA256.HashData(Encoding.UTF8.GetBytes(prefix + ":" + normalizedSource));
             return prefix + "-" + Convert.ToHexString(data).Substring(0, 12);
+        }
+
+        private static string GetNodeMetadataValue(RuntimeGraphNode node, string key)
+        {
+            if (node == null || node.Metadata == null || string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            return node.Metadata.TryGetValue(key, out string value) ? value : null;
         }
 
         private static string NormalizeToken(string value)
@@ -1084,6 +1295,27 @@ namespace SeeSpec.Services.DiagramElementService
             public List<RuntimeGraphEdgePayload> Edges { get; set; } = new List<RuntimeGraphEdgePayload>();
 
             public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+        }
+
+        private class PersistedDiagramMetadata
+        {
+            public string Summary { get; set; }
+
+            public string Description { get; set; }
+
+            public List<string> LinkedRequirementIds { get; set; } = new List<string>();
+
+            public string LinkedUseCaseSlug { get; set; }
+
+            public List<string> Actors { get; set; } = new List<string>();
+
+            public List<LegacyUseCaseDependency> Dependencies { get; set; } = new List<LegacyUseCaseDependency>();
+
+            public List<LegacyDomainEntity> Entities { get; set; } = new List<LegacyDomainEntity>();
+
+            public List<LegacyDomainRelationship> Relationships { get; set; } = new List<LegacyDomainRelationship>();
+
+            public RuntimeGraphPayload Graph { get; set; }
         }
 
         private class RuntimeGraphNodePayload

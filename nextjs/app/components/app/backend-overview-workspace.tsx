@@ -40,6 +40,7 @@ function toOverviewFormState(overviewSection: SpecSectionDto | null): OverviewFo
 export function BackendOverviewWorkspace({
     backend,
     overviewSection,
+    roleSections,
     canManageRoles,
     onSaveBackend,
     onSaveOverview,
@@ -47,6 +48,7 @@ export function BackendOverviewWorkspace({
 }: {
     backend: BackendDto;
     overviewSection: SpecSectionDto | null;
+    roleSections: SpecSectionDto[];
     canManageRoles: boolean;
     onSaveBackend: (next: BackendFormState) => Promise<void>;
     onSaveOverview: (next: OverviewFormState) => Promise<void>;
@@ -63,13 +65,24 @@ export function BackendOverviewWorkspace({
     });
 
     const hasOverview = Boolean(overviewSection);
+    const projectRoles = useMemo(
+        () =>
+            roleSections.map((section) => ({
+                id: section.id,
+                roleName: section.title,
+                assignedTo: section.sectionItems.find((item) => item.label === "assignedTo")?.content ?? "",
+                emailAddress: section.sectionItems.find((item) => item.label === "emailAddress")?.content ?? "",
+                note: section.sectionItems.find((item) => item.label === "note")?.content ?? ""
+            })),
+        [roleSections]
+    );
     const summaryCards = useMemo(
         () => [
-            { label: "Project roles", value: String(backend.roles.length) },
+            { label: "Project roles", value: String(projectRoles.length) },
             { label: "Requirements", value: String(backend.requirements.length) },
             { label: "Status", value: backend.status }
         ],
-        [backend]
+        [backend, projectRoles.length]
     );
 
     async function saveBackend() {
@@ -209,7 +222,7 @@ export function BackendOverviewWorkspace({
                                 <strong>Role setup is locked</strong>
                                 <p>Create the overview first, then assign the project roles for this backend.</p>
                             </div>
-                        ) : backend.roles.length === 0 ? (
+                        ) : projectRoles.length === 0 ? (
                             <div className="backend-blocked-state">
                                 <strong>No roles configured yet</strong>
                                 <p>
@@ -220,7 +233,7 @@ export function BackendOverviewWorkspace({
                             </div>
                         ) : (
                             <div className="backend-role-list">
-                                {backend.roles.map((role) => (
+                                {projectRoles.map((role) => (
                                     <article key={role.id} className="backend-role-item">
                                         <div className="backend-role-heading">
                                             <strong>{role.roleName}</strong>

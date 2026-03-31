@@ -20,5 +20,8 @@ RUN dotnet publish -c Release -o /publish --no-restore
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 EXPOSE 80
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends default-jre-headless graphviz plantuml \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /publish .
 ENTRYPOINT ["dotnet", "SeeSpec.Web.Host.dll"]

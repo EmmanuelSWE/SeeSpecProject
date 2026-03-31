@@ -32,8 +32,14 @@ export default function BackendUseCaseDiagramPage() {
     }, [backend?.id, getDiagramElementsByBackendAndType, getSectionsByBackendAndType]);
 
     const useCase = useMemo(
-        () => diagramElements.find((item) => item.slug === params.useCaseSlug) ?? null,
-        [diagramElements, params.useCaseSlug]
+        () =>
+            diagramElements.find(
+                (item) =>
+                    item.backendId === backend?.id &&
+                    item.type === "use-case" &&
+                    item.slug === params.useCaseSlug
+            ) ?? null,
+        [backend?.id, diagramElements, params.useCaseSlug]
     );
     const linkedRequirements = useMemo(
         () => sections.filter((section) => useCase?.linkedRequirementIds.includes(section.id)),

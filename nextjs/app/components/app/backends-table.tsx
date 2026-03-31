@@ -3,6 +3,22 @@
 import Link from "next/link";
 import type { BackendDto } from "@/app/lib/utils/services/backend-service";
 
+function dedupeBackends(backends: BackendDto[]) {
+    const seen = new Set<string>();
+    const uniqueBackends: BackendDto[] = [];
+
+    for (const backend of backends) {
+        if (seen.has(backend.id)) {
+            continue;
+        }
+
+        seen.add(backend.id);
+        uniqueBackends.push(backend);
+    }
+
+    return uniqueBackends;
+}
+
 export function BackendsTable({
     backends,
     onCreate,
@@ -12,6 +28,8 @@ export function BackendsTable({
     onCreate: () => void;
     onEdit: (backend: BackendDto) => void;
 }) {
+    const uniqueBackends = dedupeBackends(backends);
+
     return (
         <section className="page-section backend-page">
             <div className="card backend-hero-card">
@@ -36,7 +54,7 @@ export function BackendsTable({
                         <span className="requirements-eyebrow">Workspace Systems</span>
                         <h3>Available backends</h3>
                     </div>
-                    <span className="requirements-count-pill">{backends.length}</span>
+                    <span className="requirements-count-pill">{uniqueBackends.length}</span>
                 </div>
                 <div className="table-wrap">
                     <table className="data-table backend-table">
@@ -52,7 +70,7 @@ export function BackendsTable({
                             </tr>
                         </thead>
                         <tbody>
-                            {backends.map((backend) => (
+                            {uniqueBackends.map((backend) => (
                                 <tr key={backend.id}>
                                     <td>
                                         <div className="backend-table-primary">

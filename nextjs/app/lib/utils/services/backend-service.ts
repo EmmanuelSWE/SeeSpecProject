@@ -92,6 +92,14 @@ type SpecSectionApiDto = {
   content: string;
 };
 
+type SectionItemApiDto = {
+  id: string;
+  specSectionId: string;
+  label: string;
+  content: string;
+  position: number;
+};
+
 type DiagramElementApiDto = {
   id: string;
   backendId: string;
@@ -119,7 +127,24 @@ type EnrichmentPayload = {
   specs: SpecApiDto[];
   sections: SpecSectionApiDto[];
   diagrams: DiagramElementApiDto[];
+  sectionItems: SectionItemApiDto[];
 };
+
+function dedupeById<T extends { id: string }>(items: T[]) {
+  const seen = new Set<string>();
+  const deduped: T[] = [];
+
+  for (const item of items) {
+    if (seen.has(item.id)) {
+      continue;
+    }
+
+    seen.add(item.id);
+    deduped.push(item);
+  }
+
+  return deduped;
+}
 
 function slugifyBackendName(name: string) {
   return name
@@ -198,12 +223,25 @@ function parseDomainMetadata(metadataJson?: string | null) {
   };
 }
 
+function mapRoleName(value: string): BackendRoleName {
+  switch (value) {
+    case "Tenant Admin":
+    case "Business Analyst":
+    case "System Architect":
+    case "Project Lead":
+      return value;
+    default:
+      return "Project Lead";
+  }
+}
+
 function buildBackendDto(backend: BackendApiDto, enrichment: EnrichmentPayload): BackendDto {
   const spec = enrichment.specs.find((item) => item.backendId === backend.id) ?? null;
   const specSections = spec ? enrichment.sections.filter((item) => item.specId === spec.id) : [];
   const overviewSection =
     specSections.find((item) => item.slug === `${backend.slug}-overview`) ??
     specSections.find((item) => item.sectionType === 4);
+  const roleSections = specSections.filter((item) => item.sectionType === 4 && item.slug.startsWith("role-"));
   const requirementSections = specSections.filter((item) => item.sectionType === 1);
   const diagramElements = enrichment.diagrams.filter((item) => item.backendId === backend.id);
   const useCaseElements = diagramElements.filter((item) => item.diagramType === 1);
@@ -221,7 +259,16 @@ function buildBackendDto(backend: BackendApiDto, enrichment: EnrichmentPayload):
     status: mapBackendStatus(backend.status),
     repositoryUrl: backend.repositoryUrl ?? "",
     overview: overviewSection ? parseOverview(overviewSection.content) : null,
-    roles: [],
+    roles: roleSections.map((section) => {
+      const roleItems = enrichment.sectionItems.filter((item) => item.specSectionId === section.id);
+      return {
+        id: section.id,
+        roleName: mapRoleName(section.title),
+        assignedTo: roleItems.find((item) => item.label === "assignedTo")?.content ?? "",
+        emailAddress: roleItems.find((item) => item.label === "emailAddress")?.content ?? "",
+        note: roleItems.find((item) => item.label === "note")?.content ?? ""
+      };
+    }),
     requirements: requirementSections.map((item) => ({ id: item.id })),
     useCases: useCaseElements.map((item) => ({
       id: item.id,
@@ -233,16 +280,18 @@ function buildBackendDto(backend: BackendApiDto, enrichment: EnrichmentPayload):
 }
 
 async function getBackendEnrichment(): Promise<EnrichmentPayload> {
-  const [specs, sections, diagrams] = await Promise.all([
+  const [specs, sections, diagrams, sectionItems] = await Promise.all([
     getPaged<SpecApiDto>("/services/app/Spec/GetAll"),
     getPaged<SpecSectionApiDto>("/services/app/SpecSection/GetAll"),
-    getPaged<DiagramElementApiDto>("/services/app/DiagramElement/GetAll")
+    getPaged<DiagramElementApiDto>("/services/app/DiagramElement/GetAll"),
+    getPaged<SectionItemApiDto>("/services/app/SectionItem/GetAll")
   ]);
 
   return {
     specs: specs.items ?? [],
     sections: sections.items ?? [],
-    diagrams: diagrams.items ?? []
+    diagrams: diagrams.items ?? [],
+    sectionItems: sectionItems.items ?? []
   };
 }
 
@@ -254,7 +303,8 @@ async function getBackendRows() {
 export async function getBackends() {
   try {
     const [backends, enrichment] = await Promise.all([getBackendRows(), getBackendEnrichment()]);
-    return backends.map((backend) => buildBackendDto(backend, enrichment));
+    // Deduping by the persisted backend id fixes the real duplicate-row source before React keys are assigned.
+    return dedupeById(backends).map((backend) => buildBackendDto(backend, enrichment));
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to load backends."));
   }

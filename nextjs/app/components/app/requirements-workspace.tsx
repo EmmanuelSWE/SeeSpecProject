@@ -259,7 +259,16 @@ export function RequirementsWorkspace({ session }: { session: IUserSession | nul
             </div>
           </aside>
 
-          <RequirementsDetailPanel requirement={activeRequirement} canEdit={canEdit} />
+          <RequirementsDetailPanel
+            requirement={activeRequirement}
+            canEdit={canEdit}
+            hasUseCaseDiagram={false}
+            hasActivityDiagram={false}
+            onCreateUseCaseDiagram={() => {}}
+            onOpenUseCaseDiagram={() => {}}
+            onCreateActivityDiagram={() => {}}
+            onOpenActivityDiagram={() => {}}
+          />
 
           <RequirementsTraceabilityPanel
             traceItems={activeRequirement.traceItems}
