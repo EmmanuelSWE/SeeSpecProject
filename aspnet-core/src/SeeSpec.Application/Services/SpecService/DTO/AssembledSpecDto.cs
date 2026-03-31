@@ -15,6 +15,8 @@ namespace SeeSpec.Services.SpecService.DTO
 
         public SpecStatus Status { get; set; }
 
+        public IReadOnlyList<Guid> IndependentSectionIds { get; set; }
+
         public IReadOnlyList<AssembledSpecSectionDto> Sections { get; set; }
     }
 }
