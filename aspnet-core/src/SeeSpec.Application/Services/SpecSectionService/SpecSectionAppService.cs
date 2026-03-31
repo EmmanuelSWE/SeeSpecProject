@@ -20,11 +20,11 @@ namespace SeeSpec.Services.SpecSectionService
 
         public override async Task<SpecSectionDto> CreateAsync(SpecSectionDto input)
         {
-            if (input.SectionType == SectionType.Overview)
+            if (IsOverviewSection(input.SectionType, input.Slug))
             {
-                // Overview is a singleton per backend spec, so a second "create" must update the existing overview instead.
+                // The current domain model stores overview sections under Shared, using the overview slug to distinguish the singleton.
                 SpecSection existingOverview = await Repository.FirstOrDefaultAsync(
-                    item => item.SpecId == input.SpecId && item.SectionType == SectionType.Overview
+                    item => item.SpecId == input.SpecId && IsOverviewSection(item.SectionType, item.Slug)
                 );
 
                 if (existingOverview != null)
@@ -43,6 +43,11 @@ namespace SeeSpec.Services.SpecSectionService
             }
 
             return await base.CreateAsync(input);
+        }
+
+        private static bool IsOverviewSection(SectionType sectionType, string slug)
+        {
+            return sectionType == SectionType.Shared && !string.IsNullOrWhiteSpace(slug) && slug.EndsWith("-overview", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

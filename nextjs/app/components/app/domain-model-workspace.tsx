@@ -7,10 +7,12 @@ import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element
 
 export function DomainModelWorkspace({
     backend,
-    diagram
+    diagram,
+    onCreateDiagram
 }: {
     backend: BackendDto;
     diagram: DiagramElementDto | null;
+    onCreateDiagram: () => Promise<void>;
 }) {
     const entities = diagram?.entities ?? [];
     const relationships = diagram?.relationships ?? [];
@@ -88,6 +90,9 @@ export function DomainModelWorkspace({
                                 <div className="semantic-diagram-empty">
                                     <strong>No domain model diagram is defined yet.</strong>
                                     <p>Create a backend-scoped domain diagram element before editing the semantic graph.</p>
+                                    <button type="button" className="requirements-action-button" onClick={() => { onCreateDiagram().catch(() => {}); }}>
+                                        Create domain model
+                                    </button>
                                 </div>
                             )}
                         </div>

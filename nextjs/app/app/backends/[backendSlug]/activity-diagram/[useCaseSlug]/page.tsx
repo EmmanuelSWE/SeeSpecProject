@@ -12,8 +12,8 @@ import { useUserState } from "@/app/lib/providers/userProvider";
 export default function BackendActivityDiagramPage() {
   const params = useParams<{ backendSlug: string; useCaseSlug: string }>();
   const { session } = useUserState();
-  const { backend } = useBackendState();
-  const { diagramElements } = useDiagramElementState();
+  const { backend, isPending: isBackendPending } = useBackendState();
+  const { diagramElements, isPending: isDiagramPending } = useDiagramElementState();
   const { getBackendBySlug } = useBackendActions();
   const { getDiagramElementsByBackend } = useDiagramElementActions();
 
@@ -51,6 +51,19 @@ export default function BackendActivityDiagramPage() {
 
   if (!hasPermission(session, APP_PERMISSIONS.activityDiagram)) {
     return <AccessPanel title="Activity Diagram" message="Your current role does not allow access to activity diagrams." />;
+  }
+
+  if (isBackendPending || isDiagramPending) {
+    return (
+      <section className="page-section">
+        <div className="card backend-state-card">
+          <div className="card-body backend-blocked-state">
+            <strong>Loading activity diagram...</strong>
+            <p>Resolving the backend, use case, and linked activity diagram context.</p>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   if (!backend || !useCase || !activityDiagram) {

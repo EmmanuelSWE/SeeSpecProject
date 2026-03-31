@@ -7,16 +7,19 @@ import { UseCaseDiagramWorkspace } from "@/app/components/app/usecase-diagram-wo
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import { useDiagramElementActions, useDiagramElementState } from "@/app/lib/providers/diagramElementProvider";
+import { useSpecActions, useSpecState } from "@/app/lib/providers/specProvider";
 import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
 import { useUserState } from "@/app/lib/providers/userProvider";
 
 export default function BackendUseCaseDiagramPage() {
     const params = useParams<{ backendSlug: string; useCaseSlug: string }>();
     const { session } = useUserState();
-    const { backend } = useBackendState();
-    const { diagramElements } = useDiagramElementState();
-    const { sections } = useSpecSectionState();
+    const { backend, isPending: isBackendPending } = useBackendState();
+    const { spec, isPending: isSpecPending } = useSpecState();
+    const { diagramElements, isPending: isDiagramPending } = useDiagramElementState();
+    const { sections, isPending: isSectionPending } = useSpecSectionState();
     const { getBackendBySlug } = useBackendActions();
+    const { getSpecByBackend } = useSpecActions();
     const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
     const { getSectionsByBackendAndType } = useSpecSectionActions();
 
@@ -26,10 +29,11 @@ export default function BackendUseCaseDiagramPage() {
 
     useEffect(() => {
         if (backend) {
+            getSpecByBackend(backend.id).catch(() => {});
             getDiagramElementsByBackendAndType(backend.id, "use-case").catch(() => {});
             getSectionsByBackendAndType(backend.id, "requirement").catch(() => {});
         }
-    }, [backend?.id, getDiagramElementsByBackendAndType, getSectionsByBackendAndType]);
+    }, [backend?.id, getDiagramElementsByBackendAndType, getSectionsByBackendAndType, getSpecByBackend]);
 
     const useCase = useMemo(
         () =>
@@ -42,12 +46,25 @@ export default function BackendUseCaseDiagramPage() {
         [backend?.id, diagramElements, params.useCaseSlug]
     );
     const linkedRequirements = useMemo(
-        () => sections.filter((section) => useCase?.linkedRequirementIds.includes(section.id)),
-        [sections, useCase?.linkedRequirementIds]
+        () => sections.filter((section) => section.specId === spec?.id && useCase?.linkedRequirementIds.includes(section.id)),
+        [sections, spec?.id, useCase?.linkedRequirementIds]
     );
 
     if (!hasPermission(session, APP_PERMISSIONS.usecaseDiagrams)) {
         return <AccessPanel title="Use Case Diagrams" message="Your current role does not allow access to use case diagrams." />;
+    }
+
+    if (isBackendPending || isSpecPending || isDiagramPending || isSectionPending) {
+        return (
+            <section className="page-section">
+                <div className="card backend-state-card">
+                    <div className="card-body backend-blocked-state">
+                        <strong>Loading use case diagram...</strong>
+                        <p>Resolving the backend, spec, and linked use case context.</p>
+                    </div>
+                </div>
+            </section>
+        );
     }
 
     if (!backend || !useCase) {

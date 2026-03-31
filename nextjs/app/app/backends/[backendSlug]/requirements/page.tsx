@@ -7,6 +7,7 @@ import { BackendRequirementsWorkspace } from "@/app/components/app/backend-requi
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import { useDiagramElementActions, useDiagramElementState } from "@/app/lib/providers/diagramElementProvider";
+import { useSpecActions, useSpecState } from "@/app/lib/providers/specProvider";
 import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
 import { useUserState } from "@/app/lib/providers/userProvider";
 
@@ -14,9 +15,11 @@ export default function BackendRequirementsPage() {
     const params = useParams<{ backendSlug: string }>();
     const { session } = useUserState();
     const { backend } = useBackendState();
+    const { spec } = useSpecState();
     const { sections } = useSpecSectionState();
     const { diagramElements } = useDiagramElementState();
     const { getBackendBySlug } = useBackendActions();
+    const { getSpecByBackend } = useSpecActions();
     const { createDiagramElement, getDiagramElementsByBackend, updateDiagramElement } = useDiagramElementActions();
     const { createSection, getSectionsByBackend, updateSection } = useSpecSectionActions();
 
@@ -26,10 +29,11 @@ export default function BackendRequirementsPage() {
 
     useEffect(() => {
         if (backend) {
+            getSpecByBackend(backend.id).catch(() => {});
             getSectionsByBackend(backend.id).catch(() => {});
             getDiagramElementsByBackend(backend.id).catch(() => {});
         }
-    }, [backend?.id, getDiagramElementsByBackend, getSectionsByBackend]);
+    }, [backend?.id, getDiagramElementsByBackend, getSectionsByBackend, getSpecByBackend]);
 
     if (!hasPermission(session, APP_PERMISSIONS.requirements)) {
         return <AccessPanel title="Requirements" message="Your current role does not allow access to backend requirements." />;
@@ -50,10 +54,10 @@ export default function BackendRequirementsPage() {
 
     // Roles stay on the overview page only; requirements only consume the real overview section for gating.
     const overviewSection =
-        sections.find((item) => item.type === "overview" && item.slug === `${backend.slug}-overview`) ??
-        sections.find((item) => item.type === "overview") ??
+        sections.find((item) => item.specId === spec?.id && item.type === "overview" && item.slug === `${backend.slug}-overview`) ??
+        sections.find((item) => item.specId === spec?.id && item.type === "overview") ??
         null;
-    const requirementSections = sections.filter((item) => item.type === "requirement");
+    const requirementSections = sections.filter((item) => item.specId === spec?.id && item.type === "requirement");
 
     return (
         <BackendRequirementsWorkspace

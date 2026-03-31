@@ -13,8 +13,8 @@ export default function BackendUseCaseIndexPage() {
     const params = useParams<{ backendSlug: string }>();
     const router = useRouter();
     const { session } = useUserState();
-    const { backend } = useBackendState();
-    const { diagramElements } = useDiagramElementState();
+    const { backend, isPending: isBackendPending } = useBackendState();
+    const { diagramElements, isPending: isDiagramPending } = useDiagramElementState();
     const { getBackendBySlug } = useBackendActions();
     const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
 
@@ -36,6 +36,19 @@ export default function BackendUseCaseIndexPage() {
 
     if (!hasPermission(session, APP_PERMISSIONS.usecaseDiagrams)) {
         return <AccessPanel title="Use Case Diagrams" message="Your current role does not allow access to use case diagrams." />;
+    }
+
+    if (isBackendPending || isDiagramPending) {
+        return (
+            <section className="page-section">
+                <div className="card backend-state-card">
+                    <div className="card-body backend-blocked-state">
+                        <strong>Loading use case workspace...</strong>
+                        <p>Resolving the backend and any saved use case diagrams.</p>
+                    </div>
+                </div>
+            </section>
+        );
     }
 
     if (!backend || diagramElements.length === 0) {

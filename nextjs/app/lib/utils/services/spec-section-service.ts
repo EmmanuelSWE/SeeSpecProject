@@ -13,6 +13,7 @@ export type SpecSectionItemDto = {
 
 export type SpecSectionDto = {
   id: string;
+  specId: string;
   backendId: string;
   backendSlug: string;
   slug: string;
@@ -280,6 +281,7 @@ function buildSpecSectionDto(
 
   return {
     id: section.id,
+    specId: spec.id,
     backendId: spec.backendId,
     backendSlug: backend?.slug ?? "",
     slug: section.slug,

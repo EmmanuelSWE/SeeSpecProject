@@ -6,20 +6,21 @@ import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendOverviewWorkspace } from "@/app/components/app/backend-overview-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
+import { useSectionItemActions } from "@/app/lib/providers/sectionItemProvider";
+import { useSpecActions, useSpecState } from "@/app/lib/providers/specProvider";
 import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
-import {
-    createSectionItem,
-    updateSectionItem
-} from "@/app/lib/utils/services/section-item-service";
 import { useUserState } from "@/app/lib/providers/userProvider";
 
 export default function BackendOverviewPage() {
     const params = useParams<{ backendSlug: string }>();
     const { session } = useUserState();
     const { backend } = useBackendState();
+    const { spec } = useSpecState();
     const { sections } = useSpecSectionState();
     const { getBackendBySlug, updateBackend } = useBackendActions();
+    const { getSpecByBackend } = useSpecActions();
     const { getSectionsByBackend, createSection, updateSection } = useSpecSectionActions();
+    const { createItem, updateItem } = useSectionItemActions();
 
     useEffect(() => {
         getBackendBySlug(params.backendSlug).catch(() => {});
@@ -27,15 +28,17 @@ export default function BackendOverviewPage() {
 
     useEffect(() => {
         if (backend) {
+            getSpecByBackend(backend.id).catch(() => {});
             getSectionsByBackend(backend.id).catch(() => {});
         }
-    }, [backend, getSectionsByBackend]);
+    }, [backend, getSectionsByBackend, getSpecByBackend]);
 
     const overviewSection =
-        sections.find((item) => item.type === "overview" && item.slug === `${backend?.slug ?? ""}-overview`) ??
-        sections.find((item) => item.type === "overview") ??
+        sections.find((item) => item.specId === spec?.id && item.type === "overview" && item.slug === `${backend?.slug ?? ""}-overview`) ??
+        sections.find((item) => item.specId === spec?.id && item.type === "overview") ??
         null;
-    const roleSections = sections.filter((item) => item.type === "role");
+    // Roles belong to the active spec/project context, not the backend generically, so the overview page scopes them to the resolved spec.
+    const roleSections = sections.filter((item) => item.specId === spec?.id && item.type === "role");
 
     if (!hasPermission(session, APP_PERMISSIONS.backends)) {
         return <AccessPanel title="Backends" message="Your current role does not allow access to backend workspaces." />;
@@ -93,16 +96,22 @@ export default function BackendOverviewPage() {
             }}
             onSaveRole={async (role) => {
                 // Roles are stored in the spec model as Shared SpecSections, and the editable role details live in SectionItems.
-                const createdRoleSection = await createSection({
+                const roleTitle = role.roleName;
+                const existingRoleSection =
+                    roleSections.find((section) => section.title === roleTitle) ??
+                    null;
+
+                const roleSection = existingRoleSection ?? await createSection({
                     backendId: backend.id,
                     type: "role",
-                    title: role.roleName,
-                    summary: role.note || role.assignedTo || role.roleName,
-                    content: [role.note || role.assignedTo || role.roleName],
-                    tags: ["Role", role.roleName, backend.name]
+                    title: roleTitle,
+                    summary: role.note || role.assignedTo || roleTitle,
+                    content: [role.note || role.assignedTo || roleTitle],
+                    tags: ["Role", roleTitle, backend.name]
                 });
 
-                const existingItems = createdRoleSection.sectionItems;
+                // Role details and role-to-role connections live as SectionItems under the role SpecSection.
+                const existingItems = roleSection.sectionItems;
                 const roleItemPayloads = [
                     { label: "assignedTo", content: role.assignedTo, position: 1 },
                     { label: "emailAddress", content: role.emailAddress, position: 2 },
@@ -113,7 +122,7 @@ export default function BackendOverviewPage() {
                     roleItemPayloads.map(async (item) => {
                         const existingItem = existingItems.find((entry) => entry.label === item.label) ?? null;
                         if (existingItem) {
-                            await updateSectionItem({
+                            await updateItem({
                                 id: existingItem.id,
                                 content: item.content,
                                 position: item.position
@@ -121,8 +130,8 @@ export default function BackendOverviewPage() {
                             return;
                         }
 
-                        await createSectionItem({
-                            specSectionId: createdRoleSection.id,
+                        await createItem({
+                            specSectionId: roleSection.id,
                             label: item.label,
                             content: item.content,
                             position: item.position

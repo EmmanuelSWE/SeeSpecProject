@@ -1,6 +1,20 @@
 import { INITIAL_STATE, type IDiagramElementStateContext } from "./context";
 import { DiagramElementActionEnums, type DiagramElementAction } from "./actions";
 
+function upsertDiagramCollection(
+  stateElements: IDiagramElementStateContext["diagramElements"],
+  nextElement: NonNullable<IDiagramElementStateContext["diagramElement"]>
+) {
+  const existingIndex = stateElements.findIndex((diagramElement) => diagramElement.id === nextElement.id);
+  if (existingIndex === -1) {
+    return [...stateElements, nextElement];
+  }
+
+  return stateElements.map((diagramElement) =>
+    diagramElement.id === nextElement.id ? nextElement : diagramElement
+  );
+}
+
 export function DiagramElementReducer(
   state: IDiagramElementStateContext = INITIAL_STATE,
   action: DiagramElementAction
@@ -75,7 +89,7 @@ export function DiagramElementReducer(
         isError: false,
         errorMessage: null,
         diagramElement: action.payload,
-        diagramElements: [...state.diagramElements, action.payload]
+        diagramElements: upsertDiagramCollection(state.diagramElements, action.payload)
       };
     case DiagramElementActionEnums.updateDiagramElementSuccess:
       return {
@@ -85,9 +99,7 @@ export function DiagramElementReducer(
         isError: false,
         errorMessage: null,
         diagramElement: action.payload,
-        diagramElements: state.diagramElements.map((diagramElement) =>
-          diagramElement.id === action.payload.id ? action.payload : diagramElement
-        )
+        diagramElements: upsertDiagramCollection(state.diagramElements, action.payload)
       };
     case DiagramElementActionEnums.deleteDiagramElementSuccess:
       return {

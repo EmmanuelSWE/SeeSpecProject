@@ -1,6 +1,18 @@
 import { INITIAL_STATE, type ISpecSectionStateContext } from "./context";
 import { SpecSectionActionEnums, type SpecSectionAction } from "./actions";
 
+function upsertSectionCollection(
+  stateSections: ISpecSectionStateContext["sections"],
+  nextSection: NonNullable<ISpecSectionStateContext["section"]>
+) {
+  const existingIndex = stateSections.findIndex((section) => section.id === nextSection.id);
+  if (existingIndex === -1) {
+    return [...stateSections, nextSection];
+  }
+
+  return stateSections.map((section) => (section.id === nextSection.id ? nextSection : section));
+}
+
 export function SpecSectionReducer(
   state: ISpecSectionStateContext = INITIAL_STATE,
   action: SpecSectionAction
@@ -48,7 +60,7 @@ export function SpecSectionReducer(
         isError: false,
         errorMessage: null,
         section: action.payload,
-        sections: [...state.sections, action.payload]
+        sections: upsertSectionCollection(state.sections, action.payload)
       };
     case SpecSectionActionEnums.updateSectionSuccess:
       return {

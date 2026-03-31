@@ -916,6 +916,7 @@ namespace SeeSpec.Services.DiagramElementService
         // PlantUML stays renderer-only; it is derived from the semantic graph instead of becoming editable state.
         private static string BuildPlantUml(DiagramElement diagram, RuntimeGraph graph)
         {
+            // Diagram type is identified explicitly before emission so Activity, Domain Model, and Use Case requests cannot drift into the wrong PlantUML syntax.
             switch (diagram.DiagramType)
             {
                 case DiagramType.DomainModel:
