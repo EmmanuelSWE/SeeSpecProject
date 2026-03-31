@@ -133,6 +133,16 @@ function isTextEntryKey(event: KeyboardEvent<HTMLDivElement>) {
   return event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
 }
 
+function focusScene(sceneElement: HTMLDivElement | null) {
+  if (!sceneElement) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    sceneElement.focus();
+  });
+}
+
 function annotateSemanticSvg(
   svg: string,
   selection: ParsedSelectionTarget | null,
@@ -294,6 +304,12 @@ export function SemanticSvgDiagramEditor({
     lastRenderedHashRef.current = null;
     pendingRenderHashRef.current = null;
   }, [diagramElementId]);
+
+  useEffect(() => {
+    if (editorMode !== "view") {
+      focusScene(sceneRef.current);
+    }
+  }, [editorMode]);
 
   useEffect(() => {
     if (!selection || !graph) {
@@ -477,6 +493,7 @@ export function SemanticSvgDiagramEditor({
       }
 
       event.preventDefault();
+      focusScene(sceneRef.current);
       setSelection(target);
       setNewlyCreatedSelection(null);
       setControllerMessageOverride({
@@ -803,7 +820,7 @@ export function SemanticSvgDiagramEditor({
 
   return (
     <div className="semantic-diagram-shell">
-      <div className="semantic-diagram-controls">
+      <div className="semantic-diagram-controls semantic-diagram-panel">
         <div className="semantic-diagram-controls-header">
           <div>
             <span className="requirements-eyebrow">Controls</span>
@@ -820,6 +837,7 @@ export function SemanticSvgDiagramEditor({
                     diagramElementId,
                     message: "Edit mode enabled. Select a node and press Enter to type."
                   });
+                  focusScene(sceneRef.current);
                   return;
                 }
 
@@ -862,17 +880,21 @@ export function SemanticSvgDiagramEditor({
                 : "Controller ready"}
           </span>
           <strong>{controllerMessage}</strong>
-          <p>{inlineEditor.isOpen ? draftValue || "Type to define the semantic change" : "Use the Edit button to enter semantic command mode."}</p>
+          <p>
+            {inlineEditor.isOpen
+              ? draftValue || "Type to define the semantic change"
+              : "Use the Edit button to enter semantic command mode."}
+          </p>
         </div>
       </div>
 
       <div
         ref={sceneRef}
-        className="semantic-diagram-scene"
+        className="semantic-diagram-scene semantic-diagram-panel"
         onClick={handleSceneClick}
         onKeyDown={handleKeyDown}
         tabIndex={0}
-        role="button"
+        role="application"
         aria-label={title}
       >
         {sanitizedSvg ? (

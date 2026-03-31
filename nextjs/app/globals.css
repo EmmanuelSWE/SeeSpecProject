@@ -1837,8 +1837,11 @@ button, input { font: inherit; }
 .semantic-diagram-shell {
   position: absolute;
   inset: 18px;
+  display: grid;
   border-radius: 18px;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: start;
+  gap: 16px;
 }
 
 .semantic-diagram-controls,
@@ -1848,6 +1851,24 @@ button, input { font: inherit; }
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
+}
+
+.semantic-diagram-controls {
+  display: grid;
+  gap: 14px;
+  background: #111111;
+}
+
+.semantic-diagram-panel {
+  position: relative;
+  z-index: 1;
+}
+
+.semantic-diagram-controls-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .semantic-diagram-toolbar {
@@ -1866,9 +1887,32 @@ button, input { font: inherit; }
   color: #fafaf9;
 }
 
+.semantic-diagram-instructions {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.semantic-diagram-instructions summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 14px;
+  font-weight: 600;
+  color: #fafaf9;
+}
+
+.semantic-diagram-instructions summary::-webkit-details-marker {
+  display: none;
+}
+
+.semantic-diagram-instructions[open] summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .semantic-diagram-help-list {
   margin: 0;
-  padding-left: 18px;
+  padding: 14px 18px 16px 32px;
   display: grid;
   gap: 8px;
   color: #d6d3d1;
@@ -1876,7 +1920,7 @@ button, input { font: inherit; }
 
 .semantic-diagram-scene {
   position: relative;
-  min-height: 640px;
+  min-height: 760px;
   overflow: hidden;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1898,37 +1942,36 @@ button, input { font: inherit; }
   gap: 8px;
   padding: 12px 14px;
   border-radius: 16px;
-  border: 1px solid rgba(249, 115, 22, 0.18);
-  background: rgba(10, 12, 11, 0.88);
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.28);
-  pointer-events: none;
+  border: 1px solid #d6dbe3;
+  background: #ffffff;
+  box-shadow: none;
 }
 
 .semantic-diagram-indicator-label,
 .semantic-inline-editor-label span,
 .semantic-inline-editor-hint {
-  color: #fdba74;
+  color: #4b5563;
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .semantic-diagram-status-area strong {
-  color: #fafaf9;
+  color: #111111;
   font-size: 0.96rem;
   line-height: 1.5;
 }
 
 .semantic-diagram-status-area p {
   margin: 0;
-  color: #d6d3d1;
+  color: #111111;
   line-height: 1.5;
 }
 
 .semantic-diagram-svg {
   position: absolute;
   inset: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 32px;
 }
 
