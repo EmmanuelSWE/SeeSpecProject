@@ -2,6 +2,7 @@
 
 import { useCallback, useContext, useMemo, useReducer } from "react";
 import {
+  applyDiagramSemanticAction,
   createDiagramElement,
   deleteDiagramElement,
   getDiagramElementById,
@@ -9,25 +10,44 @@ import {
   getDiagramElementsByBackend,
   getDiagramElementsByBackendAndType,
   getDiagramElementsByType,
+  getDiagramGraph,
+  renderDiagramSvg,
+  type ApplyDiagramSemanticActionInput,
   type CreateDiagramElementInput,
+  type DiagramEditorMode,
   type DiagramElementDto,
   type DiagramElementType,
+  type DiagramGraphDto,
+  type RenderedDiagramDto,
   updateDiagramElement,
   type UpdateDiagramElementInput
 } from "@/app/lib/utils/services/diagram-element-service";
 import {
+  closeDiagramInlineEditor,
   createDiagramElementSuccess,
   deleteDiagramElementSuccess,
   diagramElementError,
   diagramElementPending,
+  diagramElementRenderPending,
   getDiagramElementSuccess,
   getDiagramElementsSuccess,
+  getDiagramGraphSuccess,
+  getRenderedDiagramSuccess,
+  openDiagramInlineEditor,
   resetDiagramElementState,
   setActiveDiagramElement,
   setActiveDiagramElementType,
+  setDiagramEditorMode,
+  setDiagramSelection,
   updateDiagramElementSuccess
 } from "./actions";
-import { DiagramElementActionContext, DiagramElementStateContext, INITIAL_STATE } from "./context";
+import {
+  DiagramElementActionContext,
+  DiagramElementStateContext,
+  INITIAL_STATE,
+  type DiagramInlineEditorState,
+  type DiagramSelection
+} from "./context";
 import { DiagramElementReducer } from "./reducer";
 
 export function DiagramElementProvider({ children }: { children: React.ReactNode }) {
@@ -100,6 +120,45 @@ export function DiagramElementProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
+  const getGraph = useCallback(async (diagramElementId: string) => {
+    dispatch(diagramElementPending());
+    try {
+      const graph = await getDiagramGraph(diagramElementId);
+      dispatch(getDiagramGraphSuccess(graph, graph.validation));
+      return graph;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load diagram graph.";
+      dispatch(diagramElementError(message));
+      throw error;
+    }
+  }, []);
+
+  const applyAction = useCallback(async (payload: ApplyDiagramSemanticActionInput): Promise<DiagramGraphDto> => {
+    dispatch(diagramElementPending());
+    try {
+      const result = await applyDiagramSemanticAction(payload);
+      dispatch(getDiagramGraphSuccess(result.graph, result.validation));
+      return result.graph;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to apply diagram action.";
+      dispatch(diagramElementError(message));
+      throw error;
+    }
+  }, []);
+
+  const renderSvg = useCallback(async (diagramElementId: string, includePlantUmlText = false): Promise<RenderedDiagramDto> => {
+    dispatch(diagramElementRenderPending());
+    try {
+      const render = await renderDiagramSvg(diagramElementId, includePlantUmlText);
+      dispatch(getRenderedDiagramSuccess(render));
+      return render;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to render diagram.";
+      dispatch(diagramElementError(message));
+      throw error;
+    }
+  }, []);
+
   const createElement = useCallback(async (payload: CreateDiagramElementInput) => {
     dispatch(diagramElementPending());
     try {
@@ -146,6 +205,22 @@ export function DiagramElementProvider({ children }: { children: React.ReactNode
     dispatch(setActiveDiagramElementType(type));
   }, []);
 
+  const setMode = useCallback((mode: DiagramEditorMode) => {
+    dispatch(setDiagramEditorMode(mode));
+  }, []);
+
+  const setSelection = useCallback((selection: DiagramSelection) => {
+    dispatch(setDiagramSelection(selection));
+  }, []);
+
+  const openInlineEditor = useCallback((payload: Omit<DiagramInlineEditorState, "isOpen">) => {
+    dispatch(openDiagramInlineEditor(payload));
+  }, []);
+
+  const closeInlineEditor = useCallback(() => {
+    dispatch(closeDiagramInlineEditor());
+  }, []);
+
   const reset = useCallback(() => {
     dispatch(resetDiagramElementState());
   }, []);
@@ -160,30 +235,42 @@ export function DiagramElementProvider({ children }: { children: React.ReactNode
       createDiagramElement: createElement,
       updateDiagramElement: updateElement,
       deleteDiagramElement: removeElement,
+      getDiagramGraph: getGraph,
+      applySemanticAction: applyAction,
+      renderSvg,
       setActiveDiagramElement: setDiagramElement,
       setActiveType: setType,
+      setEditorMode: setMode,
+      setSelection,
+      openInlineEditor,
+      closeInlineEditor,
       reset
     }),
     [
+      applyAction,
       createElement,
       getAllDiagramElements,
       getBackendDiagramElements,
       getBackendTypedDiagramElements,
       getDiagramElement,
+      getGraph,
       getTypedDiagramElements,
       removeElement,
+      renderSvg,
       reset,
       setDiagramElement,
+      setMode,
+      setSelection,
       setType,
+      openInlineEditor,
+      closeInlineEditor,
       updateElement
     ]
   );
 
   return (
     <DiagramElementStateContext.Provider value={state}>
-      <DiagramElementActionContext.Provider value={actions}>
-        {children}
-      </DiagramElementActionContext.Provider>
+      <DiagramElementActionContext.Provider value={actions}>{children}</DiagramElementActionContext.Provider>
     </DiagramElementStateContext.Provider>
   );
 }

@@ -14,6 +14,13 @@ export function DiagramElementReducer(
         isError: false,
         errorMessage: null
       };
+    case DiagramElementActionEnums.renderPending:
+      return {
+        ...state,
+        isRendering: true,
+        isError: false,
+        errorMessage: null
+      };
     case DiagramElementActionEnums.getDiagramElementSuccess:
       return {
         ...state,
@@ -32,10 +39,30 @@ export function DiagramElementReducer(
         errorMessage: null,
         diagramElements: action.payload
       };
+    case DiagramElementActionEnums.getGraphSuccess:
+      return {
+        ...state,
+        isPending: false,
+        isSuccess: true,
+        isError: false,
+        errorMessage: null,
+        graph: action.payload.graph,
+        validation: action.payload.validation
+      };
+    case DiagramElementActionEnums.renderSuccess:
+      return {
+        ...state,
+        isRendering: false,
+        isSuccess: true,
+        isError: false,
+        errorMessage: null,
+        renderedDiagram: action.payload
+      };
     case DiagramElementActionEnums.error:
       return {
         ...state,
         isPending: false,
+        isRendering: false,
         isSuccess: false,
         isError: true,
         errorMessage: action.payload
@@ -81,6 +108,35 @@ export function DiagramElementReducer(
       return {
         ...state,
         activeType: action.payload
+      };
+    case DiagramElementActionEnums.setEditorMode:
+      return {
+        ...state,
+        editorMode: action.payload
+      };
+    case DiagramElementActionEnums.setSelection:
+      return {
+        ...state,
+        selection: action.payload
+      };
+    case DiagramElementActionEnums.openInlineEditor:
+      return {
+        ...state,
+        inlineEditor: {
+          ...action.payload,
+          isOpen: true
+        }
+      };
+    case DiagramElementActionEnums.closeInlineEditor:
+      return {
+        ...state,
+        inlineEditor: {
+          ...state.inlineEditor,
+          isOpen: false,
+          value: "",
+          targetKind: null,
+          targetId: null
+        }
       };
     case DiagramElementActionEnums.reset:
       return { ...INITIAL_STATE };

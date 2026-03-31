@@ -6,6 +6,74 @@ import type {
 } from "@/app/lib/utils/services/backend-service";
 
 export type DiagramElementType = "use-case" | "domain-model" | "activity";
+export type DiagramEditorMode = "view" | "navigate" | "edit";
+export type DiagramSemanticTargetKind = "node" | "edge" | "member";
+export type DiagramSemanticActionType = "create" | "update" | "delete";
+
+export type DiagramValidationResultDto = {
+  isValid: boolean;
+  errors: string[];
+};
+
+export type DiagramGraphMemberDto = {
+  id: string;
+  memberKind: "property" | "function" | string;
+  signature: string;
+  position: number;
+};
+
+export type DiagramGraphNodeDto = {
+  id: string;
+  nodeType: string;
+  label: string;
+  description: string;
+  members: DiagramGraphMemberDto[];
+  metadata: Record<string, string>;
+};
+
+export type DiagramGraphEdgeDto = {
+  id: string;
+  edgeType: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  label: string;
+};
+
+export type DiagramGraphDto = {
+  diagramElementId: string;
+  name: string;
+  diagramType: number;
+  nodes: DiagramGraphNodeDto[];
+  edges: DiagramGraphEdgeDto[];
+  metadata: Record<string, string>;
+  graphHash: string;
+  validation: DiagramValidationResultDto;
+};
+
+export type ApplyDiagramSemanticActionInput = {
+  diagramElementId: string;
+  actionType: DiagramSemanticActionType;
+  targetKind: DiagramSemanticTargetKind;
+  targetId?: string;
+  relatedId?: string;
+  value?: string;
+  nodeType?: string;
+  edgeType?: string;
+  memberKind?: string;
+};
+
+export type DiagramSemanticActionResultDto = {
+  graph: DiagramGraphDto;
+  validation: DiagramValidationResultDto;
+  graphHash: string;
+  metadataJson: string;
+};
+
+export type RenderedDiagramDto = {
+  svg: string;
+  graphHash: string;
+  plantUmlText?: string | null;
+};
 
 export type DiagramElementDto = {
   id: string;
@@ -23,6 +91,7 @@ export type DiagramElementDto = {
   entities: BackendDomainEntityDto[];
   relationships: BackendDomainRelationshipDto[];
   updatedAt: string;
+  graphHash?: string;
 };
 
 export type CreateDiagramElementInput = {
@@ -82,7 +151,7 @@ function parseJson<T>(value?: string | null): T | null {
   }
 }
 
-function diagramTypeToApi(type: DiagramElementType) {
+function diagramTypeToApi(type: DiagramElementType): number {
   switch (type) {
     case "domain-model":
       return 2;
@@ -104,7 +173,7 @@ function apiToDiagramType(value: number): DiagramElementType {
   }
 }
 
-function buildMetadata(payload: Partial<CreateDiagramElementInput>) {
+function buildMetadata(payload: Partial<CreateDiagramElementInput>): string {
   return JSON.stringify({
     summary: payload.summary ?? "",
     description: payload.description ?? payload.summary ?? "",
@@ -117,44 +186,132 @@ function buildMetadata(payload: Partial<CreateDiagramElementInput>) {
   });
 }
 
-async function getBackendMap() {
+async function getBackendMap(): Promise<Map<string, BackendApiDto>> {
   const response = await getPaged<BackendApiDto>("/services/app/Backend/GetAll");
   const backends = response.items ?? [];
   return new Map(backends.map((backend) => [backend.id, backend]));
 }
 
+function extractUseCaseSummary(metadata: DiagramMetadata, graph: DiagramGraphDto | null): Pick<DiagramElementDto, "summary" | "description" | "actors" | "dependencies"> {
+  const graphActors = graph?.nodes.filter((node) => node.nodeType === "actor").map((node) => node.label) ?? [];
+  const dependencyNodeIds = new Set(
+    (graph?.edges ?? []).filter((edge) => edge.edgeType === "dependency").map((edge) => edge.sourceNodeId)
+  );
+  const dependencyNodes =
+    graph?.nodes
+      .filter((node) => dependencyNodeIds.has(node.id))
+      .map((node) => ({
+        slug: node.metadata.slug ?? node.id,
+        name: node.label
+      })) ?? [];
+
+  return {
+    summary: metadata.summary ?? graph?.metadata.summary ?? graph?.name ?? "",
+    description: metadata.description ?? graph?.metadata.summary ?? graph?.name ?? "",
+    actors: metadata.actors?.length ? metadata.actors : graphActors,
+    dependencies: metadata.dependencies?.length ? metadata.dependencies : dependencyNodes
+  };
+}
+
+function extractDomainSummary(metadata: DiagramMetadata, graph: DiagramGraphDto | null): Pick<DiagramElementDto, "entities" | "relationships"> {
+  const entities =
+    metadata.entities?.length
+      ? metadata.entities
+      : (graph?.nodes ?? []).map((node) => ({
+          id: node.id,
+          name: node.label,
+          description: node.description,
+          attributes: node.members.map((member) => member.signature)
+        }));
+
+  const relationships =
+    metadata.relationships?.length
+      ? metadata.relationships
+      : (graph?.edges ?? []).map((edge) => ({
+          id: edge.id,
+          source: graph?.nodes.find((node) => node.id === edge.sourceNodeId)?.label ?? edge.sourceNodeId,
+          target: graph?.nodes.find((node) => node.id === edge.targetNodeId)?.label ?? edge.targetNodeId,
+          label: edge.label || edge.edgeType
+        }));
+
+  return { entities, relationships };
+}
+
 function buildDiagramElementDto(
   diagram: DiagramElementApiDto,
-  backendMap: Map<string, BackendApiDto>
+  backendMap: Map<string, BackendApiDto>,
+  graph: DiagramGraphDto | null = null
 ): DiagramElementDto {
   const metadata = parseJson<DiagramMetadata>(diagram.metadataJson) ?? {};
   const backend = backendMap.get(diagram.backendId);
+  const type = apiToDiagramType(diagram.diagramType);
+  const useCaseSummary = extractUseCaseSummary(metadata, graph);
+  const domainSummary = extractDomainSummary(metadata, graph);
 
   return {
     id: diagram.id,
     backendId: diagram.backendId,
     backendSlug: backend?.slug ?? "",
-    type: apiToDiagramType(diagram.diagramType),
+    type,
     slug: diagram.externalElementKey,
     name: diagram.name,
-    description: metadata.description ?? diagram.name,
-    summary: metadata.summary ?? diagram.name,
+    description: useCaseSummary.description || diagram.name,
+    summary: useCaseSummary.summary || diagram.name,
     linkedRequirementIds: metadata.linkedRequirementIds ?? [],
     linkedUseCaseSlug: metadata.linkedUseCaseSlug ?? null,
-    actors: metadata.actors ?? [],
-    dependencies: metadata.dependencies ?? [],
-    entities: metadata.entities ?? [],
-    relationships: metadata.relationships ?? [],
-    updatedAt: "Saved"
+    actors: type === "use-case" ? useCaseSummary.actors : [],
+    dependencies: type === "use-case" ? useCaseSummary.dependencies : [],
+    entities: type === "domain-model" ? domainSummary.entities : [],
+    relationships: type === "domain-model" ? domainSummary.relationships : [],
+    updatedAt: "Saved",
+    graphHash: graph?.graphHash
   };
 }
 
-async function getDiagramRows() {
+async function getDiagramRows(): Promise<DiagramElementApiDto[]> {
   const response = await getPaged<DiagramElementApiDto>("/services/app/DiagramElement/GetAll");
   return response.items ?? [];
 }
 
-export async function getDiagramElements() {
+export async function getDiagramGraph(diagramElementId: string): Promise<DiagramGraphDto> {
+  try {
+    return await getOne<DiagramGraphDto>("/services/app/DiagramElement/GetGraph", { Id: diagramElementId });
+  } catch (error) {
+    throw new Error(mapErrorMessage(error, "Unable to load diagram graph."));
+  }
+}
+
+export async function applyDiagramSemanticAction(
+  payload: ApplyDiagramSemanticActionInput
+): Promise<DiagramSemanticActionResultDto> {
+  try {
+    return await postOne<DiagramSemanticActionResultDto, ApplyDiagramSemanticActionInput>(
+      "/services/app/DiagramElement/ApplySemanticAction",
+      payload
+    );
+  } catch (error) {
+    throw new Error(mapErrorMessage(error, "Unable to apply diagram action."));
+  }
+}
+
+export async function renderDiagramSvg(
+  diagramElementId: string,
+  includePlantUmlText = false
+): Promise<RenderedDiagramDto> {
+  try {
+    return await postOne<RenderedDiagramDto, { diagramElementId: string; includePlantUmlText: boolean }>(
+      "/services/app/DiagramElement/RenderSvg",
+      {
+        diagramElementId,
+        includePlantUmlText
+      }
+    );
+  } catch (error) {
+    throw new Error(mapErrorMessage(error, "Unable to render diagram."));
+  }
+}
+
+export async function getDiagramElements(): Promise<DiagramElementDto[]> {
   try {
     const [diagrams, backendMap] = await Promise.all([getDiagramRows(), getBackendMap()]);
     return diagrams.map((diagram) => buildDiagramElementDto(diagram, backendMap));
@@ -163,35 +320,39 @@ export async function getDiagramElements() {
   }
 }
 
-export async function getDiagramElementById(id: string) {
+export async function getDiagramElementById(id: string): Promise<DiagramElementDto> {
   try {
-    const [diagram, backendMap] = await Promise.all([
+    const [diagram, backendMap, graph] = await Promise.all([
       getOne<DiagramElementApiDto>("/services/app/DiagramElement/Get", { Id: id }),
-      getBackendMap()
+      getBackendMap(),
+      getDiagramGraph(id).catch(() => null)
     ]);
 
-    return buildDiagramElementDto(diagram, backendMap);
+    return buildDiagramElementDto(diagram, backendMap, graph);
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to load diagram element."));
   }
 }
 
-export async function getDiagramElementsByBackend(backendId: string) {
+export async function getDiagramElementsByBackend(backendId: string): Promise<DiagramElementDto[]> {
   const elements = await getDiagramElements();
   return elements.filter((element) => element.backendId === backendId);
 }
 
-export async function getDiagramElementsByType(type: DiagramElementType) {
+export async function getDiagramElementsByType(type: DiagramElementType): Promise<DiagramElementDto[]> {
   const elements = await getDiagramElements();
   return elements.filter((element) => element.type === type);
 }
 
-export async function getDiagramElementsByBackendAndType(backendId: string, type: DiagramElementType) {
+export async function getDiagramElementsByBackendAndType(
+  backendId: string,
+  type: DiagramElementType
+): Promise<DiagramElementDto[]> {
   const elements = await getDiagramElements();
   return elements.filter((element) => element.backendId === backendId && element.type === type);
 }
 
-export async function createDiagramElement(payload: CreateDiagramElementInput) {
+export async function createDiagramElement(payload: CreateDiagramElementInput): Promise<DiagramElementDto> {
   try {
     const created = await postOne<DiagramElementApiDto, Omit<DiagramElementApiDto, "id">>(
       "/services/app/DiagramElement/Create",
@@ -211,7 +372,7 @@ export async function createDiagramElement(payload: CreateDiagramElementInput) {
   }
 }
 
-export async function updateDiagramElement(payload: UpdateDiagramElementInput) {
+export async function updateDiagramElement(payload: UpdateDiagramElementInput): Promise<DiagramElementDto> {
   try {
     const current = await getOne<DiagramElementApiDto>("/services/app/DiagramElement/Get", { Id: payload.id });
     const currentDto = await getDiagramElementById(payload.id);
@@ -232,7 +393,7 @@ export async function updateDiagramElement(payload: UpdateDiagramElementInput) {
   }
 }
 
-export async function deleteDiagramElement(id: string) {
+export async function deleteDiagramElement(id: string): Promise<string> {
   try {
     await axiosInstance.delete("/services/app/DiagramElement/Delete", {
       params: {

@@ -7,6 +7,11 @@ namespace SeeSpec.Services.DiagramElementService
 {
     public interface IDiagramElementAppService : IAsyncCrudAppService<DiagramElementDto, Guid, PagedAndSortedResultRequestDto, DiagramElementDto, DiagramElementDto>
     {
+        System.Threading.Tasks.Task<DiagramGraphDto> GetGraphAsync(GetDiagramGraphDto input);
+
+        System.Threading.Tasks.Task<DiagramSemanticActionResultDto> ApplySemanticActionAsync(ApplyDiagramSemanticActionDto input);
+
+        System.Threading.Tasks.Task<RenderedDiagramDto> RenderSvgAsync(RenderDiagramDto input);
     }
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DrawIoEditor } from "@/app/components/app/draw-io-editor";
+import { SemanticSvgDiagramEditor } from "@/app/components/app/semantic-svg-diagram-editor";
 import type { BackendDto } from "@/app/lib/utils/services/backend-service";
 import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
 import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-service";
@@ -80,12 +80,17 @@ export function UseCaseDiagramWorkspace({
                     <div className="card-header usecase-panel-header">
                         <div>
                             <span className="requirements-eyebrow">Diagram Scene</span>
-                            <h3>Draw.io editor surface</h3>
+                            <h3>Semantic SVG editor</h3>
                         </div>
                     </div>
                     <div className="card-body usecase-scene-body">
                         <div className="usecase-scene-frame">
-                            <DrawIoEditor title={`${useCase.name} draw.io editor`} />
+                            <SemanticSvgDiagramEditor
+                                diagramElementId={useCase.id}
+                                title={`${useCase.name} use case diagram`}
+                                defaultNodeType="use-case"
+                                allowMembers={false}
+                            />
                         </div>
                     </div>
                 </article>
@@ -127,6 +132,10 @@ export function UseCaseDiagramWorkspace({
                                 <Link href={`/app/backends/${backend.slug}/requirements`} className="requirements-link-card">
                                     <span>Backend</span>
                                     <strong>Requirements</strong>
+                                </Link>
+                                <Link href={`/app/backends/${backend.slug}/activity-diagram/${useCase.slug}`} className="requirements-link-card">
+                                    <span>Use case</span>
+                                    <strong>Activity diagram</strong>
                                 </Link>
                             </div>
                         </div>
