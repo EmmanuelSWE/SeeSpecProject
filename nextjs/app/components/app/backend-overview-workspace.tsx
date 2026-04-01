@@ -32,9 +32,10 @@ function toOverviewFormState(overviewSection: SpecSectionDto | null): OverviewFo
         ? {
               summary: overviewSection.content[0] ?? overviewSection.summary,
               scope: overviewSection.content[1] ?? "",
-              goals: overviewSection.content[2] ?? ""
+              goals: overviewSection.content[2] ?? "",
+              isAccepted: overviewSection.isAccepted ?? false
           }
-        : { summary: "", scope: "", goals: "" };
+        : { summary: "", scope: "", goals: "", isAccepted: false };
 }
 
 export function BackendOverviewWorkspace({
@@ -44,6 +45,7 @@ export function BackendOverviewWorkspace({
     canManageRoles,
     onSaveBackend,
     onSaveOverview,
+    onAcceptOverview,
     onSaveRole
 }: {
     backend: BackendRecord;
@@ -52,6 +54,7 @@ export function BackendOverviewWorkspace({
     canManageRoles: boolean;
     onSaveBackend: (next: BackendFormState) => Promise<void>;
     onSaveOverview: (next: OverviewFormState) => Promise<void>;
+    onAcceptOverview: () => Promise<void>;
     onSaveRole: (role: BackendRoleFormState) => Promise<void>;
 }) {
     const [modal, setModal] = useState<ModalState>(null);
@@ -65,6 +68,7 @@ export function BackendOverviewWorkspace({
     });
 
     const hasOverview = Boolean(overviewSection);
+    const isOverviewAccepted = overviewSection?.isAccepted ?? false;
     const projectRoles = useMemo(
         () =>
             roleSections.map((section) => ({
@@ -80,9 +84,9 @@ export function BackendOverviewWorkspace({
         () => [
             { label: "Project roles", value: String(projectRoles.length) },
             { label: "Requirements", value: String(backend.requirements.length) },
-            { label: "Status", value: backend.status }
+            { label: "Overview gate", value: isOverviewAccepted ? "Accepted" : "Pending" }
         ],
-        [backend, projectRoles.length]
+        [backend.requirements.length, isOverviewAccepted, projectRoles.length]
     );
 
     async function saveBackend() {
@@ -122,11 +126,11 @@ export function BackendOverviewWorkspace({
                             Edit backend
                         </button>
                         <Link
-                            href={hasOverview ? `/app/backends/${backend.slug}/requirements` : "#"}
-                            className={`requirements-action-button ${hasOverview ? "" : "is-disabled-link"}`}
-                            aria-disabled={!hasOverview}
+                            href={isOverviewAccepted ? `/app/backends/${backend.slug}/requirements` : "#"}
+                            className={`requirements-action-button ${isOverviewAccepted ? "" : "is-disabled-link"}`}
+                            aria-disabled={!isOverviewAccepted}
                             onClick={(event) => {
-                                if (!hasOverview) {
+                                if (!isOverviewAccepted) {
                                     event.preventDefault();
                                 }
                             }}
@@ -134,11 +138,11 @@ export function BackendOverviewWorkspace({
                             Open requirements
                         </Link>
                         <Link
-                            href={hasOverview ? `/app/backends/${backend.slug}/domain-model` : "#"}
-                            className={`secondary-button ${hasOverview ? "" : "is-disabled-link"}`}
-                            aria-disabled={!hasOverview}
+                            href={isOverviewAccepted ? `/app/backends/${backend.slug}/domain-model` : "#"}
+                            className={`secondary-button ${isOverviewAccepted ? "" : "is-disabled-link"}`}
+                            aria-disabled={!isOverviewAccepted}
                             onClick={(event) => {
-                                if (!hasOverview) {
+                                if (!isOverviewAccepted) {
                                     event.preventDefault();
                                 }
                             }}
@@ -193,6 +197,10 @@ export function BackendOverviewWorkspace({
                                     <strong>Goals</strong>
                                     <p>{overviewSection.content[2] ?? ""}</p>
                                 </div>
+                                <div className="backend-overview-copy">
+                                    <strong>Overview gate</strong>
+                                    <p>{isOverviewAccepted ? "Accepted. Downstream analysis and diagrams may continue." : "Pending acceptance. Downstream analysis and diagrams stay blocked."}</p>
+                                </div>
                             </>
                         ) : (
                             <div className="backend-blocked-state">
@@ -204,6 +212,13 @@ export function BackendOverviewWorkspace({
                             </div>
                         )}
                     </div>
+                    {overviewSection && !isOverviewAccepted ? (
+                        <div className="card-footer requirements-panel-footer">
+                            <button type="button" className="requirements-action-button" onClick={() => { onAcceptOverview().catch(() => {}); }}>
+                                Accept overview
+                            </button>
+                        </div>
+                    ) : null}
                 </div>
 
                 <div className="card backend-role-card">

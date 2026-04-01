@@ -23,6 +23,17 @@ namespace SeeSpec.Services.BackendService
     public class BackendImportService : SeeSpecAppServiceBase, IBackendImportService, ITransientDependency
     {
         private const string TempRootFolderName = "SeeSpecBackendImports";
+        private static readonly HashSet<string> IgnoredDirectoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "bin",
+            "obj",
+            ".vs",
+            "node_modules",
+            "dist",
+            "build",
+            "out"
+        };
+
         private readonly IRepository<BackendEntity, Guid> _backendRepository;
         private readonly ISpecAppService _specAppService;
 
@@ -53,6 +64,8 @@ namespace SeeSpec.Services.BackendService
                 var extractedPath = Path.Combine(tempWorkspace.RootPath, "extracted");
                 Directory.CreateDirectory(extractedPath);
 
+                // ZIP upload is the primary deployment-safe path because the server can stream it to
+                // its own temp workspace without assuming client-side folder access.
                 // Zip input resolves into a temp extracted folder first, then both zip and folder modes
                 // converge into the same workspace-based validation path.
                 using (var archiveWriteStream = new FileStream(archivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous))
@@ -80,6 +93,8 @@ namespace SeeSpec.Services.BackendService
                 throw new UserFriendlyException("The supplied backend folder does not exist.");
             }
 
+            // Folder import is only meaningful for trusted server-side/admin workflows where the
+            // server can already access the supplied path; deployed browser clients should use ZIP upload.
             // Direct folder imports reuse the same workspace validation path as extracted zip uploads.
             return await ImportResolvedWorkspaceAsync(normalizedFolderPath, null, cancellationToken);
         }
@@ -116,7 +131,9 @@ namespace SeeSpec.Services.BackendService
             });
 
             await CurrentUnitOfWork.SaveChangesAsync();
-            await _specAppService.EnsureCanonicalStructureAsync(new EntityDto<Guid>(backend.Id));
+            // Import stops at Backend + Spec so the user-authored overview remains the hard gate
+            // before any scan or downstream semantic structure is introduced.
+            await _specAppService.EnsureSpecAsync(new EntityDto<Guid>(backend.Id));
 
             if (!string.IsNullOrWhiteSpace(temporaryRootPath))
             {
@@ -128,7 +145,7 @@ namespace SeeSpec.Services.BackendService
                 BackendId = backend.Id,
                 Name = backend.Name,
                 Status = backend.Status,
-                NextAction = "Backend imported and ready for analysis."
+                NextAction = "Backend imported. Complete and accept the overview before analysis."
             };
         }
 
@@ -153,6 +170,11 @@ namespace SeeSpec.Services.BackendService
                     foreach (var entry in archive.Entries)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
+
+                        if (ShouldIgnoreRelativePath(entry.FullName))
+                        {
+                            continue;
+                        }
 
                         var destinationPath = GetSafeExtractionPath(extractedPath, entry.FullName);
                         if (string.IsNullOrEmpty(entry.Name))
@@ -225,10 +247,10 @@ namespace SeeSpec.Services.BackendService
 
         private static async Task<WorkspaceValidationResult> ValidateWorkspaceAsync(string workspacePath, CancellationToken cancellationToken)
         {
-            var solutionFiles = Directory.GetFiles(workspacePath, "*.sln", SearchOption.AllDirectories)
+            var solutionFiles = EnumerateWorkspaceFiles(workspacePath, ".sln")
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var projectFiles = Directory.GetFiles(workspacePath, "*.csproj", SearchOption.AllDirectories)
+            var projectFiles = EnumerateWorkspaceFiles(workspacePath, ".csproj")
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -386,6 +408,53 @@ namespace SeeSpec.Services.BackendService
         private static string NormalizeFolderPath(string folderPath)
         {
             return Path.GetFullPath((folderPath ?? string.Empty).Trim());
+        }
+
+        private static IEnumerable<string> EnumerateWorkspaceFiles(string workspacePath, string extension)
+        {
+            Stack<string> pendingDirectories = new Stack<string>();
+            pendingDirectories.Push(workspacePath);
+
+            while (pendingDirectories.Count > 0)
+            {
+                string currentDirectory = pendingDirectories.Pop();
+                IEnumerable<string> childDirectories = Directory.EnumerateDirectories(currentDirectory)
+                    .Where(directoryPath => !ShouldIgnoreDirectory(directoryPath));
+
+                foreach (string childDirectory in childDirectories)
+                {
+                    pendingDirectories.Push(childDirectory);
+                }
+
+                foreach (string filePath in Directory.EnumerateFiles(currentDirectory))
+                {
+                    if (string.Equals(Path.GetExtension(filePath), extension, StringComparison.OrdinalIgnoreCase))
+                    {
+                        yield return filePath;
+                    }
+                }
+            }
+        }
+
+        private static bool ShouldIgnoreDirectory(string directoryPath)
+        {
+            string directoryName = Path.GetFileName(directoryPath);
+            return !string.IsNullOrWhiteSpace(directoryName) && IgnoredDirectoryNames.Contains(directoryName);
+        }
+
+        private static bool ShouldIgnoreRelativePath(string relativePath)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath))
+            {
+                return false;
+            }
+
+            string[] pathSegments = relativePath
+                .Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // Ignoring build and tool output early keeps import preparation focused on meaningful
+            // source content instead of wasting temp storage on junk folders.
+            return pathSegments.Any(segment => IgnoredDirectoryNames.Contains(segment));
         }
 
         private static string GetSafeExtractionPath(string extractedPath, string entryPath)

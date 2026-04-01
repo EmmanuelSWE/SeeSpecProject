@@ -32,6 +32,7 @@ export type SpecSectionDto = {
   linkedArtifacts?: { label: string; href: string; kind: "Task" | "Diagram" | "Domain" }[];
   traceItems?: { title: string; detail: string; kind: "Comment" | "Task" | "Dependency" }[];
   activityItems?: { author: string; text: string; timestamp: string }[];
+  isAccepted?: boolean;
   sectionItems: SpecSectionItemDto[];
 };
 
@@ -52,6 +53,7 @@ export type CreateSpecSectionInput = {
   linkedArtifacts?: { label: string; href: string; kind: "Task" | "Diagram" | "Domain" }[];
   traceItems?: { title: string; detail: string; kind: "Comment" | "Task" | "Dependency" }[];
   activityItems?: { author: string; text: string; timestamp: string }[];
+  isAccepted?: boolean;
 };
 
 export type UpdateSpecSectionInput = Partial<SpecSectionDto> & {
@@ -109,6 +111,7 @@ type SectionMetadata = {
   activityItems?: { author: string; text: string; timestamp: string }[];
   scope?: string;
   goals?: string;
+  isAccepted?: boolean;
 };
 
 function slugify(value: string) {
@@ -177,6 +180,7 @@ function parseMetadata(type: SpecSectionType, content: string): SectionMetadata 
       summary: parts[0] ?? content,
       scope: parts[1] ?? "",
       goals: parts[2] ?? "",
+      isAccepted: false,
       body: parts
     };
   }
@@ -192,7 +196,9 @@ function serializeMetadata(type: SpecSectionType, payload: CreateSpecSectionInpu
     return JSON.stringify({
       summary: payload.content?.[0] ?? payload.summary ?? "",
       scope: payload.content?.[1] ?? "",
-      goals: payload.content?.[2] ?? ""
+      goals: payload.content?.[2] ?? "",
+      // Overview acceptance is explicit, so editing resets the gate until the user accepts the latest text.
+      isAccepted: payload.isAccepted ?? false
     });
   }
 
@@ -286,7 +292,10 @@ function buildSpecSectionDto(
     type,
     title: section.title,
     summary: metadata.summary ?? "",
-    content: metadata.body ?? [metadata.summary ?? ""].filter(Boolean),
+    content:
+      type === "overview"
+        ? [metadata.summary ?? "", metadata.scope ?? "", metadata.goals ?? ""]
+        : metadata.body ?? [metadata.summary ?? ""].filter(Boolean),
     tags: metadata.tags ?? [],
     updatedAt: `Version ${section.version}`,
     code: metadata.code,
@@ -299,6 +308,7 @@ function buildSpecSectionDto(
     linkedArtifacts: metadata.linkedArtifacts ?? [],
     traceItems: metadata.traceItems ?? [],
     activityItems: metadata.activityItems ?? [],
+    isAccepted: metadata.isAccepted ?? false,
     sectionItems
   };
 }
@@ -398,7 +408,8 @@ export async function createSpecSection(payload: CreateSpecSectionInput) {
           acceptanceCriteria: payload.acceptanceCriteria,
           linkedArtifacts: payload.linkedArtifacts,
           traceItems: payload.traceItems,
-          activityItems: payload.activityItems
+          activityItems: payload.activityItems,
+          isAccepted: payload.isAccepted
         });
       }
     }

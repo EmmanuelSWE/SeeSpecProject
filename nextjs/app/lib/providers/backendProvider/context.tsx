@@ -9,6 +9,7 @@ export type BackendOverview = {
   summary: string;
   scope: string;
   goals: string;
+  isAccepted?: boolean;
 };
 
 export type BackendRole = {
@@ -80,6 +81,10 @@ export type BackendUploadResult = {
   nextAction: string;
 };
 
+export type BackendFolderImportInput = {
+  folderPath: string;
+};
+
 export interface IBackendStateContext {
   isPending: boolean;
   isSuccess: boolean;
@@ -96,6 +101,7 @@ export interface IBackendActionContext {
   createBackend: (payload: CreateBackendInput) => Promise<BackendRecord>;
   updateBackend: (payload: UpdateBackendInput) => Promise<BackendRecord>;
   uploadBackendArchive: (file: File) => Promise<BackendUploadResult>;
+  importBackendFolder: (payload: BackendFolderImportInput) => Promise<BackendUploadResult>;
   deleteBackend: (id: string) => Promise<void>;
   setActiveBackend: (backend: BackendRecord | null) => void;
   reset: () => void;
@@ -121,6 +127,9 @@ export const INITIAL_ACTION_STATE: IBackendActionContext = {
     throw new Error("BackendActionContext is not initialized.");
   },
   uploadBackendArchive: async () => {
+    throw new Error("BackendActionContext is not initialized.");
+  },
+  importBackendFolder: async () => {
     throw new Error("BackendActionContext is not initialized.");
   },
   deleteBackend: async () => {},

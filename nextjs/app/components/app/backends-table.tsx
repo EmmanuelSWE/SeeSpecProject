@@ -23,12 +23,14 @@ export function BackendsTable({
     backends,
     onCreate,
     onEdit,
-    onUpload
+    onUpload,
+    onDelete
 }: {
     backends: BackendRecord[];
     onCreate: () => void;
     onEdit: (backend: BackendRecord) => void;
     onUpload: () => void;
+    onDelete: (backend: BackendRecord) => void;
 }) {
     const uniqueBackends = dedupeBackends(backends);
 
@@ -111,6 +113,13 @@ export function BackendsTable({
                                                 onClick={() => onEdit(backend)}
                                             >
                                                 Edit
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="secondary-button small"
+                                                onClick={() => onDelete(backend)}
+                                            >
+                                                Delete
                                             </button>
                                         </div>
                                     </td>

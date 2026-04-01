@@ -75,7 +75,8 @@ export default function BackendOverviewPage() {
                         id: existingOverview.id,
                         title: `${backend.name} Overview`,
                         summary: payload.summary,
-                        content: [payload.summary, payload.scope, payload.goals]
+                        content: [payload.summary, payload.scope, payload.goals],
+                        isAccepted: false
                     });
                     await getSectionsByBackend(backend.id);
                     return;
@@ -87,7 +88,27 @@ export default function BackendOverviewPage() {
                     title: `${backend.name} Overview`,
                     summary: payload.summary,
                     content: [payload.summary, payload.scope, payload.goals],
+                    isAccepted: false,
                     tags: ["Overview", backend.name]
+                });
+                await getSectionsByBackend(backend.id);
+            }}
+            onAcceptOverview={async () => {
+                const existingOverview =
+                    sections.find((item) => item.type === "overview" && item.slug === `${backend.slug}-overview`) ??
+                    sections.find((item) => item.type === "overview") ??
+                    null;
+
+                if (!existingOverview) {
+                    return;
+                }
+
+                await updateSection({
+                    id: existingOverview.id,
+                    title: existingOverview.title,
+                    summary: existingOverview.summary,
+                    content: existingOverview.content,
+                    isAccepted: true
                 });
                 await getSectionsByBackend(backend.id);
             }}

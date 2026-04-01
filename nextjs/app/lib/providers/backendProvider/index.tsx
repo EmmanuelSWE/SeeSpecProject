@@ -35,6 +35,7 @@ import {
   type BackendRole,
   type BackendRoleName,
   type BackendStatus,
+  type BackendFolderImportInput,
   type BackendUploadResult,
   type CreateBackendInput,
   type UpdateBackendInput
@@ -424,7 +425,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
 
       const response = await axiosInstance.post<
         UploadBackendApiResponse | { result?: UploadBackendApiResponse }
-      >("/backends/upload", formData, {
+      >("/services/app/Backend/Upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data"
         }
@@ -451,6 +452,40 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       return typedResult;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to upload backend archive.";
+      dispatch(getBackendsError(message));
+      throw new Error(mapErrorMessage(error, message));
+    }
+  }, []);
+
+  const importBackendFolder = useCallback(async (payload: BackendFolderImportInput) => {
+    dispatch(getBackendsPending());
+    try {
+      const response = await postOne<
+        UploadBackendApiResponse | { result?: UploadBackendApiResponse },
+        BackendFolderImportInput
+      >("/services/app/Backend/ImportFolder", payload);
+
+      const importResult = unwrapResponse<UploadBackendApiResponse>(
+        response as UploadBackendApiResponse & { result?: UploadBackendApiResponse }
+      );
+      const typedResult: BackendUploadResult = {
+        backendId: importResult.backendId,
+        name: importResult.name,
+        status: mapBackendStatus(importResult.status),
+        nextAction: importResult.nextAction
+      };
+
+      const refreshedBackends = await loadBackendsFromApi();
+      dispatch(getBackendsSuccess(refreshedBackends));
+
+      const createdBackend = refreshedBackends.find((item) => item.id === typedResult.backendId) ?? null;
+      if (createdBackend) {
+        dispatch(getBackendSuccess(createdBackend));
+      }
+
+      return typedResult;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to import backend folder.";
       dispatch(getBackendsError(message));
       throw new Error(mapErrorMessage(error, message));
     }
@@ -489,6 +524,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       createBackend,
       updateBackend,
       uploadBackendArchive,
+      importBackendFolder,
       deleteBackend,
       setActiveBackend: setBackend,
       reset
@@ -499,6 +535,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       getBackend,
       getBackendBySlug,
       getBackends,
+      importBackendFolder,
       reset,
       setBackend,
       updateBackend,

@@ -22,7 +22,7 @@ const EMPTY_BACKEND_FORM: BackendFormState = {
 export default function BackendsPage() {
     const { session } = useUserState();
     const { backends } = useBackendState();
-    const { getBackends, createBackend, updateBackend, uploadBackendArchive } = useBackendActions();
+    const { getBackends, createBackend, updateBackend, uploadBackendArchive, deleteBackend } = useBackendActions();
     const [selectedBackend, setSelectedBackend] = useState<BackendRecord | null>(null);
     const [form, setForm] = useState<BackendFormState>(EMPTY_BACKEND_FORM);
     const [mode, setMode] = useState<"create" | "edit" | null>(null);
@@ -119,6 +119,27 @@ export default function BackendsPage() {
         }
     }
 
+    async function removeBackend(backend: BackendRecord) {
+        const shouldDelete = window.confirm(`Delete ${backend.name}?`);
+        if (!shouldDelete) {
+            return;
+        }
+
+        try {
+            await deleteBackend(backend.id);
+            await getBackends(true);
+            setUploadFeedback({
+                kind: "success",
+                message: `${backend.name} was deleted from the workspace list.`
+            });
+        } catch (error) {
+            setUploadFeedback({
+                kind: "error",
+                message: error instanceof Error ? error.message : "Unable to delete backend."
+            });
+        }
+    }
+
     return (
         <>
             {uploadFeedback ? (
@@ -131,7 +152,13 @@ export default function BackendsPage() {
                     </div>
                 </section>
             ) : null}
-            <BackendsTable backends={backends} onCreate={openCreate} onEdit={openEdit} onUpload={openUpload} />
+            <BackendsTable
+                backends={backends}
+                onCreate={openCreate}
+                onEdit={openEdit}
+                onUpload={openUpload}
+                onDelete={(backend) => { removeBackend(backend).catch(() => {}); }}
+            />
             {mode ? (
                 <BackendModal title={mode === "create" ? "Create backend" : "Edit backend"} description="Keep the route clean by using a generated backend slug while the internal id stays hidden." onClose={closeModal}>
                     <BackendFormFields value={form} onChange={setForm} />

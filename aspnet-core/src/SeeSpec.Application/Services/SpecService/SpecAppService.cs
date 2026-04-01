@@ -53,6 +53,14 @@ namespace SeeSpec.Services.SpecService
             return await base.CreateAsync(input);
         }
 
+        public async Task<SpecDto> EnsureSpecAsync(EntityDto<Guid> input)
+        {
+            BackendEntity backend = await _backendRepository.GetAsync(input.Id);
+            Spec spec = await GetOrCreateSpecAsync(backend);
+            await CurrentUnitOfWork.SaveChangesAsync();
+            return MapToEntityDto(spec);
+        }
+
         public async Task<AssembledSpecDto> SaveContentAsync(SaveSpecContentDto input)
         {
             var spec = await Repository.GetAsync(input.SpecId);
@@ -101,6 +109,7 @@ namespace SeeSpec.Services.SpecService
 
             await CurrentUnitOfWork.SaveChangesAsync();
             await EnsureDiagramLinkingAsync(spec, specSection, normalizedInputType, input.DiagramType, interpretedItems);
+            await UpdateSpecBootstrapStateAsync(spec);
 
             return await AssembleSpecAsync(spec.Id);
         }
@@ -115,6 +124,7 @@ namespace SeeSpec.Services.SpecService
             BackendEntity backend = await _backendRepository.GetAsync(input.Id);
             Spec spec = await GetOrCreateSpecAsync(backend);
             await EnsureCanonicalStructureInternalAsync(spec);
+            await UpdateSpecBootstrapStateAsync(spec);
             await CurrentUnitOfWork.SaveChangesAsync();
             return await AssembleSpecAsync(spec.Id);
         }
@@ -137,6 +147,8 @@ namespace SeeSpec.Services.SpecService
             var sectionDependencies = await _sectionDependencyRepository.GetAll()
                 .Where(dependency => sectionIds.Contains(dependency.FromSectionId) && sectionIds.Contains(dependency.ToSectionId))
                 .ToListAsync();
+
+            await UpdateSpecBootstrapStateAsync(spec, specSections, sectionItems, sectionDependencies);
 
             // Build the dependency graph once in memory so dependency traversal, ordering, cycle
             // detection, and independent-section analysis all operate on the same runtime model.
@@ -180,6 +192,86 @@ namespace SeeSpec.Services.SpecService
                 IndependentSectionIds = independentSectionIds,
                 Sections = sections
             };
+        }
+
+        private async Task UpdateSpecBootstrapStateAsync(
+            Spec spec,
+            List<SpecSection> specSections = null,
+            List<SectionItem> sectionItems = null,
+            List<SectionDependency> sectionDependencies = null)
+        {
+            if (specSections == null)
+            {
+                specSections = await _specSectionRepository.GetAll()
+                    .Where(section => section.SpecId == spec.Id)
+                    .OrderBy(section => section.Order)
+                    .ThenBy(section => section.Id)
+                    .ToListAsync();
+            }
+
+            var sectionIds = specSections.Select(section => section.Id).ToList();
+            if (sectionItems == null)
+            {
+                sectionItems = await _sectionItemRepository.GetAll()
+                    .Where(item => sectionIds.Contains(item.SpecSectionId))
+                    .OrderBy(item => item.Position)
+                    .ThenBy(item => item.Id)
+                    .ToListAsync();
+            }
+
+            if (sectionDependencies == null)
+            {
+                sectionDependencies = await _sectionDependencyRepository.GetAll()
+                    .Where(dependency => sectionIds.Contains(dependency.FromSectionId) && sectionIds.Contains(dependency.ToSectionId))
+                    .ToListAsync();
+            }
+
+            if (!IsOverviewAccepted(specSections, sectionItems))
+            {
+                if (spec.Status == SpecStatus.Bootstrapped)
+                {
+                    spec.Status = SpecStatus.Draft;
+                    await Repository.UpdateAsync(spec);
+                }
+
+                return;
+            }
+
+            // Spec must exist as the single source of truth before graph projection is allowed,
+            // so bootstrap validates the canonical section dependency structure first.
+            Dictionary<Guid, SectionGraphNode> graph = BuildSectionGraph(specSections, sectionItems, sectionDependencies);
+            List<SectionGraphNode> orderedNodes = TopologicallyOrderGraph(graph);
+
+            var metadataChanged = false;
+            for (var index = 0; index < orderedNodes.Count; index++)
+            {
+                SectionGraphNode node = orderedNodes[index];
+                SectionMetadata metadata = ParseSectionMetadata(node.Section.Content);
+                metadata.OrderingIndex = index + 1;
+                metadata.DependencySectionIds = node.DependencySectionIds
+                    .OrderBy(id => id)
+                    .ToList();
+
+                string serializedMetadata = BuildSectionMetadataJson(metadata, metadata.RawContent ?? new JObject());
+                if (!string.Equals(node.Section.Content, serializedMetadata, StringComparison.Ordinal))
+                {
+                    node.Section.Content = serializedMetadata;
+                    await _specSectionRepository.UpdateAsync(node.Section);
+                    metadataChanged = true;
+                }
+            }
+
+            if (spec.Status != SpecStatus.Bootstrapped)
+            {
+                // Bootstrapped means the canonical Spec -> SpecSection -> SectionItem structure is
+                // valid, dependency-safe, and ready for graph/diagram projection.
+                spec.Status = SpecStatus.Bootstrapped;
+                await Repository.UpdateAsync(spec);
+            }
+            else if (metadataChanged)
+            {
+                await Repository.UpdateAsync(spec);
+            }
         }
 
         private async Task<SpecSection> GetOrCreateSpecSectionAsync(Spec spec, SaveSpecContentDto input, string normalizedInputType)
@@ -661,15 +753,28 @@ namespace SeeSpec.Services.SpecService
 
         private static string BuildSectionMetadataJson(string inputType, DiagramType? diagramType, string content)
         {
-            var rawToken = ParseRawContent(content);
+            return BuildSectionMetadataJson(
+                new SectionMetadata
+                {
+                    InputType = inputType,
+                    DiagramType = diagramType
+                },
+                ParseRawContent(content));
+        }
 
-            // This metadata is intentionally small: it records how the section was saved while the
-            // detailed interpreted content lives in SectionItem rows.
+        private static string BuildSectionMetadataJson(SectionMetadata metadata, JToken rawContent)
+        {
+            // Spec comes before graph in this flow. Section metadata only records canonical
+            // section facts and deterministic dependency/order projection hints.
             return new JObject
             {
-                ["inputType"] = inputType,
-                ["diagramType"] = diagramType?.ToString(),
-                ["rawContent"] = rawToken
+                ["inputType"] = metadata.InputType,
+                ["diagramType"] = metadata.DiagramType?.ToString(),
+                ["rawContent"] = rawContent ?? JValue.CreateNull(),
+                ["orderingIndex"] = metadata.OrderingIndex > 0 ? metadata.OrderingIndex : null,
+                ["dependencySectionIds"] = metadata.DependencySectionIds != null
+                    ? new JArray(metadata.DependencySectionIds.Select(id => id))
+                    : new JArray()
             }.ToString(Formatting.None);
         }
 
@@ -679,7 +784,12 @@ namespace SeeSpec.Services.SpecService
             return new SectionMetadata
             {
                 InputType = token?.Value<string>("inputType") ?? "unknown",
-                DiagramType = TryParseDiagramType(token?.Value<string>("diagramType"))
+                DiagramType = TryParseDiagramType(token?.Value<string>("diagramType")),
+                RawContent = token?["rawContent"],
+                OrderingIndex = token?.Value<int?>("orderingIndex") ?? 0,
+                DependencySectionIds = token?["dependencySectionIds"] is JArray dependencyIds
+                    ? dependencyIds.Values<Guid>().ToList()
+                    : new List<Guid>()
             };
         }
 
@@ -779,10 +889,15 @@ namespace SeeSpec.Services.SpecService
 
             foreach (var dependency in sectionDependencies)
             {
+                if (dependency.FromSectionId == dependency.ToSectionId)
+                {
+                    throw new UserFriendlyException("A spec section cannot depend on itself.");
+                }
+
                 if (!graph.TryGetValue(dependency.FromSectionId, out var dependentNode) ||
                     !graph.TryGetValue(dependency.ToSectionId, out var dependencyNode))
                 {
-                    continue;
+                    throw new UserFriendlyException("A section dependency references a missing spec section.");
                 }
 
                 // The declared dependency remains one-directional. A FromSection points at the
@@ -800,6 +915,39 @@ namespace SeeSpec.Services.SpecService
             }
 
             return graph;
+        }
+
+        private static bool IsOverviewAccepted(IEnumerable<SpecSection> specSections, IEnumerable<SectionItem> sectionItems)
+        {
+            SpecSection overviewSection = specSections
+                .OrderBy(section => section.Order)
+                .ThenBy(section => section.Id)
+                .FirstOrDefault(section =>
+                    section.SectionType == SectionType.Shared
+                    && (string.Equals(section.Slug, "overview", StringComparison.OrdinalIgnoreCase)
+                        || section.Slug.EndsWith("-overview", StringComparison.OrdinalIgnoreCase)));
+
+            if (overviewSection == null)
+            {
+                return false;
+            }
+
+            JObject metadata = ParseItemContent(overviewSection.Content) as JObject;
+            if (metadata?["isAccepted"]?.Value<bool>() == true)
+            {
+                return true;
+            }
+
+            SectionItem acceptanceItem = sectionItems.FirstOrDefault(item =>
+                item.SpecSectionId == overviewSection.Id
+                && string.Equals(item.Label, "accepted", StringComparison.OrdinalIgnoreCase));
+            if (acceptanceItem == null)
+            {
+                return false;
+            }
+
+            JObject acceptancePayload = ParseItemContent(acceptanceItem.Content) as JObject;
+            return acceptancePayload?["value"]?.Value<bool>() == true;
         }
 
         private static List<SectionGraphNode> TopologicallyOrderGraph(Dictionary<Guid, SectionGraphNode> graph)
@@ -1144,6 +1292,12 @@ namespace SeeSpec.Services.SpecService
             public string InputType { get; set; }
 
             public DiagramType? DiagramType { get; set; }
+
+            public JToken RawContent { get; set; }
+
+            public int OrderingIndex { get; set; }
+
+            public List<Guid> DependencySectionIds { get; set; } = new List<Guid>();
         }
 
         private sealed class SectionGraphNode

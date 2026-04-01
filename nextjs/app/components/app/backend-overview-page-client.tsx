@@ -14,6 +14,7 @@ export function BackendOverviewPageClient({
     canManageRoles,
     onSaveBackend,
     onSaveOverview,
+    onAcceptOverview,
     onSaveRole
 }: {
     backend: BackendRecord;
@@ -22,6 +23,7 @@ export function BackendOverviewPageClient({
     canManageRoles: boolean;
     onSaveBackend: React.ComponentProps<typeof BackendOverviewWorkspace>["onSaveBackend"];
     onSaveOverview: React.ComponentProps<typeof BackendOverviewWorkspace>["onSaveOverview"];
+    onAcceptOverview: React.ComponentProps<typeof BackendOverviewWorkspace>["onAcceptOverview"];
     onSaveRole: React.ComponentProps<typeof BackendOverviewWorkspace>["onSaveRole"];
 }) {
     // Compatibility export: the overview page now renders directly, but keeping this file prevents stale build references from failing.
@@ -33,6 +35,7 @@ export function BackendOverviewPageClient({
             canManageRoles={canManageRoles}
             onSaveBackend={onSaveBackend}
             onSaveOverview={onSaveOverview}
+            onAcceptOverview={onAcceptOverview}
             onSaveRole={onSaveRole}
         />
     );

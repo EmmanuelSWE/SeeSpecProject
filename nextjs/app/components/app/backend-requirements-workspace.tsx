@@ -61,6 +61,7 @@ export function BackendRequirementsWorkspace({
     }, []);
 
     const hasOverview = Boolean(overviewSection);
+    const isOverviewAccepted = overviewSection?.isAccepted ?? false;
     const effectiveSelectedId =
         selectedId && requirementSections.some((requirement) => requirement.id === selectedId)
             ? selectedId
@@ -166,14 +167,14 @@ export function BackendRequirementsWorkspace({
         router.push(`/app/backends/${backend.slug}/activity-diagram/${useCaseDiagram.slug}`);
     }
 
-    if (!hasOverview) {
+    if (!hasOverview || !isOverviewAccepted) {
         return (
             <section className="page-section backend-page">
                 <div className="card backend-state-card">
                     <div className="card-body backend-blocked-state">
-                        <span className="requirements-eyebrow">Overview Required</span>
-                        <strong>Requirements are locked until the backend overview is created.</strong>
-                        <p>Return to the backend overview page, define what the system should do, then come back here.</p>
+                        <span className="requirements-eyebrow">Overview Acceptance Required</span>
+                        <strong>Requirements are locked until the backend overview is completed and accepted.</strong>
+                        <p>Return to the overview page, define the system context, and explicitly accept it before continuing.</p>
                     </div>
                 </div>
             </section>

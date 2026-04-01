@@ -14,6 +14,7 @@ using Abp.Application.Services.Dto;
 using Abp.Authorization;
 using Abp.Domain.Repositories;
 using Abp.UI;
+using Microsoft.EntityFrameworkCore;
 using SeeSpec.Domains.SpecManagement;
 using SeeSpec.Services.DiagramElementService.DTO;
 
@@ -24,6 +25,7 @@ namespace SeeSpec.Services.DiagramElementService
     {
         private readonly IRepository<SpecSection, Guid> _specSectionRepository;
         private readonly IRepository<Spec, Guid> _specRepository;
+        private readonly IRepository<SectionItem, Guid> _sectionItemRepository;
 
         private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
         {
@@ -36,16 +38,19 @@ namespace SeeSpec.Services.DiagramElementService
         public DiagramElementAppService(
             IRepository<DiagramElement, Guid> repository,
             IRepository<SpecSection, Guid> specSectionRepository,
-            IRepository<Spec, Guid> specRepository)
+            IRepository<Spec, Guid> specRepository,
+            IRepository<SectionItem, Guid> sectionItemRepository)
             : base(repository)
         {
             _specSectionRepository = specSectionRepository;
             _specRepository = specRepository;
+            _sectionItemRepository = sectionItemRepository;
         }
 
         public override async Task<DiagramElementDto> CreateAsync(DiagramElementDto input)
         {
             await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
+            await ValidateDiagramCreationRulesAsync(input);
 
             DiagramElement existingDiagram = await Repository.FirstOrDefaultAsync(
                 item => item.BackendId == input.BackendId && item.ExternalElementKey == input.ExternalElementKey
@@ -60,29 +65,39 @@ namespace SeeSpec.Services.DiagramElementService
                 existingDiagram.MetadataJson = input.MetadataJson;
 
                 DiagramElement updatedDiagram = await Repository.UpdateAsync(existingDiagram);
+                await PersistDiagramMetadataAsync(updatedDiagram, input.MetadataJson);
                 return MapToEntityDto(updatedDiagram);
             }
 
-            return await base.CreateAsync(input);
+            DiagramElementDto created = await base.CreateAsync(input);
+            DiagramElement createdEntity = await Repository.GetAsync(created.Id);
+            await PersistDiagramMetadataAsync(createdEntity, input.MetadataJson);
+            return MapToEntityDto(createdEntity);
         }
 
         public override async Task<DiagramElementDto> UpdateAsync(DiagramElementDto input)
         {
             await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
-            return await base.UpdateAsync(input);
+            await ValidateDiagramCreationRulesAsync(input);
+            DiagramElementDto updated = await base.UpdateAsync(input);
+            DiagramElement updatedEntity = await Repository.GetAsync(updated.Id);
+            await PersistDiagramMetadataAsync(updatedEntity, input.MetadataJson);
+            return MapToEntityDto(updatedEntity);
         }
 
         public async Task<DiagramGraphDto> GetGraphAsync(GetDiagramGraphDto input)
         {
             DiagramElement diagram = await Repository.GetAsync(input.Id);
-            RuntimeGraph graph = BuildRuntimeGraph(diagram);
+            await EnsureSpecBootstrappedAsync(diagram.BackendId);
+            RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
             return BuildGraphDto(diagram, graph);
         }
 
         public async Task<DiagramSemanticActionResultDto> ApplySemanticActionAsync(ApplyDiagramSemanticActionDto input)
         {
             DiagramElement diagram = await Repository.GetAsync(input.DiagramElementId);
-            RuntimeGraph graph = BuildRuntimeGraph(diagram);
+            await EnsureSpecBootstrappedAsync(diagram.BackendId);
+            RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
 
             ApplySemanticAction(graph, input);
 
@@ -92,9 +107,10 @@ namespace SeeSpec.Services.DiagramElementService
                 throw new UserFriendlyException(string.Join(Environment.NewLine, validation.Errors));
             }
 
-            // Persist both the graph and the linkage metadata so use-case/activity reopen flows do not lose their owning section context after edits.
-            diagram.MetadataJson = SerializeGraph(diagram, graph);
-            await Repository.UpdateAsync(diagram);
+            // Diagrams are projections of Spec content, so edits persist back into the owning
+            // SectionItem instead of treating the diagram row as authoritative.
+            string metadataJson = SerializeGraph(diagram, graph);
+            await PersistDiagramMetadataAsync(diagram, metadataJson);
 
             DiagramGraphDto graphDto = BuildGraphDto(diagram, graph);
 
@@ -110,7 +126,8 @@ namespace SeeSpec.Services.DiagramElementService
         public async Task<RenderedDiagramDto> RenderSvgAsync(RenderDiagramDto input)
         {
             DiagramElement diagram = await Repository.GetAsync(input.DiagramElementId);
-            RuntimeGraph graph = BuildRuntimeGraph(diagram);
+            await EnsureSpecBootstrappedAsync(diagram.BackendId);
+            RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
             DiagramValidationResultDto validation = ValidateGraph(graph, diagram.DiagramType);
 
             // The graph stays authoritative and renderer-only output is blocked until semantics are valid.
@@ -160,20 +177,35 @@ namespace SeeSpec.Services.DiagramElementService
             return render;
         }
 
-        private static RuntimeGraph BuildRuntimeGraph(DiagramElement diagram)
+        private async Task<RuntimeGraph> BuildRuntimeGraphAsync(DiagramElement diagram)
         {
-            if (string.IsNullOrWhiteSpace(diagram.MetadataJson))
+            SectionItem persistedItem = await FindDiagramSectionItemAsync(diagram);
+            if (persistedItem != null)
+            {
+                PersistedDiagramSectionItemPayload sectionItemPayload = DeserializeMetadata<PersistedDiagramSectionItemPayload>(persistedItem.Content);
+                if (sectionItemPayload != null && !string.IsNullOrWhiteSpace(sectionItemPayload.MetadataJson))
+                {
+                    return BuildRuntimeGraphFromMetadata(diagram, sectionItemPayload.MetadataJson);
+                }
+            }
+
+            return BuildRuntimeGraphFromMetadata(diagram, diagram.MetadataJson);
+        }
+
+        private static RuntimeGraph BuildRuntimeGraphFromMetadata(DiagramElement diagram, string metadataJson)
+        {
+            if (string.IsNullOrWhiteSpace(metadataJson))
             {
                 return CreateDefaultGraph(diagram);
             }
 
-            PersistedDiagramMetadata persistedMetadata = DeserializeMetadata<PersistedDiagramMetadata>(diagram.MetadataJson);
+            PersistedDiagramMetadata persistedMetadata = DeserializeMetadata<PersistedDiagramMetadata>(metadataJson);
             if (persistedMetadata != null && persistedMetadata.Graph != null)
             {
                 return NormalizeGraphPayload(diagram, persistedMetadata.Graph);
             }
 
-            RuntimeGraphPayload payload = DeserializeMetadata<RuntimeGraphPayload>(diagram.MetadataJson);
+            RuntimeGraphPayload payload = DeserializeMetadata<RuntimeGraphPayload>(metadataJson);
             if (payload != null && payload.Nodes != null && payload.Edges != null)
             {
                 return NormalizeGraphPayload(diagram, payload);
@@ -197,6 +229,185 @@ namespace SeeSpec.Services.DiagramElementService
             {
                 throw new UserFriendlyException("The selected diagram section does not belong to the current backend.");
             }
+        }
+
+        private async Task ValidateDiagramCreationRulesAsync(DiagramElementDto input)
+        {
+            // Overview acceptance is the hard gate before the downstream semantic flow can create
+            // requirement-driven diagrams.
+            if (!await IsOverviewAcceptedAsync(input.BackendId))
+            {
+                throw new UserFriendlyException("Accept the overview before creating diagrams.");
+            }
+
+            await EnsureSpecBootstrappedAsync(input.BackendId);
+
+            if (input.DiagramType == DiagramType.UseCase)
+            {
+                await EnsureRequirementSectionAsync(input.SpecSectionId);
+                return;
+            }
+
+            if (input.DiagramType != DiagramType.Activity)
+            {
+                return;
+            }
+
+            await EnsureRequirementSectionAsync(input.SpecSectionId);
+
+            PersistedDiagramMetadata metadata = DeserializeMetadata<PersistedDiagramMetadata>(input.MetadataJson) ?? new PersistedDiagramMetadata();
+            if (string.IsNullOrWhiteSpace(metadata.LinkedUseCaseSlug))
+            {
+                throw new UserFriendlyException("Activity diagrams can only be created from an existing use case.");
+            }
+
+            bool useCaseExists = await Repository.GetAll().AnyAsync(item =>
+                item.BackendId == input.BackendId
+                && item.DiagramType == DiagramType.UseCase
+                && item.ExternalElementKey == metadata.LinkedUseCaseSlug);
+
+            if (!useCaseExists)
+            {
+                throw new UserFriendlyException("Create the linked use case diagram before creating its activity diagram.");
+            }
+        }
+
+        private async Task EnsureRequirementSectionAsync(Guid? specSectionId)
+        {
+            if (!specSectionId.HasValue)
+            {
+                throw new UserFriendlyException("Requirement-linked diagrams must target a requirement section.");
+            }
+
+            SpecSection section = await _specSectionRepository.GetAsync(specSectionId.Value);
+            if (section.SectionType != SectionType.Requirement)
+            {
+                throw new UserFriendlyException("Requirement-linked diagrams must belong to a requirement section.");
+            }
+        }
+
+        private async Task<bool> IsOverviewAcceptedAsync(Guid backendId)
+        {
+            Spec overviewSpec = await _specRepository.GetAll()
+                .Where(item => item.BackendId == backendId)
+                .FirstOrDefaultAsync();
+            if (overviewSpec == null)
+            {
+                return false;
+            }
+
+            SpecSection overviewSection = await _specSectionRepository.GetAll()
+                .Where(item => item.SpecId == overviewSpec.Id && item.SectionType == SectionType.Shared)
+                .OrderBy(item => item.Order)
+                .ThenBy(item => item.Id)
+                .FirstOrDefaultAsync(item =>
+                    string.Equals(item.Slug, "overview", StringComparison.OrdinalIgnoreCase)
+                    || item.Slug.EndsWith("-overview", StringComparison.OrdinalIgnoreCase));
+
+            if (overviewSection == null || string.IsNullOrWhiteSpace(overviewSection.Content))
+            {
+                return false;
+            }
+
+            PersistedOverviewMetadata metadata = DeserializeMetadata<PersistedOverviewMetadata>(overviewSection.Content);
+            return metadata != null && metadata.IsAccepted;
+        }
+
+        private async Task EnsureSpecBootstrappedAsync(Guid backendId)
+        {
+            Spec spec = await _specRepository.GetAll()
+                .Where(item => item.BackendId == backendId)
+                .FirstOrDefaultAsync();
+
+            if (spec == null)
+            {
+                throw new UserFriendlyException("Create the specification before generating diagrams.");
+            }
+
+            // Graphs and diagrams are projections of the Spec, so projection is blocked until the
+            // canonical section graph has been validated and marked bootstrapped.
+            if (spec.Status != SpecStatus.Bootstrapped)
+            {
+                throw new UserFriendlyException("Complete and bootstrap the specification before generating diagrams.");
+            }
+        }
+
+        private async Task PersistDiagramMetadataAsync(DiagramElement diagram, string metadataJson)
+        {
+            if (!diagram.SpecSectionId.HasValue)
+            {
+                return;
+            }
+
+            SectionItem sectionItem = await GetOrCreateDiagramSectionItemAsync(diagram);
+            PersistedDiagramSectionItemPayload payload = new PersistedDiagramSectionItemPayload
+            {
+                DiagramType = diagram.DiagramType.ToString(),
+                ExternalElementKey = diagram.ExternalElementKey,
+                Name = diagram.Name,
+                MetadataJson = string.IsNullOrWhiteSpace(metadataJson) ? "{}" : metadataJson
+            };
+
+            sectionItem.Content = JsonSerializer.Serialize(payload, SerializerOptions);
+            await _sectionItemRepository.UpdateAsync(sectionItem);
+
+            // Keep the entity payload mirrored for the existing frontend contract, but the Spec
+            // SectionItem is the authoritative source used for graph/render projection.
+            diagram.MetadataJson = payload.MetadataJson;
+            await Repository.UpdateAsync(diagram);
+        }
+
+        private async Task<SectionItem> FindDiagramSectionItemAsync(DiagramElement diagram)
+        {
+            if (!diagram.SpecSectionId.HasValue)
+            {
+                return null;
+            }
+
+            string label = BuildDiagramSectionItemLabel(diagram);
+            return await _sectionItemRepository.FirstOrDefaultAsync(item =>
+                item.SpecSectionId == diagram.SpecSectionId.Value
+                && item.Label == label);
+        }
+
+        private async Task<SectionItem> GetOrCreateDiagramSectionItemAsync(DiagramElement diagram)
+        {
+            SectionItem existingItem = await FindDiagramSectionItemAsync(diagram);
+            if (existingItem != null)
+            {
+                existingItem.Position = existingItem.Position > 0 ? existingItem.Position : 1;
+                existingItem.ItemType = SectionItemType.Paragraph;
+                return existingItem;
+            }
+
+            return await _sectionItemRepository.InsertAsync(new SectionItem
+            {
+                SpecSectionId = diagram.SpecSectionId.Value,
+                Label = BuildDiagramSectionItemLabel(diagram),
+                Position = await ComputeNextItemPositionAsync(diagram.SpecSectionId.Value),
+                ItemType = SectionItemType.Paragraph,
+                Content = JsonSerializer.Serialize(new PersistedDiagramSectionItemPayload
+                {
+                    DiagramType = diagram.DiagramType.ToString(),
+                    ExternalElementKey = diagram.ExternalElementKey,
+                    Name = diagram.Name,
+                    MetadataJson = string.IsNullOrWhiteSpace(diagram.MetadataJson) ? "{}" : diagram.MetadataJson
+                }, SerializerOptions)
+            });
+        }
+
+        private async Task<int> ComputeNextItemPositionAsync(Guid specSectionId)
+        {
+            int? maxPosition = await _sectionItemRepository.GetAll()
+                .Where(item => item.SpecSectionId == specSectionId)
+                .MaxAsync(item => (int?)item.Position);
+
+            return (maxPosition ?? 0) + 1;
+        }
+
+        private static string BuildDiagramSectionItemLabel(DiagramElement diagram)
+        {
+            return "diagram:" + NormalizeToken(diagram.DiagramType.ToString()) + ":" + diagram.ExternalElementKey;
         }
 
         // The semantic graph is the source of truth; MetadataJson only stores its persisted form.
@@ -1316,6 +1527,22 @@ namespace SeeSpec.Services.DiagramElementService
             public List<LegacyDomainRelationship> Relationships { get; set; } = new List<LegacyDomainRelationship>();
 
             public RuntimeGraphPayload Graph { get; set; }
+        }
+
+        private class PersistedDiagramSectionItemPayload
+        {
+            public string DiagramType { get; set; }
+
+            public string ExternalElementKey { get; set; }
+
+            public string Name { get; set; }
+
+            public string MetadataJson { get; set; }
+        }
+
+        private class PersistedOverviewMetadata
+        {
+            public bool IsAccepted { get; set; }
         }
 
         private class RuntimeGraphNodePayload
