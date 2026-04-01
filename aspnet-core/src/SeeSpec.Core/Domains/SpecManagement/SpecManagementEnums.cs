@@ -5,7 +5,8 @@ namespace SeeSpec.Domains.SpecManagement
         Draft = 1,
         InReview = 2,
         Approved = 3,
-        Archived = 4
+        Archived = 4,
+        Bootstrapped = 5
     }
 
     public enum SectionType

@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { DrawIoEditor } from "@/app/components/app/draw-io-editor";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import { SemanticSvgDiagramEditor } from "@/app/components/app/semantic-svg-diagram-editor";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
 
 export function DomainModelWorkspace({
     backend,
     diagram
 }: {
-    backend: BackendDto;
+    backend: BackendRecord;
     diagram: DiagramElementDto | null;
 }) {
     const entities = diagram?.entities ?? [];
@@ -72,12 +72,24 @@ export function DomainModelWorkspace({
                     <div className="card-header usecase-panel-header">
                         <div>
                             <span className="requirements-eyebrow">Diagram Scene</span>
-                            <h3>Draw.io model editor surface</h3>
+                            <h3>Semantic SVG editor</h3>
                         </div>
                     </div>
                     <div className="card-body usecase-scene-body">
                         <div className="usecase-scene-frame">
-                            <DrawIoEditor title={`${backend.name} domain model draw.io editor`} />
+                            {diagram ? (
+                                <SemanticSvgDiagramEditor
+                                    diagramElementId={diagram.id}
+                                    title={`${backend.name} domain model`}
+                                    defaultNodeType="entity"
+                                    allowMembers
+                                />
+                            ) : (
+                                <div className="semantic-diagram-empty">
+                                    <strong>No domain model diagram is defined yet.</strong>
+                                    <p>Create a backend-scoped domain diagram element before editing the semantic graph.</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </article>

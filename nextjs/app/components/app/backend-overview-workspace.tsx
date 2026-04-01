@@ -11,12 +11,12 @@ import {
     type BackendRoleFormState
 } from "@/app/components/app/backend-form-fields";
 import { BackendModal } from "@/app/components/app/backend-modal";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-service";
 
 type ModalState = "edit-backend" | "overview" | "role" | null;
 
-function toBackendFormState(backend: BackendDto): BackendFormState {
+function toBackendFormState(backend: BackendRecord): BackendFormState {
     return {
         name: backend.name,
         framework: backend.framework,
@@ -32,24 +32,29 @@ function toOverviewFormState(overviewSection: SpecSectionDto | null): OverviewFo
         ? {
               summary: overviewSection.content[0] ?? overviewSection.summary,
               scope: overviewSection.content[1] ?? "",
-              goals: overviewSection.content[2] ?? ""
+              goals: overviewSection.content[2] ?? "",
+              isAccepted: overviewSection.isAccepted ?? false
           }
-        : { summary: "", scope: "", goals: "" };
+        : { summary: "", scope: "", goals: "", isAccepted: false };
 }
 
 export function BackendOverviewWorkspace({
     backend,
     overviewSection,
+    roleSections,
     canManageRoles,
     onSaveBackend,
     onSaveOverview,
+    onAcceptOverview,
     onSaveRole
 }: {
-    backend: BackendDto;
+    backend: BackendRecord;
     overviewSection: SpecSectionDto | null;
+    roleSections: SpecSectionDto[];
     canManageRoles: boolean;
     onSaveBackend: (next: BackendFormState) => Promise<void>;
     onSaveOverview: (next: OverviewFormState) => Promise<void>;
+    onAcceptOverview: () => Promise<void>;
     onSaveRole: (role: BackendRoleFormState) => Promise<void>;
 }) {
     const [modal, setModal] = useState<ModalState>(null);
@@ -63,13 +68,25 @@ export function BackendOverviewWorkspace({
     });
 
     const hasOverview = Boolean(overviewSection);
+    const isOverviewAccepted = overviewSection?.isAccepted ?? false;
+    const projectRoles = useMemo(
+        () =>
+            roleSections.map((section) => ({
+                id: section.id,
+                roleName: section.title,
+                assignedTo: section.sectionItems.find((item) => item.label === "assignedTo")?.content ?? "",
+                emailAddress: section.sectionItems.find((item) => item.label === "emailAddress")?.content ?? "",
+                note: section.sectionItems.find((item) => item.label === "note")?.content ?? ""
+            })),
+        [roleSections]
+    );
     const summaryCards = useMemo(
         () => [
-            { label: "Project roles", value: String(backend.roles.length) },
+            { label: "Project roles", value: String(projectRoles.length) },
             { label: "Requirements", value: String(backend.requirements.length) },
-            { label: "Status", value: backend.status }
+            { label: "Overview gate", value: isOverviewAccepted ? "Accepted" : "Pending" }
         ],
-        [backend]
+        [backend.requirements.length, isOverviewAccepted, projectRoles.length]
     );
 
     async function saveBackend() {
@@ -109,11 +126,11 @@ export function BackendOverviewWorkspace({
                             Edit backend
                         </button>
                         <Link
-                            href={hasOverview ? `/app/backends/${backend.slug}/requirements` : "#"}
-                            className={`requirements-action-button ${hasOverview ? "" : "is-disabled-link"}`}
-                            aria-disabled={!hasOverview}
+                            href={isOverviewAccepted ? `/app/backends/${backend.slug}/requirements` : "#"}
+                            className={`requirements-action-button ${isOverviewAccepted ? "" : "is-disabled-link"}`}
+                            aria-disabled={!isOverviewAccepted}
                             onClick={(event) => {
-                                if (!hasOverview) {
+                                if (!isOverviewAccepted) {
                                     event.preventDefault();
                                 }
                             }}
@@ -121,11 +138,11 @@ export function BackendOverviewWorkspace({
                             Open requirements
                         </Link>
                         <Link
-                            href={hasOverview ? `/app/backends/${backend.slug}/domain-model` : "#"}
-                            className={`secondary-button ${hasOverview ? "" : "is-disabled-link"}`}
-                            aria-disabled={!hasOverview}
+                            href={isOverviewAccepted ? `/app/backends/${backend.slug}/domain-model` : "#"}
+                            className={`secondary-button ${isOverviewAccepted ? "" : "is-disabled-link"}`}
+                            aria-disabled={!isOverviewAccepted}
                             onClick={(event) => {
-                                if (!hasOverview) {
+                                if (!isOverviewAccepted) {
                                     event.preventDefault();
                                 }
                             }}
@@ -180,6 +197,10 @@ export function BackendOverviewWorkspace({
                                     <strong>Goals</strong>
                                     <p>{overviewSection.content[2] ?? ""}</p>
                                 </div>
+                                <div className="backend-overview-copy">
+                                    <strong>Overview gate</strong>
+                                    <p>{isOverviewAccepted ? "Accepted. Downstream analysis and diagrams may continue." : "Pending acceptance. Downstream analysis and diagrams stay blocked."}</p>
+                                </div>
                             </>
                         ) : (
                             <div className="backend-blocked-state">
@@ -191,6 +212,13 @@ export function BackendOverviewWorkspace({
                             </div>
                         )}
                     </div>
+                    {overviewSection && !isOverviewAccepted ? (
+                        <div className="card-footer requirements-panel-footer">
+                            <button type="button" className="requirements-action-button" onClick={() => { onAcceptOverview().catch(() => {}); }}>
+                                Accept overview
+                            </button>
+                        </div>
+                    ) : null}
                 </div>
 
                 <div className="card backend-role-card">
@@ -209,7 +237,7 @@ export function BackendOverviewWorkspace({
                                 <strong>Role setup is locked</strong>
                                 <p>Create the overview first, then assign the project roles for this backend.</p>
                             </div>
-                        ) : backend.roles.length === 0 ? (
+                        ) : projectRoles.length === 0 ? (
                             <div className="backend-blocked-state">
                                 <strong>No roles configured yet</strong>
                                 <p>
@@ -220,7 +248,7 @@ export function BackendOverviewWorkspace({
                             </div>
                         ) : (
                             <div className="backend-role-list">
-                                {backend.roles.map((role) => (
+                                {projectRoles.map((role) => (
                                     <article key={role.id} className="backend-role-item">
                                         <div className="backend-role-heading">
                                             <strong>{role.roleName}</strong>

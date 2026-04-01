@@ -17,6 +17,8 @@ using Abp.AspNetCore.SignalR.Hubs;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
 using System.IO;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 namespace SeeSpec.Web.Host.Startup
 {
@@ -37,6 +39,20 @@ namespace SeeSpec.Web.Host.Startup
 
         public void ConfigureServices(IServiceCollection services)
         {
+            long maxUploadSizeBytes = _appConfiguration.GetValue<long?>("BackendImport:MaxUploadSizeBytes") ?? (512L * 1024L * 1024L);
+            int memoryBufferThresholdBytes = _appConfiguration.GetValue<int?>("BackendImport:MemoryBufferThresholdBytes") ?? (64 * 1024);
+
+            services.Configure<FormOptions>(options =>
+            {
+                // Large backend archives should spill to temp storage quickly instead of being kept in memory.
+                options.MultipartBodyLengthLimit = maxUploadSizeBytes;
+                options.MemoryBufferThreshold = memoryBufferThresholdBytes;
+            });
+            services.Configure<KestrelServerOptions>(options =>
+            {
+                options.Limits.MaxRequestBodySize = maxUploadSizeBytes;
+            });
+
             //MVC
             services.AddControllersWithViews(options =>
             {

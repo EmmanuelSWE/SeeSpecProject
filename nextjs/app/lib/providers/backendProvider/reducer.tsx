@@ -1,6 +1,15 @@
 import { INITIAL_STATE, type IBackendStateContext } from "./context";
 import { BackendActionEnums, type BackendAction } from "./actions";
 
+function upsertBackendCollection(stateBackends: IBackendStateContext["backends"], nextBackend: NonNullable<IBackendStateContext["backend"]>) {
+  const existingIndex = stateBackends.findIndex((backend) => backend.id === nextBackend.id);
+  if (existingIndex === -1) {
+    return [...stateBackends, nextBackend];
+  }
+
+  return stateBackends.map((backend) => (backend.id === nextBackend.id ? nextBackend : backend));
+}
+
 export function BackendReducer(
   state: IBackendStateContext = INITIAL_STATE,
   action: BackendAction
@@ -50,7 +59,8 @@ export function BackendReducer(
         isError: false,
         errorMessage: null,
         backend: action.payload,
-        backends: [...state.backends, action.payload]
+        // Keep backend identities unique in state so React list keys stay unique across create/reopen flows.
+        backends: upsertBackendCollection(state.backends, action.payload)
       };
     case BackendActionEnums.updateBackendSuccess:
       return {

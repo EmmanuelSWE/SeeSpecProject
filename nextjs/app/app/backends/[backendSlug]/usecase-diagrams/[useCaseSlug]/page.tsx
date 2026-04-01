@@ -19,21 +19,28 @@ export default function BackendUseCaseDiagramPage() {
     const { getBackendBySlug } = useBackendActions();
     const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
     const { getSectionsByBackendAndType } = useSpecSectionActions();
+    const backendId = backend?.id ?? null;
 
     useEffect(() => {
         getBackendBySlug(params.backendSlug).catch(() => {});
     }, [getBackendBySlug, params.backendSlug]);
 
     useEffect(() => {
-        if (backend) {
-            getDiagramElementsByBackendAndType(backend.id, "use-case").catch(() => {});
-            getSectionsByBackendAndType(backend.id, "requirement").catch(() => {});
+        if (backendId !== null) {
+            getDiagramElementsByBackendAndType(backendId, "use-case").catch(() => {});
+            getSectionsByBackendAndType(backendId, "requirement").catch(() => {});
         }
-    }, [backend?.id, getDiagramElementsByBackendAndType, getSectionsByBackendAndType]);
+    }, [backendId, getDiagramElementsByBackendAndType, getSectionsByBackendAndType]);
 
     const useCase = useMemo(
-        () => diagramElements.find((item) => item.slug === params.useCaseSlug) ?? null,
-        [diagramElements, params.useCaseSlug]
+        () =>
+            diagramElements.find(
+                (item) =>
+                    item.backendId === backend?.id &&
+                    item.type === "use-case" &&
+                    item.slug === params.useCaseSlug
+            ) ?? null,
+        [backend?.id, diagramElements, params.useCaseSlug]
     );
     const linkedRequirements = useMemo(
         () => sections.filter((section) => useCase?.linkedRequirementIds.includes(section.id)),

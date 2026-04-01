@@ -1392,6 +1392,14 @@ button, input { font: inherit; }
   transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
 }
 
+.requirements-link-button {
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
 .requirements-link-card:hover {
   transform: translateY(-1px);
   border-color: rgba(249, 115, 22, 0.18);
@@ -1808,16 +1816,111 @@ button, input { font: inherit; }
 
 .usecase-scene-frame {
   position: relative;
-  min-height: 620px;
+  min-height: 720px;
   overflow: hidden;
   border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(12, 15, 14, 0.94) 0%, rgba(16, 19, 18, 0.94) 100%);
 }
 
-.drawio-editor-shell {
+.semantic-diagram-shell,
+.semantic-diagram-controls,
+.semantic-diagram-status-area,
+.semantic-diagram-status,
+.semantic-diagram-empty,
+.semantic-inline-editor,
+.semantic-inline-editor-label {
+  display: grid;
+  gap: 12px;
+}
+
+.semantic-diagram-shell {
   position: absolute;
   inset: 18px;
+  display: grid;
+  border-radius: 18px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: start;
+  gap: 16px;
+}
+
+.semantic-diagram-controls,
+.semantic-diagram-status-area,
+.semantic-diagram-status {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.semantic-diagram-controls {
+  display: grid;
+  gap: 14px;
+  background: #111111;
+}
+
+.semantic-diagram-panel {
+  position: relative;
+  z-index: 1;
+}
+
+.semantic-diagram-controls-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.semantic-diagram-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.is-active-editor-button {
+  background: rgba(249, 115, 22, 0.14);
+  border: 1px solid rgba(249, 115, 22, 0.24);
+}
+
+.semantic-diagram-controls h3,
+.semantic-diagram-empty strong {
+  margin: 0;
+  color: #fafaf9;
+}
+
+.semantic-diagram-instructions {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.semantic-diagram-instructions summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 14px;
+  font-weight: 600;
+  color: #fafaf9;
+}
+
+.semantic-diagram-instructions summary::-webkit-details-marker {
+  display: none;
+}
+
+.semantic-diagram-instructions[open] summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.semantic-diagram-help-list {
+  margin: 0;
+  padding: 14px 18px 16px 32px;
+  display: grid;
+  gap: 8px;
+  color: #d6d3d1;
+}
+
+.semantic-diagram-scene {
+  position: relative;
+  min-height: 760px;
   overflow: hidden;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1826,13 +1929,187 @@ button, input { font: inherit; }
     linear-gradient(90deg, rgba(249, 115, 22, 0.08) 1px, transparent 1px),
     linear-gradient(180deg, rgba(12, 15, 14, 0.94) 0%, rgba(16, 19, 18, 0.94) 100%);
   background-size: 36px 36px, 36px 36px, 100% 100%;
+  outline: 0;
 }
 
-.drawio-editor-frame {
+.semantic-diagram-scene:focus-visible {
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+
+.semantic-diagram-status-area {
   width: 100%;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid #d6dbe3;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.semantic-diagram-indicator-label,
+.semantic-inline-editor-label span,
+.semantic-inline-editor-hint {
+  color: #4b5563;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.semantic-diagram-status-area strong {
+  color: #111111;
+  font-size: 0.96rem;
+  line-height: 1.5;
+}
+
+.semantic-diagram-status-area p {
+  margin: 0;
+  color: #111111;
+  line-height: 1.5;
+}
+
+.semantic-diagram-svg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 32px;
+}
+
+.semantic-diagram-svg svg {
+  width: 100%;
+  height: auto;
+  min-height: calc(100% - 8px);
+}
+
+.semantic-diagram-svg .seespec-svg-target {
+  cursor: pointer;
+}
+
+.semantic-diagram-svg .seespec-svg-target.is-active rect,
+.semantic-diagram-svg .seespec-svg-target.is-active ellipse,
+.semantic-diagram-svg .seespec-svg-target.is-active polygon,
+.semantic-diagram-svg .seespec-svg-target.is-active path,
+.semantic-diagram-svg .seespec-svg-target.is-active circle {
+  stroke: #22c55e;
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 12px rgba(34, 197, 94, 0.22));
+}
+
+.semantic-diagram-svg .seespec-svg-target.is-editing rect,
+.semantic-diagram-svg .seespec-svg-target.is-editing ellipse,
+.semantic-diagram-svg .seespec-svg-target.is-editing polygon,
+.semantic-diagram-svg .seespec-svg-target.is-editing path,
+.semantic-diagram-svg .seespec-svg-target.is-editing circle {
+  stroke: #f97316;
+  stroke-width: 3px;
+}
+
+.semantic-diagram-svg .seespec-svg-target.is-new rect,
+.semantic-diagram-svg .seespec-svg-target.is-new ellipse,
+.semantic-diagram-svg .seespec-svg-target.is-new polygon,
+.semantic-diagram-svg .seespec-svg-target.is-new path,
+.semantic-diagram-svg .seespec-svg-target.is-new circle {
+  stroke: #38bdf8;
+  stroke-width: 3px;
+}
+
+.semantic-diagram-svg .seespec-svg-target.is-active text,
+.semantic-diagram-svg .seespec-svg-target.is-editing text,
+.semantic-diagram-svg .seespec-svg-target.is-new text {
+  font-weight: 700;
+}
+
+.semantic-diagram-empty {
   height: 100%;
-  border: 0;
-  background: transparent;
+  align-content: center;
+  justify-items: start;
+  padding: 24px;
+}
+
+.semantic-diagram-empty p,
+.semantic-diagram-errors p {
+  margin: 0;
+  color: #d6d3d1;
+  line-height: 1.6;
+}
+
+.semantic-inline-editor {
+  position: absolute;
+  z-index: 3;
+  top: 84px;
+  left: 16px;
+  width: min(360px, calc(100% - 32px));
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  background: rgba(10, 12, 11, 0.92);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.24);
+}
+
+.semantic-inline-editor-hint {
+  margin: 0;
+}
+
+.semantic-inline-editor-label input {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #fafaf9;
+  outline: 0;
+}
+
+.semantic-inline-editor-label input:focus {
+  border-color: rgba(249, 115, 22, 0.32);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
+}
+
+.semantic-diagram-errors {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(102, 28, 22, 0.42);
+  border: 1px solid rgba(255, 116, 91, 0.24);
+}
+
+.state-illustration,
+.state-illustration-copy {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  text-align: center;
+}
+
+.state-illustration {
+  width: 100%;
+  padding: 24px 0 6px;
+}
+
+.state-illustration-svg {
+  width: min(240px, 100%);
+  height: auto;
+}
+
+.state-illustration-copy strong {
+  color: #fafaf9;
+  font-size: 1.05rem;
+}
+
+.state-illustration-copy p {
+  margin: 0;
+  max-width: 56ch;
+  color: #d6d3d1;
+  line-height: 1.6;
+}
+
+.state-illustration-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 @keyframes requirements-shimmer {

@@ -1,12 +1,14 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { BackendModal } from "@/app/components/app/backend-modal";
 import { BackendRequirementFormFields, type BackendRequirementFormState } from "@/app/components/app/backend-form-fields";
 import { RequirementsDetailPanel } from "@/app/components/app/requirements-detail-panel";
 import { RequirementsSectionList, type RequirementSummary } from "@/app/components/app/requirements-section-list";
 import { RequirementsTraceabilityPanel } from "@/app/components/app/requirements-traceability-panel";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
+import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
 import type { CreateSpecSectionInput, SpecSectionDto, UpdateSpecSectionInput } from "@/app/lib/utils/services/spec-section-service";
 
 const EMPTY_REQUIREMENT_FORM: BackendRequirementFormState = {
@@ -24,15 +26,28 @@ export function BackendRequirementsWorkspace({
     backend,
     overviewSection,
     requirementSections,
+    useCaseDiagrams,
+    activityDiagrams,
     onCreateRequirement,
-    onUpdateRequirement
+    onUpdateRequirement,
+    onCreateUseCaseDiagram,
+    onCreateActivityDiagram,
+    onEnsureUseCaseDiagramBinding,
+    onEnsureActivityDiagramBinding
 }: {
-    backend: BackendDto;
+    backend: BackendRecord;
     overviewSection: SpecSectionDto | null;
     requirementSections: SpecSectionDto[];
+    useCaseDiagrams: DiagramElementDto[];
+    activityDiagrams: DiagramElementDto[];
     onCreateRequirement: (payload: CreateSpecSectionInput) => Promise<SpecSectionDto>;
     onUpdateRequirement: (payload: UpdateSpecSectionInput) => Promise<void>;
+    onCreateUseCaseDiagram: (requirement: SpecSectionDto) => Promise<DiagramElementDto>;
+    onCreateActivityDiagram: (requirement: SpecSectionDto, useCaseDiagram: DiagramElementDto) => Promise<DiagramElementDto>;
+    onEnsureUseCaseDiagramBinding: (diagram: DiagramElementDto, requirement: SpecSectionDto) => Promise<void>;
+    onEnsureActivityDiagramBinding: (diagram: DiagramElementDto, requirement: SpecSectionDto, useCaseDiagram: DiagramElementDto) => Promise<void>;
 }) {
+    const router = useRouter();
     const [query, setQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState<"All" | "Draft" | "In Review" | "Approved">("All");
     const [selectedId, setSelectedId] = useState<string | null>(requirementSections[0]?.id ?? null);
@@ -46,6 +61,7 @@ export function BackendRequirementsWorkspace({
     }, []);
 
     const hasOverview = Boolean(overviewSection);
+    const isOverviewAccepted = overviewSection?.isAccepted ?? false;
     const effectiveSelectedId =
         selectedId && requirementSections.some((requirement) => requirement.id === selectedId)
             ? selectedId
@@ -107,14 +123,58 @@ export function BackendRequirementsWorkspace({
         });
     }
 
-    if (!hasOverview) {
+    async function createOrOpenUseCaseDiagram() {
+        if (!activeRequirement) {
+            return;
+        }
+
+        const existingDiagram = useCaseDiagrams.find((diagram) =>
+            diagram.linkedRequirementIds.includes(activeRequirement.id)
+        );
+
+        if (existingDiagram) {
+            await onEnsureUseCaseDiagramBinding(existingDiagram, activeRequirement);
+            router.push(`/app/backends/${backend.slug}/usecase-diagrams/${existingDiagram.slug}`);
+            return;
+        }
+
+        const diagram = await onCreateUseCaseDiagram(activeRequirement);
+        router.push(`/app/backends/${backend.slug}/usecase-diagrams/${diagram.slug}`);
+    }
+
+    async function createOrOpenActivityDiagram() {
+        if (!activeRequirement) {
+            return;
+        }
+
+        const existingUseCase = useCaseDiagrams.find((diagram) =>
+            diagram.linkedRequirementIds.includes(activeRequirement.id)
+        );
+        const useCaseDiagram = existingUseCase ?? await onCreateUseCaseDiagram(activeRequirement);
+        const existingActivityDiagram = activityDiagrams.find(
+            (diagram) =>
+                diagram.linkedUseCaseSlug === useCaseDiagram.slug &&
+                diagram.linkedRequirementIds.includes(activeRequirement.id)
+        );
+
+        if (existingActivityDiagram) {
+            await onEnsureActivityDiagramBinding(existingActivityDiagram, activeRequirement, useCaseDiagram);
+            router.push(`/app/backends/${backend.slug}/activity-diagram/${useCaseDiagram.slug}`);
+            return;
+        }
+
+        await onCreateActivityDiagram(activeRequirement, useCaseDiagram);
+        router.push(`/app/backends/${backend.slug}/activity-diagram/${useCaseDiagram.slug}`);
+    }
+
+    if (!hasOverview || !isOverviewAccepted) {
         return (
             <section className="page-section backend-page">
                 <div className="card backend-state-card">
                     <div className="card-body backend-blocked-state">
-                        <span className="requirements-eyebrow">Overview Required</span>
-                        <strong>Requirements are locked until the backend overview is created.</strong>
-                        <p>Return to the backend overview page, define what the system should do, then come back here.</p>
+                        <span className="requirements-eyebrow">Overview Acceptance Required</span>
+                        <strong>Requirements are locked until the backend overview is completed and accepted.</strong>
+                        <p>Return to the overview page, define the system context, and explicitly accept it before continuing.</p>
                     </div>
                 </div>
             </section>
@@ -222,6 +282,7 @@ export function BackendRequirementsWorkspace({
 
                     <RequirementsDetailPanel
                         requirement={{
+                            id: activeRequirement.id,
                             code: activeRequirement.code ?? "",
                             title: activeRequirement.title,
                             summary: activeRequirement.summary,
@@ -234,6 +295,12 @@ export function BackendRequirementsWorkspace({
                             updatedAt: activeRequirement.updatedAt
                         }}
                         canEdit={true}
+                        hasUseCaseDiagram={useCaseDiagrams.some((diagram) => diagram.linkedRequirementIds.includes(activeRequirement.id))}
+                        hasActivityDiagram={activityDiagrams.some((diagram) => diagram.linkedRequirementIds.includes(activeRequirement.id))}
+                        onCreateUseCaseDiagram={() => { createOrOpenUseCaseDiagram().catch(() => {}); }}
+                        onOpenUseCaseDiagram={() => { createOrOpenUseCaseDiagram().catch(() => {}); }}
+                        onCreateActivityDiagram={() => { createOrOpenActivityDiagram().catch(() => {}); }}
+                        onOpenActivityDiagram={() => { createOrOpenActivityDiagram().catch(() => {}); }}
                     />
 
                     <div className="requirements-side-stack">

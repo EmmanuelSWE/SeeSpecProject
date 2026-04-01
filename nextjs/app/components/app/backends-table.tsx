@@ -1,17 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import type { BackendDto } from "@/app/lib/utils/services/backend-service";
+import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
+
+function dedupeBackends(backends: BackendRecord[]) {
+    const seen = new Set<string>();
+    const uniqueBackends: BackendRecord[] = [];
+
+    for (const backend of backends) {
+        if (seen.has(backend.id)) {
+            continue;
+        }
+
+        seen.add(backend.id);
+        uniqueBackends.push(backend);
+    }
+
+    return uniqueBackends;
+}
 
 export function BackendsTable({
     backends,
     onCreate,
-    onEdit
+    onEdit,
+    onUpload,
+    onDelete
 }: {
-    backends: BackendDto[];
+    backends: BackendRecord[];
     onCreate: () => void;
-    onEdit: (backend: BackendDto) => void;
+    onEdit: (backend: BackendRecord) => void;
+    onUpload: () => void;
+    onDelete: (backend: BackendRecord) => void;
 }) {
+    const uniqueBackends = dedupeBackends(backends);
+
     return (
         <section className="page-section backend-page">
             <div className="card backend-hero-card">
@@ -27,6 +49,9 @@ export function BackendsTable({
                     <button type="button" className="requirements-action-button" onClick={onCreate}>
                         New backend
                     </button>
+                    <button type="button" className="secondary-button" onClick={onUpload}>
+                        Upload backend
+                    </button>
                 </div>
             </div>
 
@@ -36,7 +61,7 @@ export function BackendsTable({
                         <span className="requirements-eyebrow">Workspace Systems</span>
                         <h3>Available backends</h3>
                     </div>
-                    <span className="requirements-count-pill">{backends.length}</span>
+                    <span className="requirements-count-pill">{uniqueBackends.length}</span>
                 </div>
                 <div className="table-wrap">
                     <table className="data-table backend-table">
@@ -52,7 +77,7 @@ export function BackendsTable({
                             </tr>
                         </thead>
                         <tbody>
-                            {backends.map((backend) => (
+                            {uniqueBackends.map((backend) => (
                                 <tr key={backend.id}>
                                     <td>
                                         <div className="backend-table-primary">
@@ -88,6 +113,13 @@ export function BackendsTable({
                                                 onClick={() => onEdit(backend)}
                                             >
                                                 Edit
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="secondary-button small"
+                                                onClick={() => onDelete(backend)}
+                                            >
+                                                Delete
                                             </button>
                                         </div>
                                     </td>

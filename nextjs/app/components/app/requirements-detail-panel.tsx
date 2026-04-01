@@ -1,6 +1,7 @@
 "use client";
 
 type RequirementDetail = {
+  id: string;
   code: string;
   title: string;
   summary: string;
@@ -15,10 +16,22 @@ type RequirementDetail = {
 
 export function RequirementsDetailPanel({
   requirement,
-  canEdit
+  canEdit,
+  onCreateUseCaseDiagram,
+  onOpenUseCaseDiagram,
+  onCreateActivityDiagram,
+  onOpenActivityDiagram,
+  hasUseCaseDiagram,
+  hasActivityDiagram
 }: {
   requirement: RequirementDetail;
   canEdit: boolean;
+  onCreateUseCaseDiagram: () => void;
+  onOpenUseCaseDiagram: () => void;
+  onCreateActivityDiagram: () => void;
+  onOpenActivityDiagram: () => void;
+  hasUseCaseDiagram: boolean;
+  hasActivityDiagram: boolean;
 }) {
   return (
     <article className="card requirements-detail-panel">
@@ -61,6 +74,28 @@ export function RequirementsDetailPanel({
               <li key={criterion}>{criterion}</li>
             ))}
           </ul>
+        </div>
+
+        <div className="requirements-subsection">
+          <h4>Requirement Diagrams</h4>
+          <div className="requirements-link-grid">
+            <button
+              type="button"
+              className="requirements-link-card requirements-link-button"
+              onClick={hasUseCaseDiagram ? onOpenUseCaseDiagram : onCreateUseCaseDiagram}
+            >
+              <span>Diagram</span>
+              <strong>{hasUseCaseDiagram ? "Open use case diagram" : "Create use case diagram"}</strong>
+            </button>
+            <button
+              type="button"
+              className="requirements-link-card requirements-link-button"
+              onClick={hasActivityDiagram ? onOpenActivityDiagram : onCreateActivityDiagram}
+            >
+              <span>Diagram</span>
+              <strong>{hasActivityDiagram ? "Open activity diagram" : "Create activity diagram"}</strong>
+            </button>
+          </div>
         </div>
 
         <div className="requirements-subsection">

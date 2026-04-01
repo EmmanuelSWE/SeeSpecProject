@@ -1,12 +1,21 @@
 import { axiosInstance } from "@/app/lib/api/client";
 import { getOne, getPaged, mapErrorMessage, postOne, putOne } from "@/app/lib/utils/services/service-helpers";
 
-export type SpecSectionType = "overview" | "requirement";
+export type SpecSectionType = "overview" | "requirement" | "role";
+
+export type SpecSectionItemDto = {
+  id: string;
+  specSectionId: string;
+  label: string;
+  content: string;
+  position: number;
+};
 
 export type SpecSectionDto = {
   id: string;
   backendId: string;
   backendSlug: string;
+  slug: string;
   type: SpecSectionType;
   code?: string;
   title: string;
@@ -23,6 +32,8 @@ export type SpecSectionDto = {
   linkedArtifacts?: { label: string; href: string; kind: "Task" | "Diagram" | "Domain" }[];
   traceItems?: { title: string; detail: string; kind: "Comment" | "Task" | "Dependency" }[];
   activityItems?: { author: string; text: string; timestamp: string }[];
+  isAccepted?: boolean;
+  sectionItems: SpecSectionItemDto[];
 };
 
 export type CreateSpecSectionInput = {
@@ -42,6 +53,7 @@ export type CreateSpecSectionInput = {
   linkedArtifacts?: { label: string; href: string; kind: "Task" | "Diagram" | "Domain" }[];
   traceItems?: { title: string; detail: string; kind: "Comment" | "Task" | "Dependency" }[];
   activityItems?: { author: string; text: string; timestamp: string }[];
+  isAccepted?: boolean;
 };
 
 export type UpdateSpecSectionInput = Partial<SpecSectionDto> & {
@@ -75,6 +87,14 @@ type SpecSectionApiDto = {
   version: number;
 };
 
+type SectionItemApiDto = {
+  id: string;
+  specSectionId: string;
+  label: string;
+  content: string;
+  position: number;
+};
+
 type SectionMetadata = {
   summary?: string;
   body?: string[];
@@ -91,6 +111,7 @@ type SectionMetadata = {
   activityItems?: { author: string; text: string; timestamp: string }[];
   scope?: string;
   goals?: string;
+  isAccepted?: boolean;
 };
 
 function slugify(value: string) {
@@ -126,6 +147,10 @@ function apiTypeToSectionType(section: SpecSectionApiDto): SpecSectionType | nul
     return "overview";
   }
 
+  if (section.sectionType === 4 && section.slug.startsWith("role-")) {
+    return "role";
+  }
+
   return null;
 }
 
@@ -155,6 +180,7 @@ function parseMetadata(type: SpecSectionType, content: string): SectionMetadata 
       summary: parts[0] ?? content,
       scope: parts[1] ?? "",
       goals: parts[2] ?? "",
+      isAccepted: false,
       body: parts
     };
   }
@@ -170,7 +196,16 @@ function serializeMetadata(type: SpecSectionType, payload: CreateSpecSectionInpu
     return JSON.stringify({
       summary: payload.content?.[0] ?? payload.summary ?? "",
       scope: payload.content?.[1] ?? "",
-      goals: payload.content?.[2] ?? ""
+      goals: payload.content?.[2] ?? "",
+      // Overview acceptance is explicit, so editing resets the gate until the user accepts the latest text.
+      isAccepted: payload.isAccepted ?? false
+    });
+  }
+
+  if (type === "role") {
+    return JSON.stringify({
+      summary: payload.summary ?? payload.title ?? "",
+      body: payload.content ?? []
     });
   }
 
@@ -191,6 +226,18 @@ function serializeMetadata(type: SpecSectionType, payload: CreateSpecSectionInpu
   });
 }
 
+function buildSectionSlug(type: SpecSectionType, title: string, backendSlug: string) {
+  if (type === "overview") {
+    return `${backendSlug}-overview`;
+  }
+
+  if (type === "role") {
+    return `role-${slugify(title)}`;
+  }
+
+  return slugify(title);
+}
+
 async function getSpecRows() {
   const response = await getPaged<SpecApiDto>("/services/app/Spec/GetAll");
   return response.items ?? [];
@@ -206,6 +253,11 @@ async function getSectionRows() {
   return response.items ?? [];
 }
 
+async function getSectionItemRows() {
+  const response = await getPaged<SectionItemApiDto>("/services/app/SectionItem/GetAll");
+  return response.items ?? [];
+}
+
 async function getBackendMap() {
   const backends = await getBackendRows();
   return new Map(backends.map((backend) => [backend.id, backend]));
@@ -214,7 +266,8 @@ async function getBackendMap() {
 function buildSpecSectionDto(
   section: SpecSectionApiDto,
   specs: SpecApiDto[],
-  backendMap: Map<string, BackendApiDto>
+  backendMap: Map<string, BackendApiDto>,
+  sectionItems: SpecSectionItemDto[]
 ): SpecSectionDto | null {
   const type = apiTypeToSectionType(section);
 
@@ -235,10 +288,14 @@ function buildSpecSectionDto(
     id: section.id,
     backendId: spec.backendId,
     backendSlug: backend?.slug ?? "",
+    slug: section.slug,
     type,
     title: section.title,
     summary: metadata.summary ?? "",
-    content: metadata.body ?? [metadata.summary ?? ""].filter(Boolean),
+    content:
+      type === "overview"
+        ? [metadata.summary ?? "", metadata.scope ?? "", metadata.goals ?? ""]
+        : metadata.body ?? [metadata.summary ?? ""].filter(Boolean),
     tags: metadata.tags ?? [],
     updatedAt: `Version ${section.version}`,
     code: metadata.code,
@@ -250,7 +307,9 @@ function buildSpecSectionDto(
     acceptanceCriteria: metadata.acceptanceCriteria ?? [],
     linkedArtifacts: metadata.linkedArtifacts ?? [],
     traceItems: metadata.traceItems ?? [],
-    activityItems: metadata.activityItems ?? []
+    activityItems: metadata.activityItems ?? [],
+    isAccepted: metadata.isAccepted ?? false,
+    sectionItems
   };
 }
 
@@ -273,9 +332,21 @@ async function ensureSpecForBackend(backendId: string) {
 
 export async function getSpecSections() {
   try {
-    const [sections, specs, backendMap] = await Promise.all([getSectionRows(), getSpecRows(), getBackendMap()]);
+    const [sections, specs, backendMap, sectionItems] = await Promise.all([
+      getSectionRows(),
+      getSpecRows(),
+      getBackendMap(),
+      getSectionItemRows()
+    ]);
     return sections
-      .map((section) => buildSpecSectionDto(section, specs, backendMap))
+      .map((section) =>
+        buildSpecSectionDto(
+          section,
+          specs,
+          backendMap,
+          sectionItems.filter((item) => item.specSectionId === section.id)
+        )
+      )
       .filter((section): section is SpecSectionDto => section !== null);
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to load spec sections."));
@@ -284,13 +355,19 @@ export async function getSpecSections() {
 
 export async function getSpecSectionById(id: string) {
   try {
-    const [section, specs, backendMap] = await Promise.all([
+    const [section, specs, backendMap, sectionItems] = await Promise.all([
       getOne<SpecSectionApiDto>("/services/app/SpecSection/Get", { Id: id }),
       getSpecRows(),
-      getBackendMap()
+      getBackendMap(),
+      getSectionItemRows()
     ]);
 
-    return buildSpecSectionDto(section, specs, backendMap);
+    return buildSpecSectionDto(
+      section,
+      specs,
+      backendMap,
+      sectionItems.filter((item) => item.specSectionId === section.id)
+    );
   } catch (error) {
     throw new Error(mapErrorMessage(error, "Unable to load spec section."));
   }
@@ -313,6 +390,30 @@ export async function getSpecSectionsByBackendAndType(backendId: string, type: S
 
 export async function createSpecSection(payload: CreateSpecSectionInput) {
   try {
+    if (payload.type === "overview") {
+      const existingOverview = (await getSpecSectionsByBackendAndType(payload.backendId, "overview"))[0] ?? null;
+
+      if (existingOverview) {
+        return await updateSpecSection({
+          id: existingOverview.id,
+          title: payload.title,
+          summary: payload.summary,
+          content: payload.content,
+          tags: payload.tags,
+          category: payload.category,
+          owner: payload.owner,
+          status: payload.status,
+          priority: payload.priority,
+          excerpt: payload.excerpt,
+          acceptanceCriteria: payload.acceptanceCriteria,
+          linkedArtifacts: payload.linkedArtifacts,
+          traceItems: payload.traceItems,
+          activityItems: payload.activityItems,
+          isAccepted: payload.isAccepted
+        });
+      }
+    }
+
     const [spec, backend] = await Promise.all([
       ensureSpecForBackend(payload.backendId),
       getOne<BackendApiDto>("/services/app/Backend/Get", { Id: payload.backendId })
@@ -324,7 +425,7 @@ export async function createSpecSection(payload: CreateSpecSectionInput) {
         specId: spec.id,
         parentSectionId: null,
         title: payload.title,
-        slug: payload.type === "overview" ? `${backend.slug}-overview` : slugify(payload.title),
+        slug: buildSectionSlug(payload.type, payload.title, backend.slug),
         sectionType: sectionTypeToApi(payload.type),
         order: 1,
         content: serializeMetadata(payload.type, payload),
@@ -352,14 +453,9 @@ export async function updateSpecSection(payload: UpdateSpecSectionInput) {
     const updated = await putOne<SpecSectionApiDto, SpecSectionApiDto>("/services/app/SpecSection/Update", {
       ...current,
       title: payload.title ?? current.title,
-      slug:
-        payload.type === "overview"
-          ? current.slug.endsWith("-overview")
-            ? current.slug
-            : `${current.slug}-overview`
-          : payload.title
-            ? slugify(payload.title)
-            : current.slug,
+      slug: payload.title
+        ? buildSectionSlug(nextType, payload.title, currentDto?.backendSlug ?? "")
+        : current.slug,
       sectionType: sectionTypeToApi(nextType),
       content: serializeMetadata(nextType, {
         ...currentDto,
