@@ -6,6 +6,7 @@ import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendOverviewWorkspace } from "@/app/components/app/backend-overview-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
+import { useSpecActions, useSpecState } from "@/app/lib/providers/specProvider";
 import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
 import {
     createSectionItem,
@@ -17,8 +18,10 @@ export default function BackendOverviewPage() {
     const params = useParams<{ backendSlug: string }>();
     const { session } = useUserState();
     const { backend } = useBackendState();
+    const { generatedPreview, isGeneratingPreview, previewErrorMessage } = useSpecState();
     const { sections } = useSpecSectionState();
     const { getBackendBySlug, updateBackend } = useBackendActions();
+    const { clearGeneratedPreview, generateSpecCode, getSpecByBackend } = useSpecActions();
     const { getSectionsByBackend, createSection, updateSection } = useSpecSectionActions();
 
     useEffect(() => {
@@ -60,6 +63,18 @@ export default function BackendOverviewPage() {
             overviewSection={overviewSection}
             roleSections={roleSections}
             canManageRoles={true}
+            generatedPreview={generatedPreview}
+            isGeneratingPreview={isGeneratingPreview}
+            previewErrorMessage={previewErrorMessage}
+            onGeneratePreview={async () => {
+                const spec = await getSpecByBackend(backend.id);
+                if (!spec) {
+                    throw new Error("No spec is available for this backend yet.");
+                }
+
+                await generateSpecCode({ specId: spec.id });
+            }}
+            onClearPreview={clearGeneratedPreview}
             onSaveBackend={async (payload) => {
                 await updateBackend({ id: backend.id, ...payload });
             }}

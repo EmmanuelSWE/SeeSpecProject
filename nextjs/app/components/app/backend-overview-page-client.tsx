@@ -15,7 +15,12 @@ export function BackendOverviewPageClient({
     onSaveBackend,
     onSaveOverview,
     onAcceptOverview,
-    onSaveRole
+    onSaveRole,
+    generatedPreview,
+    isGeneratingPreview,
+    previewErrorMessage,
+    onGeneratePreview,
+    onClearPreview
 }: {
     backend: BackendRecord;
     overviewSection: SpecSectionRecord | null;
@@ -25,6 +30,11 @@ export function BackendOverviewPageClient({
     onSaveOverview: React.ComponentProps<typeof BackendOverviewWorkspace>["onSaveOverview"];
     onAcceptOverview: React.ComponentProps<typeof BackendOverviewWorkspace>["onAcceptOverview"];
     onSaveRole: React.ComponentProps<typeof BackendOverviewWorkspace>["onSaveRole"];
+    generatedPreview: React.ComponentProps<typeof BackendOverviewWorkspace>["generatedPreview"];
+    isGeneratingPreview: React.ComponentProps<typeof BackendOverviewWorkspace>["isGeneratingPreview"];
+    previewErrorMessage: React.ComponentProps<typeof BackendOverviewWorkspace>["previewErrorMessage"];
+    onGeneratePreview: React.ComponentProps<typeof BackendOverviewWorkspace>["onGeneratePreview"];
+    onClearPreview: React.ComponentProps<typeof BackendOverviewWorkspace>["onClearPreview"];
 }) {
     // Compatibility export: the overview page now renders directly, but keeping this file prevents stale build references from failing.
     return (
@@ -37,6 +47,11 @@ export function BackendOverviewPageClient({
             onSaveOverview={onSaveOverview}
             onAcceptOverview={onAcceptOverview}
             onSaveRole={onSaveRole}
+            generatedPreview={generatedPreview}
+            isGeneratingPreview={isGeneratingPreview}
+            previewErrorMessage={previewErrorMessage}
+            onGeneratePreview={onGeneratePreview}
+            onClearPreview={onClearPreview}
         />
     );
 }

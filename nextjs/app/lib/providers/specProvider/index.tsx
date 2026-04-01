@@ -4,6 +4,10 @@ import { useCallback, useContext, useMemo, useReducer } from "react";
 import { getOne, getPaged, mapErrorMessage, postOne, putOne } from "@/app/lib/utils/services/service-helpers";
 import {
   createSpecSuccess,
+  clearGeneratedPreview,
+  generatePreviewError,
+  generatePreviewPending,
+  generatePreviewSuccess,
   getSpecSuccess,
   getSpecsSuccess,
   resetSpecState,
@@ -14,6 +18,8 @@ import {
 } from "./actions";
 import {
   type ICreateSpecInput,
+  type IGenerateSpecCodeInput,
+  type IGeneratedSpecPreview,
   type ISpec,
   type IUpdateSpecInput,
   SpecActionContext,
@@ -102,6 +108,26 @@ export function SpecProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const generateSpecCode = useCallback(async (payload: IGenerateSpecCodeInput) => {
+    dispatch(generatePreviewPending());
+    try {
+      const preview = await postOne<IGeneratedSpecPreview, IGenerateSpecCodeInput>(
+        "/services/app/AI/GenerateFromSpec",
+        payload
+      );
+      dispatch(generatePreviewSuccess(preview));
+      return preview;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to generate AI preview.";
+      dispatch(generatePreviewError(mapErrorMessage(error, message)));
+      throw error;
+    }
+  }, []);
+
+  const clearPreview = useCallback(() => {
+    dispatch(clearGeneratedPreview());
+  }, []);
+
   const setSpec = useCallback((spec: ISpec | null) => {
     dispatch(setActiveSpec(spec));
   }, []);
@@ -117,10 +143,12 @@ export function SpecProvider({ children }: { children: React.ReactNode }) {
       getSpecByBackend,
       createSpec,
       updateSpec,
+      generateSpecCode,
+      clearGeneratedPreview: clearPreview,
       setActiveSpec: setSpec,
       reset
     }),
-    [createSpec, getSpec, getSpecByBackend, getSpecs, reset, setSpec, updateSpec]
+    [clearPreview, createSpec, generateSpecCode, getSpec, getSpecByBackend, getSpecs, reset, setSpec, updateSpec]
   );
 
   return (

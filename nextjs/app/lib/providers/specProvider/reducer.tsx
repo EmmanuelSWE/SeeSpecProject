@@ -32,6 +32,32 @@ export function SpecReducer(
         errorMessage: null,
         spec: action.payload
       };
+    case SpecActionEnums.generatePreviewPending:
+      return {
+        ...state,
+        isGeneratingPreview: true,
+        previewErrorMessage: null
+      };
+    case SpecActionEnums.generatePreviewSuccess:
+      return {
+        ...state,
+        isGeneratingPreview: false,
+        previewErrorMessage: null,
+        generatedPreview: action.payload
+      };
+    case SpecActionEnums.generatePreviewError:
+      return {
+        ...state,
+        isGeneratingPreview: false,
+        previewErrorMessage: action.payload
+      };
+    case SpecActionEnums.clearGeneratedPreview:
+      return {
+        ...state,
+        isGeneratingPreview: false,
+        previewErrorMessage: null,
+        generatedPreview: null
+      };
     case SpecActionEnums.getSpecsSuccess:
       return {
         ...state,

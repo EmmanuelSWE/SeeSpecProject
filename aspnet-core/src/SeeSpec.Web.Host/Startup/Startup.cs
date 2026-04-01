@@ -19,6 +19,7 @@ using Microsoft.OpenApi.Models;
 using System.IO;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using SeeSpec.Services.AIGenerationService;
 
 namespace SeeSpec.Web.Host.Startup
 {
@@ -63,6 +64,8 @@ namespace SeeSpec.Web.Host.Startup
             AuthConfigurer.Configure(services, _appConfiguration);
 
             services.AddSignalR();
+            services.AddHttpClient();
+            services.Configure<AIGenerationOptions>(_appConfiguration.GetSection(AIGenerationOptions.SectionName));
 
             // Configure CORS for angular2 UI
             services.AddCors(

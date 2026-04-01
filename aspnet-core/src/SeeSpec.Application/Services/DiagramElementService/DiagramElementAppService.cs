@@ -58,7 +58,6 @@ namespace SeeSpec.Services.DiagramElementService
 
             if (existingDiagram != null)
             {
-                // Create is treated as upsert for the persisted backend/key pair so reopen/retry flows reuse the same diagram record.
                 existingDiagram.SpecSectionId = input.SpecSectionId;
                 existingDiagram.DiagramType = input.DiagramType;
                 existingDiagram.Name = input.Name;
@@ -107,8 +106,6 @@ namespace SeeSpec.Services.DiagramElementService
                 throw new UserFriendlyException(string.Join(Environment.NewLine, validation.Errors));
             }
 
-            // Diagrams are projections of Spec content, so edits persist back into the owning
-            // SectionItem instead of treating the diagram row as authoritative.
             string metadataJson = SerializeGraph(diagram, graph);
             await PersistDiagramMetadataAsync(diagram, metadataJson);
 
@@ -130,7 +127,6 @@ namespace SeeSpec.Services.DiagramElementService
             RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
             DiagramValidationResultDto validation = ValidateGraph(graph, diagram.DiagramType);
 
-            // The graph stays authoritative and renderer-only output is blocked until semantics are valid.
             if (!validation.IsValid)
             {
                 throw new UserFriendlyException(string.Join(Environment.NewLine, validation.Errors));
@@ -155,7 +151,6 @@ namespace SeeSpec.Services.DiagramElementService
             }
             catch (Exception)
             {
-                // SVG must still be returned even when PlantUML is unavailable or rejects emitted text.
                 svg = BuildFallbackSvg(diagram, graph);
             }
 
@@ -166,7 +161,6 @@ namespace SeeSpec.Services.DiagramElementService
                 PlantUmlText = input.IncludePlantUmlText ? plantUmlText : null
             };
 
-            // Cache by graph hash so identical valid graphs do not invoke the renderer repeatedly.
             RenderCache[graphHash] = new RenderedDiagramDto
             {
                 Svg = svg,
@@ -224,7 +218,6 @@ namespace SeeSpec.Services.DiagramElementService
             SpecSection specSection = await _specSectionRepository.GetAsync(specSectionId.Value);
             Spec owningSpec = await _specRepository.GetAsync(specSection.SpecId);
 
-            // Diagram persistence must keep the owning SpecSection link intact so reopen/rehydration can resolve the same content later.
             if (owningSpec.BackendId != backendId)
             {
                 throw new UserFriendlyException("The selected diagram section does not belong to the current backend.");
@@ -233,8 +226,6 @@ namespace SeeSpec.Services.DiagramElementService
 
         private async Task ValidateDiagramCreationRulesAsync(DiagramElementDto input)
         {
-            // Overview acceptance is the hard gate before the downstream semantic flow can create
-            // requirement-driven diagrams.
             if (!await IsOverviewAcceptedAsync(input.BackendId))
             {
                 throw new UserFriendlyException("Accept the overview before creating diagrams.");
@@ -324,8 +315,6 @@ namespace SeeSpec.Services.DiagramElementService
                 throw new UserFriendlyException("Create the specification before generating diagrams.");
             }
 
-            // Graphs and diagrams are projections of the Spec, so projection is blocked until the
-            // canonical section graph has been validated and marked bootstrapped.
             if (spec.Status != SpecStatus.Bootstrapped)
             {
                 throw new UserFriendlyException("Complete and bootstrap the specification before generating diagrams.");
@@ -351,8 +340,6 @@ namespace SeeSpec.Services.DiagramElementService
             sectionItem.Content = JsonSerializer.Serialize(payload, SerializerOptions);
             await _sectionItemRepository.UpdateAsync(sectionItem);
 
-            // Keep the entity payload mirrored for the existing frontend contract, but the Spec
-            // SectionItem is the authoritative source used for graph/render projection.
             diagram.MetadataJson = payload.MetadataJson;
             await Repository.UpdateAsync(diagram);
         }
@@ -410,7 +397,6 @@ namespace SeeSpec.Services.DiagramElementService
             return "diagram:" + NormalizeToken(diagram.DiagramType.ToString()) + ":" + diagram.ExternalElementKey;
         }
 
-        // The semantic graph is the source of truth; MetadataJson only stores its persisted form.
         private static string SerializeGraph(DiagramElement diagram, RuntimeGraph graph)
         {
             PersistedDiagramMetadata metadata = DeserializeMetadata<PersistedDiagramMetadata>(diagram.MetadataJson) ?? new PersistedDiagramMetadata();
@@ -955,7 +941,6 @@ namespace SeeSpec.Services.DiagramElementService
 
             if (!ruleSet.AllowsCycles)
             {
-                // Cycles are rejected before rendering so the backend remains authoritative on graph legality.
                 List<string> cycleNodes = DetectCycle(graph);
                 if (cycleNodes.Count > 0)
                 {
@@ -1063,7 +1048,6 @@ namespace SeeSpec.Services.DiagramElementService
             return Convert.ToHexString(data);
         }
 
-        // Keep the graph payload and the user-facing linkage metadata together so diagram reopen, requirement scoping, and downstream resolution survive later semantic edits.
         private static void UpdatePersistedMetadataFromGraph(DiagramElement diagram, PersistedDiagramMetadata metadata, RuntimeGraph graph)
         {
             metadata.Summary = !string.IsNullOrWhiteSpace(metadata.Summary) ? metadata.Summary : diagram.Name;
@@ -1124,7 +1108,17 @@ namespace SeeSpec.Services.DiagramElementService
             }
         }
 
-        // PlantUML stays renderer-only; it is derived from the semantic graph instead of becoming editable state.
+        // =====================================================================
+        // PlantUML Builders — each diagram type uses its own correct syntax.
+        //
+        // Use Case  → declarative alias syntax  (@startuml usecase)
+        // Domain    → declarative class syntax  (@startuml class)
+        // Activity  → imperative flow syntax    (@startuml activity / beta)
+        //
+        // NEVER mix alias-declaration syntax with activity flow syntax.
+        // Activity diagrams are walked edge-by-edge; nodes are NOT pre-declared.
+        // =====================================================================
+
         private static string BuildPlantUml(DiagramElement diagram, RuntimeGraph graph)
         {
             switch (diagram.DiagramType)
@@ -1138,6 +1132,10 @@ namespace SeeSpec.Services.DiagramElementService
             }
         }
 
+        // -----------------------------------------------------------------------
+        // Use Case — declarative alias syntax. Actors use `actor`, use-cases use
+        // `usecase`. Both support [[link]] hyperlinks. Arrows use --> and ..>.
+        // -----------------------------------------------------------------------
         private static string BuildUseCasePlantUml(DiagramElement diagram, RuntimeGraph graph)
         {
             StringBuilder builder = new StringBuilder();
@@ -1146,22 +1144,47 @@ namespace SeeSpec.Services.DiagramElementService
             builder.AppendLine("skinparam svgLinkTarget _top");
             builder.AppendLine("skinparam shadowing false");
             builder.AppendLine("title " + EscapePlantUml(diagram.Name));
+            builder.AppendLine();
 
-            foreach (RuntimeGraphNode node in graph.Nodes.OrderBy(item => item.Label, StringComparer.OrdinalIgnoreCase).ThenBy(item => item.Id, StringComparer.Ordinal))
+            // Wrap all use-case nodes in a system rectangle so PlantUML
+            // correctly separates actors (outside) from use cases (inside).
+            List<RuntimeGraphNode> useCaseNodes = graph.Nodes
+                .Where(n => NormalizeToken(n.NodeType) == "use-case")
+                .OrderBy(n => n.Label, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(n => n.Id, StringComparer.Ordinal)
+                .ToList();
+
+            List<RuntimeGraphNode> actorNodes = graph.Nodes
+                .Where(n => NormalizeToken(n.NodeType) == "actor")
+                .OrderBy(n => n.Label, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(n => n.Id, StringComparer.Ordinal)
+                .ToList();
+
+            // Declare actors outside the rectangle
+            foreach (RuntimeGraphNode node in actorNodes)
             {
                 string alias = BuildPlantUmlAlias(node.Id);
                 string link = BuildSemanticLink("node", node.Id);
-                if (NormalizeToken(node.NodeType) == "actor")
-                {
-                    builder.AppendLine("actor \"" + EscapePlantUml(node.Label) + "\" as " + alias + " [[" + link + "]]");
-                }
-                else
-                {
-                    builder.AppendLine("usecase \"" + EscapePlantUml(node.Label) + "\" as " + alias + " [[" + link + "]]");
-                }
+                builder.AppendLine("actor \"" + EscapePlantUml(node.Label) + "\" as " + alias + " [[" + link + "]]");
             }
 
-            foreach (RuntimeGraphEdge edge in graph.Edges.OrderBy(item => item.SourceNodeId, StringComparer.Ordinal).ThenBy(item => item.TargetNodeId, StringComparer.Ordinal))
+            builder.AppendLine();
+
+            // Wrap use cases in a system boundary rectangle
+            builder.AppendLine("rectangle \"" + EscapePlantUml(diagram.Name) + "\" {");
+            foreach (RuntimeGraphNode node in useCaseNodes)
+            {
+                string alias = BuildPlantUmlAlias(node.Id);
+                string link = BuildSemanticLink("node", node.Id);
+                builder.AppendLine("  usecase \"" + EscapePlantUml(node.Label) + "\" as " + alias + " [[" + link + "]]");
+            }
+            builder.AppendLine("}");
+            builder.AppendLine();
+
+            // Edges
+            foreach (RuntimeGraphEdge edge in graph.Edges
+                .OrderBy(e => e.SourceNodeId, StringComparer.Ordinal)
+                .ThenBy(e => e.TargetNodeId, StringComparer.Ordinal))
             {
                 string arrow = NormalizeToken(edge.EdgeType) == "actor-link" ? "-->" : "..>";
                 string label = string.IsNullOrWhiteSpace(edge.Label) ? string.Empty : " : " + EscapePlantUml(edge.Label);
@@ -1172,6 +1195,11 @@ namespace SeeSpec.Services.DiagramElementService
             return builder.ToString();
         }
 
+        // -----------------------------------------------------------------------
+        // Domain Model — class diagram syntax. Each entity becomes a `class` block
+        // with members listed inside. Relationship arrows map to PlantUML
+        // association/composition/inheritance/dependency arrows.
+        // -----------------------------------------------------------------------
         private static string BuildDomainPlantUml(DiagramElement diagram, RuntimeGraph graph)
         {
             StringBuilder builder = new StringBuilder();
@@ -1180,21 +1208,32 @@ namespace SeeSpec.Services.DiagramElementService
             builder.AppendLine("skinparam shadowing false");
             builder.AppendLine("hide empty members");
             builder.AppendLine("title " + EscapePlantUml(diagram.Name));
+            builder.AppendLine();
 
-            foreach (RuntimeGraphNode node in graph.Nodes.OrderBy(item => item.Label, StringComparer.OrdinalIgnoreCase).ThenBy(item => item.Id, StringComparer.Ordinal))
+            foreach (RuntimeGraphNode node in graph.Nodes
+                .OrderBy(n => n.Label, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(n => n.Id, StringComparer.Ordinal))
             {
                 string alias = BuildPlantUmlAlias(node.Id);
                 string link = BuildSemanticLink("node", node.Id);
                 builder.AppendLine("class \"" + EscapePlantUml(node.Label) + "\" as " + alias + " [[" + link + "]] {");
-                foreach (RuntimeGraphMember member in node.Members.OrderBy(item => item.Position).ThenBy(item => item.Id, StringComparer.Ordinal))
+                foreach (RuntimeGraphMember member in node.Members
+                    .OrderBy(m => m.Position)
+                    .ThenBy(m => m.Id, StringComparer.Ordinal))
                 {
-                    builder.AppendLine("  " + EscapePlantUml(member.Signature));
+                    // Prefix with + (property) or ~ (function) so PlantUML renders
+                    // the correct visibility icon without needing the user to type it.
+                    string prefix = NormalizeToken(member.MemberKind) == "function" ? "~ " : "+ ";
+                    builder.AppendLine("  " + prefix + EscapePlantUml(member.Signature));
                 }
-
                 builder.AppendLine("}");
             }
 
-            foreach (RuntimeGraphEdge edge in graph.Edges.OrderBy(item => item.SourceNodeId, StringComparer.Ordinal).ThenBy(item => item.TargetNodeId, StringComparer.Ordinal))
+            builder.AppendLine();
+
+            foreach (RuntimeGraphEdge edge in graph.Edges
+                .OrderBy(e => e.SourceNodeId, StringComparer.Ordinal)
+                .ThenBy(e => e.TargetNodeId, StringComparer.Ordinal))
             {
                 string arrow = BuildDomainArrow(edge.EdgeType);
                 string label = string.IsNullOrWhiteSpace(edge.Label) ? string.Empty : " : " + EscapePlantUml(edge.Label);
@@ -1205,30 +1244,167 @@ namespace SeeSpec.Services.DiagramElementService
             return builder.ToString();
         }
 
+        // -----------------------------------------------------------------------
+        // Activity — imperative beta-syntax. Nodes are NOT pre-declared with
+        // aliases. Instead the graph is walked edge-by-edge and PlantUML keywords
+        // are emitted inline:
+        //
+        //   start          → start node
+        //   :Label;        → action node  (semicolon required)
+        //   if (q) then    → decision node outgoing yes-branch
+        //   else (no)      → decision node outgoing no-branch
+        //   endif          → closes a decision block
+        //   stop           → end node
+        //
+        // [[link]] is embedded directly inside the label string so semantic
+        // hyperlinks survive the renderer.
+        //
+        // Decision nodes with exactly two outgoing edges are split into yes/no
+        // branches. All other multi-outgoing cases fall back to sequential flow.
+        // -----------------------------------------------------------------------
         private static string BuildActivityPlantUml(DiagramElement diagram, RuntimeGraph graph)
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("@startuml");
             builder.AppendLine("skinparam svgLinkTarget _top");
             builder.AppendLine("skinparam shadowing false");
+            builder.AppendLine("skinparam ActivityBorderColor #555555");
+            builder.AppendLine("skinparam ActivityBackgroundColor #f8f8f8");
             builder.AppendLine("title " + EscapePlantUml(diagram.Name));
+            builder.AppendLine();
 
-            foreach (RuntimeGraphNode node in graph.Nodes.OrderBy(item => item.Label, StringComparer.OrdinalIgnoreCase).ThenBy(item => item.Id, StringComparer.Ordinal))
+            // Index nodes and build an adjacency list keyed by source node id.
+            Dictionary<string, RuntimeGraphNode> nodeById = graph.Nodes
+                .ToDictionary(n => n.Id, n => n, StringComparer.Ordinal);
+
+            Dictionary<string, List<RuntimeGraphEdge>> outgoing = graph.Edges
+                .GroupBy(e => e.SourceNodeId, StringComparer.Ordinal)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderBy(e => e.TargetNodeId, StringComparer.Ordinal).ToList(),
+                    StringComparer.Ordinal);
+
+            // Walk the graph starting from the start node following edges in order.
+            // Visited guards against infinite loops on malformed graphs that passed
+            // the cycle-free validation (edge cases with disconnected subgraphs).
+            HashSet<string> visited = new HashSet<string>(StringComparer.Ordinal);
+
+            RuntimeGraphNode startNode = graph.Nodes
+                .FirstOrDefault(n => NormalizeToken(n.NodeType) == "start");
+
+            if (startNode != null)
             {
-                string alias = BuildPlantUmlAlias(node.Id);
-                string link = BuildSemanticLink("node", node.Id);
-                string keyword = ResolveActivityKeyword(node.NodeType);
-                builder.AppendLine(keyword + " \"" + EscapePlantUml(node.Label) + "\" as " + alias + " [[" + link + "]]");
+                builder.AppendLine("start");
+                EmitActivityNode(builder, startNode, nodeById, outgoing, visited, indent: "");
             }
-
-            foreach (RuntimeGraphEdge edge in graph.Edges.OrderBy(item => item.SourceNodeId, StringComparer.Ordinal).ThenBy(item => item.TargetNodeId, StringComparer.Ordinal))
+            else
             {
-                string label = string.IsNullOrWhiteSpace(edge.Label) ? string.Empty : " : " + EscapePlantUml(edge.Label);
-                builder.AppendLine(BuildPlantUmlAlias(edge.SourceNodeId) + " --> " + BuildPlantUmlAlias(edge.TargetNodeId) + label);
+                // No explicit start node — emit all action nodes in label order.
+                builder.AppendLine("start");
+                foreach (RuntimeGraphNode node in graph.Nodes
+                    .Where(n => NormalizeToken(n.NodeType) != "end")
+                    .OrderBy(n => n.Label, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(n => n.Id, StringComparer.Ordinal))
+                {
+                    string link = BuildSemanticLink("node", node.Id);
+                    builder.AppendLine(":" + EscapePlantUml(node.Label) + " [[" + link + "]];");
+                }
+                builder.AppendLine("stop");
             }
 
             builder.AppendLine("@enduml");
             return builder.ToString();
+        }
+
+        // Recursive walker that emits each node in correct PlantUML activity syntax.
+        private static void EmitActivityNode(
+            StringBuilder builder,
+            RuntimeGraphNode node,
+            Dictionary<string, RuntimeGraphNode> nodeById,
+            Dictionary<string, List<RuntimeGraphEdge>> outgoing,
+            HashSet<string> visited,
+            string indent)
+        {
+            if (visited.Contains(node.Id))
+            {
+                return;
+            }
+
+            visited.Add(node.Id);
+
+            string nodeType = NormalizeToken(node.NodeType);
+            string link = BuildSemanticLink("node", node.Id);
+
+            // start nodes have already emitted `start` before this call.
+            if (nodeType == "start")
+            {
+                // Immediately follow start edges without emitting another keyword.
+                if (outgoing.TryGetValue(node.Id, out List<RuntimeGraphEdge> startEdges))
+                {
+                    foreach (RuntimeGraphEdge edge in startEdges)
+                    {
+                        if (nodeById.TryGetValue(edge.TargetNodeId, out RuntimeGraphNode next))
+                        {
+                            EmitActivityNode(builder, next, nodeById, outgoing, visited, indent);
+                        }
+                    }
+                }
+                return;
+            }
+
+            if (nodeType == "end")
+            {
+                builder.AppendLine(indent + "stop");
+                return;
+            }
+
+            if (nodeType == "decision")
+            {
+                // Decision nodes branch on their outgoing edges.
+                // First edge = yes branch, second edge = no branch (if present).
+                outgoing.TryGetValue(node.Id, out List<RuntimeGraphEdge> decisionEdges);
+                List<RuntimeGraphEdge> branches = decisionEdges ?? new List<RuntimeGraphEdge>();
+
+                string condition = EscapePlantUml(node.Label);
+                string yesLabel = branches.Count > 0 && !string.IsNullOrWhiteSpace(branches[0].Label)
+                    ? EscapePlantUml(branches[0].Label) : "yes";
+                string noLabel = branches.Count > 1 && !string.IsNullOrWhiteSpace(branches[1].Label)
+                    ? EscapePlantUml(branches[1].Label) : "no";
+
+                builder.AppendLine(indent + "if (" + condition + ") then (" + yesLabel + ")");
+
+                if (branches.Count > 0 && nodeById.TryGetValue(branches[0].TargetNodeId, out RuntimeGraphNode yesBranch))
+                {
+                    EmitActivityNode(builder, yesBranch, nodeById, outgoing, visited, indent + "  ");
+                }
+
+                if (branches.Count > 1)
+                {
+                    builder.AppendLine(indent + "else (" + noLabel + ")");
+                    if (nodeById.TryGetValue(branches[1].TargetNodeId, out RuntimeGraphNode noBranch))
+                    {
+                        EmitActivityNode(builder, noBranch, nodeById, outgoing, visited, indent + "  ");
+                    }
+                }
+
+                builder.AppendLine(indent + "endif");
+                return;
+            }
+
+            // Default: action node — emit as :Label [[link]];
+            builder.AppendLine(indent + ":" + EscapePlantUml(node.Label) + " [[" + link + "]];");
+
+            // Follow outgoing edges sequentially.
+            if (outgoing.TryGetValue(node.Id, out List<RuntimeGraphEdge> nextEdges))
+            {
+                foreach (RuntimeGraphEdge edge in nextEdges)
+                {
+                    if (nodeById.TryGetValue(edge.TargetNodeId, out RuntimeGraphNode next))
+                    {
+                        EmitActivityNode(builder, next, nodeById, outgoing, visited, indent);
+                    }
+                }
+            }
         }
 
         private static string BuildDomainArrow(string edgeType)
@@ -1243,21 +1419,6 @@ namespace SeeSpec.Services.DiagramElementService
                     return "..>";
                 default:
                     return "-->";
-            }
-        }
-
-        private static string ResolveActivityKeyword(string nodeType)
-        {
-            switch (NormalizeToken(nodeType))
-            {
-                case "start":
-                    return "circle";
-                case "end":
-                    return "circle";
-                case "decision":
-                    return "diamond";
-                default:
-                    return "rectangle";
             }
         }
 
@@ -1454,89 +1615,62 @@ namespace SeeSpec.Services.DiagramElementService
         private class RuntimeGraph
         {
             public List<RuntimeGraphNode> Nodes { get; set; } = new List<RuntimeGraphNode>();
-
             public List<RuntimeGraphEdge> Edges { get; set; } = new List<RuntimeGraphEdge>();
-
             public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
         }
 
         private class RuntimeGraphNode
         {
             public string Id { get; set; }
-
             public string NodeType { get; set; }
-
             public string Label { get; set; }
-
             public string Description { get; set; }
-
             public List<RuntimeGraphMember> Members { get; set; } = new List<RuntimeGraphMember>();
-
             public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
         }
 
         private class RuntimeGraphMember
         {
             public string Id { get; set; }
-
             public string MemberKind { get; set; }
-
             public string Signature { get; set; }
-
             public int Position { get; set; }
         }
 
         private class RuntimeGraphEdge
         {
             public string Id { get; set; }
-
             public string EdgeType { get; set; }
-
             public string SourceNodeId { get; set; }
-
             public string TargetNodeId { get; set; }
-
             public string Label { get; set; }
         }
 
         private class RuntimeGraphPayload
         {
             public List<RuntimeGraphNodePayload> Nodes { get; set; } = new List<RuntimeGraphNodePayload>();
-
             public List<RuntimeGraphEdgePayload> Edges { get; set; } = new List<RuntimeGraphEdgePayload>();
-
             public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
         }
 
         private class PersistedDiagramMetadata
         {
             public string Summary { get; set; }
-
             public string Description { get; set; }
-
             public List<string> LinkedRequirementIds { get; set; } = new List<string>();
-
             public string LinkedUseCaseSlug { get; set; }
-
             public List<string> Actors { get; set; } = new List<string>();
-
             public List<LegacyUseCaseDependency> Dependencies { get; set; } = new List<LegacyUseCaseDependency>();
-
             public List<LegacyDomainEntity> Entities { get; set; } = new List<LegacyDomainEntity>();
-
             public List<LegacyDomainRelationship> Relationships { get; set; } = new List<LegacyDomainRelationship>();
-
             public RuntimeGraphPayload Graph { get; set; }
         }
 
         private class PersistedDiagramSectionItemPayload
         {
             public string DiagramType { get; set; }
-
             public string ExternalElementKey { get; set; }
-
             public string Name { get; set; }
-
             public string MetadataJson { get; set; }
         }
 
@@ -1548,97 +1682,71 @@ namespace SeeSpec.Services.DiagramElementService
         private class RuntimeGraphNodePayload
         {
             public string Id { get; set; }
-
             public string NodeType { get; set; }
-
             public string Label { get; set; }
-
             public string Description { get; set; }
-
             public List<RuntimeGraphMemberPayload> Members { get; set; } = new List<RuntimeGraphMemberPayload>();
-
             public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
         }
 
         private class RuntimeGraphMemberPayload
         {
             public string Id { get; set; }
-
             public string MemberKind { get; set; }
-
             public string Signature { get; set; }
-
             public int Position { get; set; }
         }
 
         private class RuntimeGraphEdgePayload
         {
             public string Id { get; set; }
-
             public string EdgeType { get; set; }
-
             public string SourceNodeId { get; set; }
-
             public string TargetNodeId { get; set; }
-
             public string Label { get; set; }
         }
 
         private class DiagramRuleSet
         {
             public HashSet<string> AllowedNodeTypes { get; set; } = new HashSet<string>(StringComparer.Ordinal);
-
             public HashSet<string> AllowedEdgeTypes { get; set; } = new HashSet<string>(StringComparer.Ordinal);
-
             public HashSet<string> AllowedMemberKinds { get; set; } = new HashSet<string>(StringComparer.Ordinal);
-
             public bool AllowsCycles { get; set; }
         }
 
         private class LegacyUseCaseMetadata
         {
             public string Summary { get; set; }
-
             public string Description { get; set; }
-
             public List<string> Actors { get; set; } = new List<string>();
-
             public List<LegacyUseCaseDependency> Dependencies { get; set; } = new List<LegacyUseCaseDependency>();
         }
 
         private class LegacyUseCaseDependency
         {
             public string Slug { get; set; }
-
             public string Name { get; set; }
         }
 
         private class LegacyDomainMetadata
         {
             public List<LegacyDomainEntity> Entities { get; set; } = new List<LegacyDomainEntity>();
-
             public List<LegacyDomainRelationship> Relationships { get; set; } = new List<LegacyDomainRelationship>();
         }
 
         private class LegacyDomainEntity
         {
             public string Id { get; set; }
-
             public string Name { get; set; }
-
             public string Description { get; set; }
-
             public List<string> Attributes { get; set; } = new List<string>();
         }
 
         private class LegacyDomainRelationship
         {
             public string Id { get; set; }
-
             public string Source { get; set; }
-
             public string Target { get; set; }
-
             public string Label { get; set; }
         }
     }
