@@ -11,6 +11,8 @@ namespace SeeSpec.Services.GenerationSnapshotService.DTO
     {
         public Guid BackendId { get; set; }
 
+        public Guid? SpecId { get; set; }
+
         public long TriggeredByUserId { get; set; }
 
         public GenerationMode Mode { get; set; }
@@ -25,6 +27,15 @@ namespace SeeSpec.Services.GenerationSnapshotService.DTO
 
         [StringLength(12000)]
         public string PromptSent { get; set; }
+
+        [Required]
+        [StringLength(128)]
+        public string ModelName { get; set; }
+
+        [StringLength(32000)]
+        public string OutputText { get; set; }
+
+        public DateTime CreationTime { get; set; }
     }
 }
 

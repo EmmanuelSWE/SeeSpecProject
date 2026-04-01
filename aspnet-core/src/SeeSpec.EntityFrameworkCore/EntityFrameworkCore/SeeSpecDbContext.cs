@@ -210,12 +210,17 @@ namespace SeeSpec.EntityFrameworkCore
             {
                 entity.ToTable("SeeSpecGenerationSnapshots");
                 entity.HasIndex(x => new { x.BackendId, x.Status });
+                entity.HasIndex(x => x.SpecId);
                 entity.Property(x => x.Mode).HasConversion<int>();
                 entity.Property(x => x.Status).HasConversion<int>();
                 entity.HasOne(x => x.Backend)
                     .WithMany(x => x.GenerationSnapshots)
                     .HasForeignKey(x => x.BackendId)
                     .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(x => x.Spec)
+                    .WithMany()
+                    .HasForeignKey(x => x.SpecId)
+                    .OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.TriggeredByUser)
                     .WithMany()
                     .HasForeignKey(x => x.TriggeredByUserId)

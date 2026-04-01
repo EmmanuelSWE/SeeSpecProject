@@ -48,6 +48,32 @@ type DiagramScopedMessage = {
   message: string;
 };
 
+// Which input panel is visible in edit mode: keyboard controller or form
+type InputPanelTab = "controller" | "form";
+
+// Form state for the structured alternative input panel
+type FormState = {
+  nodeLabel: string;
+  nodeType: string;
+  memberSignature: string;
+  memberKind: "property" | "function";
+  edgeSourceId: string;
+  edgeTargetId: string;
+  edgeLabel: string;
+  edgeType: string;
+};
+
+const EMPTY_FORM: FormState = {
+  nodeLabel: "",
+  nodeType: "",
+  memberSignature: "",
+  memberKind: "property",
+  edgeSourceId: "",
+  edgeTargetId: "",
+  edgeLabel: "",
+  edgeType: ""
+};
+
 const renderedDiagramCache = new Map<string, DisplayedRender>();
 
 function parseSemanticTarget(value: string | null): ParsedSelectionTarget | null {
@@ -223,6 +249,11 @@ export function SemanticSvgDiagramEditor({
   const [draftOverride, setDraftOverride] = useState<string | null>(null);
   const [newlyCreatedSelection, setNewlyCreatedSelection] = useState<DiagramScopedNodeSelection | null>(null);
   const [controllerMessageOverride, setControllerMessageOverride] = useState<DiagramScopedMessage | null>(null);
+  // Which tab is active in the controls panel when in edit mode
+  const [inputPanelTab, setInputPanelTab] = useState<InputPanelTab>("controller");
+  // Form state for the structured input alternative
+  const [formState, setFormState] = useState<FormState>(EMPTY_FORM);
+  const [formMessage, setFormMessage] = useState<string>("");
 
   const toEditorMessage = useCallback((error: unknown, fallback: string) => {
     return error instanceof Error ? error.message : fallback;
@@ -256,6 +287,7 @@ export function SemanticSvgDiagramEditor({
 
     return cachedRender;
   }, [diagramElementId, graph, renderedDiagram]);
+
   const controllerMessage = useMemo(() => {
     const currentOverride =
       controllerMessageOverride?.diagramElementId === diagramElementId
@@ -281,6 +313,7 @@ export function SemanticSvgDiagramEditor({
 
     return "Step 1: edit mode is active. Use Arrow to navigate or Ctrl + Arrow to travel/create.";
   }, [controllerMessageOverride, diagramElementId, editorMode, inlineEditor.isOpen, inlineEditor.targetId, selection]);
+
   const sanitizedSvg = useMemo(() => {
     if (!displayedRender || displayedRender.diagramElementId !== diagramElementId) {
       return "";
@@ -375,84 +408,96 @@ export function SemanticSvgDiagramEditor({
     };
   }, [diagramElementId, graph, renderSvg]);
 
+  const openFormTab = useCallback(() => {
+    if (selectedNode) {
+      setFormState((prev) => ({
+        ...prev,
+        nodeLabel: selectedNode.label,
+        nodeType: selectedNode.nodeType ?? ""
+      }));
+    }
+
+    setInputPanelTab("form");
+  }, [selectedNode]);
+
   const commitInlineEdit = useCallback(async (memberCommit: boolean) => {
-      if (!inlineEditor.targetKind) {
+    if (!inlineEditor.targetKind) {
+      return;
+    }
+
+    try {
+      if (inlineEditor.targetKind === "node" && inlineEditor.targetId && !memberCommit) {
+        await applySemanticAction({
+          diagramElementId,
+          actionType: "update",
+          targetKind: "node",
+          targetId: inlineEditor.targetId,
+          value: draftValue,
+          nodeType: selectedNode?.nodeType ?? defaultNodeType
+        });
+        setSelection({ kind: "node", id: inlineEditor.targetId });
+        setNewlyCreatedSelection(null);
+        setDraftOverride(null);
+        closeInlineEditor();
+        setEditorMode("navigate");
         return;
       }
 
-      try {
-        if (inlineEditor.targetKind === "node" && inlineEditor.targetId && !memberCommit) {
-          await applySemanticAction({
-            diagramElementId,
-            actionType: "update",
-            targetKind: "node",
-            targetId: inlineEditor.targetId,
-            value: draftValue,
-            nodeType: selectedNode?.nodeType ?? defaultNodeType
-          });
-          setSelection({ kind: "node", id: inlineEditor.targetId });
-          setNewlyCreatedSelection(null);
-          setDraftOverride(null);
-          closeInlineEditor();
-          setEditorMode("navigate");
-          return;
-        }
-
-        if (inlineEditor.targetKind === "node" && inlineEditor.targetId && memberCommit && allowMembers) {
-          await applySemanticAction({
-            diagramElementId,
-            actionType: "create",
-            targetKind: "member",
-            targetId: inlineEditor.targetId,
-            value: draftValue,
-            memberKind: "function"
-          });
-          setSelection({ kind: "node", id: inlineEditor.targetId });
-          setNewlyCreatedSelection(null);
-          setDraftOverride(null);
-          closeInlineEditor();
-          setEditorMode("navigate");
-          return;
-        }
-
-        if (inlineEditor.targetKind === "edge" && inlineEditor.targetId) {
-          await applySemanticAction({
-            diagramElementId,
-            actionType: "update",
-            targetKind: "edge",
-            targetId: inlineEditor.targetId,
-            value: draftValue
-          });
-          setSelection({ kind: "edge", id: inlineEditor.targetId });
-          setNewlyCreatedSelection(null);
-          setDraftOverride(null);
-          closeInlineEditor();
-          setEditorMode("navigate");
-          return;
-        }
-
-        if (inlineEditor.targetKind === "member" && inlineEditor.targetId && selection?.kind === "node") {
-          await applySemanticAction({
-            diagramElementId,
-            actionType: "update",
-            targetKind: "member",
-            targetId: selection.id,
-            relatedId: inlineEditor.targetId,
-            value: draftValue,
-            memberKind: memberCommit ? "function" : "property"
-          });
-          setSelection({ kind: "node", id: selection.id });
-          setNewlyCreatedSelection(null);
-          setDraftOverride(null);
-          closeInlineEditor();
-          setEditorMode("navigate");
-        }
-      } catch (error) {
-        setControllerMessageOverride({
+      if (inlineEditor.targetKind === "node" && inlineEditor.targetId && memberCommit && allowMembers) {
+        await applySemanticAction({
           diagramElementId,
-          message: toEditorMessage(error, "Unable to commit the semantic change.")
+          actionType: "create",
+          targetKind: "member",
+          targetId: inlineEditor.targetId,
+          value: draftValue,
+          memberKind: "function"
         });
+        setSelection({ kind: "node", id: inlineEditor.targetId });
+        setNewlyCreatedSelection(null);
+        setDraftOverride(null);
+        closeInlineEditor();
+        setEditorMode("navigate");
+        return;
       }
+
+      if (inlineEditor.targetKind === "edge" && inlineEditor.targetId) {
+        await applySemanticAction({
+          diagramElementId,
+          actionType: "update",
+          targetKind: "edge",
+          targetId: inlineEditor.targetId,
+          value: draftValue
+        });
+        setSelection({ kind: "edge", id: inlineEditor.targetId });
+        setNewlyCreatedSelection(null);
+        setDraftOverride(null);
+        closeInlineEditor();
+        setEditorMode("navigate");
+        return;
+      }
+
+      if (inlineEditor.targetKind === "member" && inlineEditor.targetId && selection?.kind === "node") {
+        await applySemanticAction({
+          diagramElementId,
+          actionType: "update",
+          targetKind: "member",
+          targetId: selection.id,
+          relatedId: inlineEditor.targetId,
+          value: draftValue,
+          memberKind: memberCommit ? "function" : "property"
+        });
+        setSelection({ kind: "node", id: selection.id });
+        setNewlyCreatedSelection(null);
+        setDraftOverride(null);
+        closeInlineEditor();
+        setEditorMode("navigate");
+      }
+    } catch (error) {
+      setControllerMessageOverride({
+        diagramElementId,
+        message: toEditorMessage(error, "Unable to commit the semantic change.")
+      });
+    }
   }, [
     allowMembers,
     applySemanticAction,
@@ -672,25 +717,25 @@ export function SemanticSvgDiagramEditor({
         return;
       }
 
-        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-          event.preventDefault();
-          if (graph.validation.isValid) {
-            try {
-              pendingRenderHashRef.current = graph.graphHash;
-              await renderSvg(diagramElementId);
-              setControllerMessageOverride({
-                diagramElementId,
-                message: "Validated and refreshed the current semantic graph."
-              });
-            } catch (error) {
-              setControllerMessageOverride({
-                diagramElementId,
-                message: toEditorMessage(error, "Unable to validate and refresh the current diagram.")
-              });
-            }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (graph.validation.isValid) {
+          try {
+            pendingRenderHashRef.current = graph.graphHash;
+            await renderSvg(diagramElementId);
+            setControllerMessageOverride({
+              diagramElementId,
+              message: "Validated and refreshed the current semantic graph."
+            });
+          } catch (error) {
+            setControllerMessageOverride({
+              diagramElementId,
+              message: toEditorMessage(error, "Unable to validate and refresh the current diagram.")
+            });
           }
-          return;
         }
+        return;
+      }
 
       if (event.key === "Enter") {
         event.preventDefault();
@@ -812,82 +857,522 @@ export function SemanticSvgDiagramEditor({
       renderSvg,
       selection,
       setEditorMode,
-      setSelection
-      ,
+      setSelection,
       toEditorMessage
     ]
   );
 
+  // ─── Form panel handlers ────────────────────────────────────────────────────
+
+  const handleFormCreateNode = useCallback(async () => {
+    const label = formState.nodeLabel.trim();
+    if (!label) {
+      setFormMessage("Enter a node label before creating.");
+      return;
+    }
+    try {
+      const createdGraph = await applySemanticAction({
+        diagramElementId,
+        actionType: "create",
+        targetKind: "node",
+        value: label,
+        nodeType: formState.nodeType.trim() || defaultNodeType
+      });
+      const nextNode = createdGraph.nodes[createdGraph.nodes.length - 1] ?? null;
+      if (nextNode) {
+        setSelection({ kind: "node", id: nextNode.id });
+        setNewlyCreatedSelection({ diagramElementId, nodeId: nextNode.id });
+      }
+      setFormState((prev) => ({ ...prev, nodeLabel: "", nodeType: "" }));
+      setFormMessage(`Created node "${label}".`);
+    } catch (error) {
+      setFormMessage(toEditorMessage(error, "Failed to create node."));
+    }
+  }, [applySemanticAction, defaultNodeType, diagramElementId, formState.nodeLabel, formState.nodeType, setSelection, toEditorMessage]);
+
+  const handleFormUpdateNode = useCallback(async () => {
+    if (!selectedNode) {
+      setFormMessage("Select a node in the diagram first.");
+      return;
+    }
+    const label = formState.nodeLabel.trim();
+    if (!label) {
+      setFormMessage("Enter a new label before updating.");
+      return;
+    }
+    try {
+      await applySemanticAction({
+        diagramElementId,
+        actionType: "update",
+        targetKind: "node",
+        targetId: selectedNode.id,
+        value: label,
+        nodeType: formState.nodeType.trim() || selectedNode.nodeType
+      });
+      setFormMessage(`Updated node to "${label}".`);
+    } catch (error) {
+      setFormMessage(toEditorMessage(error, "Failed to update node."));
+    }
+  }, [applySemanticAction, diagramElementId, formState.nodeLabel, formState.nodeType, selectedNode, toEditorMessage]);
+
+  const handleFormDeleteNode = useCallback(async () => {
+    if (!selectedNode) {
+      setFormMessage("Select a node in the diagram first.");
+      return;
+    }
+    try {
+      await applySemanticAction({
+        diagramElementId,
+        actionType: "delete",
+        targetKind: "node",
+        targetId: selectedNode.id
+      });
+      setSelection(null);
+      setFormState(EMPTY_FORM);
+      setFormMessage(`Deleted node "${selectedNode.label}".`);
+    } catch (error) {
+      setFormMessage(toEditorMessage(error, "Failed to delete node."));
+    }
+  }, [applySemanticAction, diagramElementId, selectedNode, setSelection, toEditorMessage]);
+
+  const handleFormAddMember = useCallback(async () => {
+    if (!selectedNode) {
+      setFormMessage("Select a node in the diagram first.");
+      return;
+    }
+    const sig = formState.memberSignature.trim();
+    if (!sig) {
+      setFormMessage("Enter a member signature before adding.");
+      return;
+    }
+    try {
+      await applySemanticAction({
+        diagramElementId,
+        actionType: "create",
+        targetKind: "member",
+        targetId: selectedNode.id,
+        value: sig,
+        memberKind: formState.memberKind
+      });
+      setFormState((prev) => ({ ...prev, memberSignature: "" }));
+      setFormMessage(`Added ${formState.memberKind} "${sig}" to ${selectedNode.label}.`);
+    } catch (error) {
+      setFormMessage(toEditorMessage(error, "Failed to add member."));
+    }
+  }, [applySemanticAction, diagramElementId, formState.memberKind, formState.memberSignature, selectedNode, toEditorMessage]);
+
+  const handleFormCreateEdge = useCallback(async () => {
+    const sourceId = formState.edgeSourceId.trim();
+    const targetId = formState.edgeTargetId.trim();
+    if (!sourceId || !targetId) {
+      setFormMessage("Select a source and target node ID before creating an edge.");
+      return;
+    }
+    try {
+      await applySemanticAction({
+        diagramElementId,
+        actionType: "create",
+        targetKind: "edge",
+        targetId: sourceId,
+        relatedId: targetId,
+        edgeType: formState.edgeType.trim() || (graph ? getDefaultEdgeType(graph.diagramType) : "association"),
+        value: formState.edgeLabel.trim()
+      });
+      setFormState((prev) => ({ ...prev, edgeSourceId: "", edgeTargetId: "", edgeLabel: "", edgeType: "" }));
+      setFormMessage("Edge created.");
+    } catch (error) {
+      setFormMessage(toEditorMessage(error, "Failed to create edge."));
+    }
+  }, [applySemanticAction, diagramElementId, formState.edgeLabel, formState.edgeSourceId, formState.edgeTargetId, formState.edgeType, graph, toEditorMessage]);
+
+  const handleFormSave = useCallback(async () => {
+    if (!graph?.validation.isValid) {
+      setFormMessage("Fix validation errors before saving.");
+      return;
+    }
+    try {
+      pendingRenderHashRef.current = graph.graphHash;
+      await renderSvg(diagramElementId);
+      setFormMessage("Saved and rendered the diagram.");
+    } catch (error) {
+      setFormMessage(toEditorMessage(error, "Failed to save diagram."));
+    }
+  }, [diagramElementId, graph, renderSvg, toEditorMessage]);
+
+  // ─── Enter / exit edit mode (shared by both tabs) ───────────────────────────
+
+  const handleEnterEditMode = useCallback(() => {
+    const initialNode =
+      (selection?.kind === "node"
+        ? orderedNodes.find((node) => node.id === selection.id) ?? null
+        : null) ?? orderedNodes[0] ?? null;
+
+    if (initialNode) {
+      setSelection({ kind: "node", id: initialNode.id });
+      openInlineEditor({
+        x: 0,
+        y: 0,
+        value: initialNode.label,
+        targetKind: "node",
+        targetId: initialNode.id
+      });
+      setDraftOverride(initialNode.label);
+      setFormState((prev) => ({ ...prev, nodeLabel: initialNode.label, nodeType: initialNode.nodeType ?? "" }));
+    } else {
+      setSelection(null);
+      openInlineEditor({ x: 0, y: 0, value: "", targetKind: "node", targetId: null });
+      setDraftOverride("");
+    }
+
+    setEditorMode("edit");
+    setControllerMessageOverride({
+      diagramElementId,
+      message: initialNode
+        ? `Edit mode enabled. ${initialNode.label} is open for editing.`
+        : "Edit mode enabled. Type a label to create the first semantic node."
+    });
+
+    if (!sanitizedSvg && graph?.validation.isValid) {
+      void renderSvg(diagramElementId).catch(() => {});
+    }
+
+    focusScene(sceneRef.current);
+  }, [
+    diagramElementId,
+    graph,
+    openInlineEditor,
+    orderedNodes,
+    renderSvg,
+    sanitizedSvg,
+    selection,
+    setEditorMode,
+    setSelection
+  ]);
+
+  const handleExitEditMode = useCallback(() => {
+    closeInlineEditor();
+    setDraftOverride(null);
+    setEditorMode("view");
+    setControllerMessageOverride({ diagramElementId, message: "Edit mode closed." });
+  }, [closeInlineEditor, diagramElementId, setEditorMode]);
+
+  const isEditMode = editorMode !== "view";
+
   return (
     <div className="semantic-diagram-shell">
+      {/* ── Controls panel ─────────────────────────────────────────────────── */}
       <div className="semantic-diagram-controls semantic-diagram-panel">
         <div className="semantic-diagram-controls-header">
           <div>
             <span className="requirements-eyebrow">Controls</span>
             <h3>{title}</h3>
           </div>
-          <div className="semantic-diagram-toolbar">
-            <button
-              type="button"
-              className={`requirements-action-button ${editorMode === "view" ? "" : "is-active-editor-button"}`}
-              onClick={() => {
-                if (editorMode === "view") {
-                  setEditorMode("edit");
-                  setControllerMessageOverride({
-                    diagramElementId,
-                    message: "Edit mode enabled. Select a node and press Enter to type."
-                  });
-                  focusScene(sceneRef.current);
-                  return;
-                }
 
-                closeInlineEditor();
-                setDraftOverride(null);
-                setEditorMode("view");
-                setControllerMessageOverride({
-                  diagramElementId,
-                  message: "Edit mode closed."
-                });
-              }}
-            >
-              {editorMode === "view" ? "Edit" : "Exit edit mode"}
-            </button>
+          <div className="semantic-diagram-toolbar">
+            {/* FIX: Two separate buttons — one always visible for each state.
+                The original single button with a toggled CSS class caused it
+                to visually disappear because "is-active-editor-button" blended
+                into the panel background. Now both states are explicit. */}
+            {isEditMode ? (
+              <button
+                type="button"
+                className="requirements-action-button semantic-diagram-exit-button"
+                onClick={handleExitEditMode}
+              >
+                ✕ Exit edit mode
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="requirements-action-button"
+                onClick={handleEnterEditMode}
+              >
+                Edit
+              </button>
+            )}
           </div>
         </div>
 
-        <details className="semantic-diagram-instructions" open>
-          <summary>Instructions</summary>
-          <ul className="semantic-diagram-help-list">
-            <li>Edit {"->"} enable controller mode</li>
-            <li>Arrow keys {"->"} navigate selection</li>
-            <li>Ctrl + Arrow {"->"} travel directed edges or create in direction</li>
-            <li>Alt + Arrow {"->"} select relationships</li>
-            <li>Enter {"->"} open or commit typing</li>
-            <li>Ctrl + Enter {"->"} commit method/function</li>
-            <li>Ctrl + S {"->"} validate and save</li>
-            <li>Escape {"->"} cancel and exit edit mode</li>
-          </ul>
-        </details>
+        {/* ── Tab switcher — only shown in edit mode ──────────────────────── */}
+        {isEditMode && (
+          <div className="semantic-diagram-tab-row" role="tablist" aria-label="Input method">
+            <button
+              role="tab"
+              type="button"
+              aria-selected={inputPanelTab === "controller"}
+              className={`semantic-diagram-tab ${inputPanelTab === "controller" ? "is-active" : ""}`}
+              onClick={() => setInputPanelTab("controller")}
+            >
+              Controller
+            </button>
+            <button
+              role="tab"
+              type="button"
+              aria-selected={inputPanelTab === "form"}
+              className={`semantic-diagram-tab ${inputPanelTab === "form" ? "is-active" : ""}`}
+              onClick={openFormTab}
+            >
+              Form
+            </button>
+          </div>
+        )}
 
-        <div className="semantic-diagram-status-area" aria-live="polite">
-          <span className="semantic-diagram-indicator-label">
-            {inlineEditor.isOpen
-              ? inlineEditor.targetId
-                ? "Editing target"
-                : "Creating node"
-              : selection
-                ? `Selected ${selection.kind}`
-                : "Controller ready"}
-          </span>
-          <strong>{controllerMessage}</strong>
-          <p>
-            {inlineEditor.isOpen
-              ? draftValue || "Type to define the semantic change"
-              : "Use the Edit button to enter semantic command mode."}
-          </p>
-        </div>
+        {/* ── Controller tab ──────────────────────────────────────────────── */}
+        {(!isEditMode || inputPanelTab === "controller") && (
+          <>
+            {/* FIX: Instructions are always rendered as a visible section in
+                edit mode — not inside a <details> that can be collapsed and
+                forgotten. In view mode they stay collapsible to save space. */}
+            {isEditMode ? (
+              <div className="semantic-diagram-instructions semantic-diagram-instructions--always-open">
+                <p className="semantic-diagram-instructions-heading">Keyboard shortcuts</p>
+                <ul className="semantic-diagram-help-list">
+                  <li><kbd>Arrow</kbd> Navigate selection</li>
+                  <li><kbd>Ctrl</kbd> + <kbd>Arrow</kbd> Travel edges or create in direction</li>
+                  <li><kbd>Alt</kbd> + <kbd>Arrow</kbd> Select relationships</li>
+                  <li><kbd>Enter</kbd> Open or commit typing</li>
+                  <li><kbd>Ctrl</kbd> + <kbd>Enter</kbd> Commit method/function</li>
+                  <li><kbd>Ctrl</kbd> + <kbd>S</kbd> Validate and save</li>
+                  <li><kbd>Esc</kbd> Cancel and exit edit mode</li>
+                </ul>
+              </div>
+            ) : (
+              <details className="semantic-diagram-instructions">
+                <summary>Instructions</summary>
+                <ul className="semantic-diagram-help-list">
+                  <li>Edit {"→"} enable controller mode</li>
+                  <li>Arrow keys {"→"} navigate selection</li>
+                  <li>Ctrl + Arrow {"→"} travel directed edges or create in direction</li>
+                  <li>Alt + Arrow {"→"} select relationships</li>
+                  <li>Enter {"→"} open or commit typing</li>
+                  <li>Ctrl + Enter {"→"} commit method/function</li>
+                  <li>Ctrl + S {"→"} validate and save</li>
+                  <li>Escape {"→"} cancel and exit edit mode</li>
+                </ul>
+              </details>
+            )}
+
+            <div className="semantic-diagram-status-area" aria-live="polite">
+              <span className="semantic-diagram-indicator-label">
+                {inlineEditor.isOpen
+                  ? inlineEditor.targetId
+                    ? "Editing target"
+                    : "Creating node"
+                  : selection
+                    ? `Selected ${selection.kind}`
+                    : "Controller ready"}
+              </span>
+              <strong>{controllerMessage}</strong>
+              <p>
+                {inlineEditor.isOpen
+                  ? draftValue || "Type to define the semantic change"
+                  : "Use the Edit button to enter semantic command mode."}
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* ── Form tab ────────────────────────────────────────────────────── */}
+        {isEditMode && inputPanelTab === "form" && (
+          <div className="semantic-diagram-form-panel">
+            {formMessage && (
+              <p className="semantic-diagram-form-message" aria-live="polite">
+                {formMessage}
+              </p>
+            )}
+
+            {/* Node section */}
+            <section className="semantic-diagram-form-section">
+              <h4 className="semantic-diagram-form-section-title">Node</h4>
+
+              {selectedNode && (
+                <p className="semantic-diagram-form-context">
+                  Selected: <strong>{selectedNode.label}</strong>
+                  <span className="semantic-diagram-form-context-type"> ({selectedNode.nodeType})</span>
+                </p>
+              )}
+
+              <label className="semantic-diagram-form-field">
+                <span>Label</span>
+                <input
+                  type="text"
+                  value={formState.nodeLabel}
+                  placeholder="e.g. Place Order"
+                  onChange={(e) => setFormState((prev) => ({ ...prev, nodeLabel: e.target.value }))}
+                />
+              </label>
+
+              <label className="semantic-diagram-form-field">
+                <span>Type</span>
+                <input
+                  type="text"
+                  value={formState.nodeType}
+                  placeholder={defaultNodeType}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, nodeType: e.target.value }))}
+                />
+              </label>
+
+              <div className="semantic-diagram-form-actions">
+                <button
+                  type="button"
+                  className="semantic-diagram-form-button semantic-diagram-form-button--primary"
+                  onClick={handleFormCreateNode}
+                >
+                  Create node
+                </button>
+                {selectedNode && (
+                  <>
+                    <button
+                      type="button"
+                      className="semantic-diagram-form-button"
+                      onClick={handleFormUpdateNode}
+                    >
+                      Update selected
+                    </button>
+                    <button
+                      type="button"
+                      className="semantic-diagram-form-button semantic-diagram-form-button--danger"
+                      onClick={handleFormDeleteNode}
+                    >
+                      Delete selected
+                    </button>
+                  </>
+                )}
+              </div>
+            </section>
+
+            {/* Member section — only for diagram types that allow members */}
+            {allowMembers && (
+              <section className="semantic-diagram-form-section">
+                <h4 className="semantic-diagram-form-section-title">Member</h4>
+                <p className="semantic-diagram-form-hint">
+                  {selectedNode
+                    ? `Adding member to "${selectedNode.label}"`
+                    : "Select a node in the diagram first."}
+                </p>
+
+                <label className="semantic-diagram-form-field">
+                  <span>Signature</span>
+                  <input
+                    type="text"
+                    value={formState.memberSignature}
+                    placeholder="e.g. orderId: string"
+                    onChange={(e) => setFormState((prev) => ({ ...prev, memberSignature: e.target.value }))}
+                  />
+                </label>
+
+                <label className="semantic-diagram-form-field">
+                  <span>Kind</span>
+                  <select
+                    value={formState.memberKind}
+                    onChange={(e) =>
+                      setFormState((prev) => ({
+                        ...prev,
+                        memberKind: e.target.value as "property" | "function"
+                      }))
+                    }
+                  >
+                    <option value="property">Property</option>
+                    <option value="function">Function</option>
+                  </select>
+                </label>
+
+                <div className="semantic-diagram-form-actions">
+                  <button
+                    type="button"
+                    className="semantic-diagram-form-button semantic-diagram-form-button--primary"
+                    onClick={handleFormAddMember}
+                    disabled={!selectedNode}
+                  >
+                    Add member
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {/* Edge section */}
+            <section className="semantic-diagram-form-section">
+              <h4 className="semantic-diagram-form-section-title">Edge</h4>
+
+              <label className="semantic-diagram-form-field">
+                <span>Source node</span>
+                <select
+                  value={formState.edgeSourceId}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, edgeSourceId: e.target.value }))}
+                >
+                  <option value="">— select source —</option>
+                  {orderedNodes.map((node) => (
+                    <option key={node.id} value={node.id}>
+                      {node.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="semantic-diagram-form-field">
+                <span>Target node</span>
+                <select
+                  value={formState.edgeTargetId}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, edgeTargetId: e.target.value }))}
+                >
+                  <option value="">— select target —</option>
+                  {orderedNodes.map((node) => (
+                    <option key={node.id} value={node.id}>
+                      {node.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="semantic-diagram-form-field">
+                <span>Label</span>
+                <input
+                  type="text"
+                  value={formState.edgeLabel}
+                  placeholder="e.g. triggers"
+                  onChange={(e) => setFormState((prev) => ({ ...prev, edgeLabel: e.target.value }))}
+                />
+              </label>
+
+              <label className="semantic-diagram-form-field">
+                <span>Type</span>
+                <input
+                  type="text"
+                  value={formState.edgeType}
+                  placeholder={graph ? getDefaultEdgeType(graph.diagramType) : "association"}
+                  onChange={(e) => setFormState((prev) => ({ ...prev, edgeType: e.target.value }))}
+                />
+              </label>
+
+              <div className="semantic-diagram-form-actions">
+                <button
+                  type="button"
+                  className="semantic-diagram-form-button semantic-diagram-form-button--primary"
+                  onClick={handleFormCreateEdge}
+                >
+                  Create edge
+                </button>
+              </div>
+            </section>
+
+            {/* Save */}
+            <section className="semantic-diagram-form-section">
+              <div className="semantic-diagram-form-actions">
+                <button
+                  type="button"
+                  className="semantic-diagram-form-button semantic-diagram-form-button--save"
+                  onClick={handleFormSave}
+                  disabled={!graph?.validation.isValid}
+                >
+                  Save &amp; render
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
       </div>
 
+      {/* ── Scene ──────────────────────────────────────────────────────────── */}
       <div
         ref={sceneRef}
         className="semantic-diagram-scene semantic-diagram-panel"
@@ -897,17 +1382,60 @@ export function SemanticSvgDiagramEditor({
         role="application"
         aria-label={title}
       >
+        {inlineEditor.isOpen ? (
+          <div className="semantic-inline-editor" role="dialog" aria-label="Semantic inline editor">
+            <p className="semantic-inline-editor-hint">
+              {inlineEditor.targetId === null
+                ? "Type a label for the new semantic node."
+                : `Editing ${inlineEditor.targetKind} ${inlineEditor.targetId}.`}
+            </p>
+            <label className="semantic-inline-editor-label">
+              <span>Label</span>
+              <input
+                type="text"
+                value={draftValue}
+                onChange={(event) => {
+                  setDraftOverride(event.target.value);
+                }}
+                autoFocus
+              />
+            </label>
+          </div>
+        ) : null}
+
         {sanitizedSvg ? (
-          // SVG is still a projection only; the backend-owned semantic graph remains the editable source of truth.
           <div className="semantic-diagram-svg" dangerouslySetInnerHTML={{ __html: sanitizedSvg }} />
         ) : (
           <div className="semantic-diagram-empty">
-            <strong>No rendered diagram yet.</strong>
-            <p>{isRendering ? "Rendering the latest valid graph..." : "Enable edit mode, then press Enter to create a semantic node."}</p>
+            <strong>{editorMode === "view" ? "No rendered diagram yet." : "Edit mode is active."}</strong>
+            <p>
+              {isRendering
+                ? "Rendering the latest valid graph..."
+                : inlineEditor.isOpen
+                  ? inlineEditor.targetId === null
+                    ? "Type a label in the editor above to create the first semantic node."
+                    : "Update the selected semantic target in the editor above, then press Enter to commit."
+                  : editorMode === "view"
+                    ? "Enable edit mode, then press Enter to create a semantic node."
+                    : "Select a node or press Enter to begin typing a semantic change."}
+            </p>
+            {graph?.nodes.length ? (
+              <div className="badge-row">
+                {graph.nodes
+                  .slice()
+                  .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id))
+                  .map((node) => (
+                    <span key={node.id} className="badge">
+                      {node.label}
+                    </span>
+                  ))}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
 
+      {/* ── Status bar ─────────────────────────────────────────────────────── */}
       <div className="semantic-diagram-status">
         <div className="badge-row">
           <span className="badge">Mode: {editorMode}</span>

@@ -23,6 +23,14 @@ function getBackendBaseUrl() {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function shouldAllowInsecureLocalDevTls(backendUrl: URL) {
+  return (
+    process.env.NODE_ENV === "development" &&
+    backendUrl.protocol === "https:" &&
+    (backendUrl.hostname === "localhost" || backendUrl.hostname === "127.0.0.1")
+  );
+}
+
 export function buildBackendUrl(request: NextRequest, path: string[]) {
   const pathname = path.join("/");
   const backendUrl = new URL(`${getBackendBaseUrl()}/api/${pathname}`);
@@ -55,11 +63,18 @@ export function buildProxyRequestHeaders(request: NextRequest) {
 
 export async function buildProxyRequestInit(request: NextRequest): Promise<RequestInit> {
   const method = request.method.toUpperCase();
+  const backendUrl = new URL(getBackendBaseUrl());
   const init: RequestInit = {
     method,
     headers: buildProxyRequestHeaders(request),
     redirect: "manual"
   };
+
+  if (shouldAllowInsecureLocalDevTls(backendUrl)) {
+    // Local ASP.NET development commonly uses a self-signed certificate. Restrict the TLS
+    // bypass to localhost in development so deployed environments still require valid certs.
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  }
 
   if (method !== "GET" && method !== "HEAD") {
     init.body = await request.arrayBuffer();

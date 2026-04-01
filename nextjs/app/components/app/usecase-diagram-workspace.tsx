@@ -58,9 +58,9 @@ export function UseCaseDiagramWorkspace({
                             <strong>Dependencies</strong>
                             {useCase.dependencies.length > 0 ? (
                                 <div className="usecase-link-list">
-                                    {useCase.dependencies.map((dependency) => (
+                                    {useCase.dependencies.map((dependency, index) => (
                                         <Link
-                                            key={dependency.slug}
+                                            key={`${dependency.slug}-${index}`}
                                             href={`/app/backends/${backend.slug}/usecase-diagrams/${dependency.slug}`}
                                             className="requirements-link-card"
                                         >

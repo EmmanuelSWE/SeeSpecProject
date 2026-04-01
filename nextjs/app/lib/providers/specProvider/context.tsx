@@ -10,6 +10,26 @@ export interface ISpec {
   status: number;
 }
 
+export interface ITokenUsage {
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+export interface IGeneratedSpecPreview {
+  specId: string;
+  prompt: string;
+  model: string;
+  outputText: string;
+  usage: ITokenUsage | null;
+  timestamp: string;
+}
+
+export interface IGenerateSpecCodeInput {
+  specId: string;
+  model?: string;
+  maxTokens?: number;
+}
+
 export interface ICreateSpecInput {
   backendId: string;
   title: string;
@@ -28,6 +48,9 @@ export interface ISpecStateContext {
   errorMessage: string | null;
   spec: ISpec | null;
   specs: ISpec[];
+  isGeneratingPreview: boolean;
+  previewErrorMessage: string | null;
+  generatedPreview: IGeneratedSpecPreview | null;
 }
 
 export interface ISpecActionContext {
@@ -36,6 +59,8 @@ export interface ISpecActionContext {
   getSpecByBackend: (backendId: string) => Promise<ISpec | null>;
   createSpec: (payload: ICreateSpecInput) => Promise<ISpec>;
   updateSpec: (payload: IUpdateSpecInput) => Promise<ISpec>;
+  generateSpecCode: (payload: IGenerateSpecCodeInput) => Promise<IGeneratedSpecPreview>;
+  clearGeneratedPreview: () => void;
   setActiveSpec: (spec: ISpec | null) => void;
   reset: () => void;
 }
@@ -46,7 +71,10 @@ export const INITIAL_STATE: ISpecStateContext = {
   isError: false,
   errorMessage: null,
   spec: null,
-  specs: []
+  specs: [],
+  isGeneratingPreview: false,
+  previewErrorMessage: null,
+  generatedPreview: null
 };
 
 export const SpecStateContext = createContext<ISpecStateContext>(INITIAL_STATE);

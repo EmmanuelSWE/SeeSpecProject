@@ -12,6 +12,7 @@ import {
 } from "@/app/components/app/backend-form-fields";
 import { BackendModal } from "@/app/components/app/backend-modal";
 import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
+import type { IGeneratedSpecPreview } from "@/app/lib/providers/specProvider/context";
 import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-service";
 
 type ModalState = "edit-backend" | "overview" | "role" | null;
@@ -46,7 +47,12 @@ export function BackendOverviewWorkspace({
     onSaveBackend,
     onSaveOverview,
     onAcceptOverview,
-    onSaveRole
+    onSaveRole,
+    generatedPreview,
+    isGeneratingPreview,
+    previewErrorMessage,
+    onGeneratePreview,
+    onClearPreview
 }: {
     backend: BackendRecord;
     overviewSection: SpecSectionDto | null;
@@ -56,6 +62,11 @@ export function BackendOverviewWorkspace({
     onSaveOverview: (next: OverviewFormState) => Promise<void>;
     onAcceptOverview: () => Promise<void>;
     onSaveRole: (role: BackendRoleFormState) => Promise<void>;
+    generatedPreview: IGeneratedSpecPreview | null;
+    isGeneratingPreview: boolean;
+    previewErrorMessage: string | null;
+    onGeneratePreview: () => Promise<void>;
+    onClearPreview: () => void;
 }) {
     const [modal, setModal] = useState<ModalState>(null);
     const [backendForm, setBackendForm] = useState<BackendFormState>(() => toBackendFormState(backend));
@@ -261,6 +272,67 @@ export function BackendOverviewWorkspace({
                             </div>
                         )}
                     </div>
+                </div>
+            </div>
+
+            <div className="card backend-overview-card">
+                <div className="card-header backend-table-header">
+                    <div>
+                        <span className="requirements-eyebrow">AI Preview</span>
+                        <h3>Inspect raw generation output</h3>
+                    </div>
+                    <div className="backend-hero-actions">
+                        <button type="button" className="secondary-button" onClick={onClearPreview} disabled={!generatedPreview && !previewErrorMessage}>
+                            Clear
+                        </button>
+                        <button type="button" className="requirements-action-button" onClick={() => { onGeneratePreview().catch(() => {}); }} disabled={isGeneratingPreview}>
+                            {isGeneratingPreview ? "Generating..." : "Generate preview"}
+                        </button>
+                    </div>
+                </div>
+                <div className="card-body backend-overview-body">
+                    <div className="backend-overview-copy">
+                        <strong>Status</strong>
+                        <p>
+                            {isGeneratingPreview
+                                ? "Building the prompt from the backend spec and requesting raw AI output."
+                                : generatedPreview
+                                  ? "Raw preview is available below. This output is not persisted."
+                                  : "Generate a preview to inspect the backend-built prompt and raw AI response."}
+                        </p>
+                    </div>
+                    {previewErrorMessage ? (
+                        <div className="backend-blocked-state">
+                            <strong>Preview failed</strong>
+                            <p>{previewErrorMessage}</p>
+                        </div>
+                    ) : null}
+                    {generatedPreview ? (
+                        <div className="backend-role-list">
+                            <article className="backend-role-item">
+                                <div className="backend-role-heading">
+                                    <strong>Model</strong>
+                                    <span>{generatedPreview.model}</span>
+                                </div>
+                                <p>{new Date(generatedPreview.timestamp).toLocaleString()}</p>
+                                <small>
+                                    Input tokens: {generatedPreview.usage?.inputTokens ?? "n/a"} | Output tokens: {generatedPreview.usage?.outputTokens ?? "n/a"}
+                                </small>
+                            </article>
+                            <article className="backend-role-item">
+                                <div className="backend-role-heading">
+                                    <strong>Prompt</strong>
+                                </div>
+                                <pre className="semantic-diagram-editor-status">{generatedPreview.prompt}</pre>
+                            </article>
+                            <article className="backend-role-item">
+                                <div className="backend-role-heading">
+                                    <strong>Raw output</strong>
+                                </div>
+                                <pre className="semantic-diagram-editor-status">{generatedPreview.outputText}</pre>
+                            </article>
+                        </div>
+                    ) : null}
                 </div>
             </div>
 

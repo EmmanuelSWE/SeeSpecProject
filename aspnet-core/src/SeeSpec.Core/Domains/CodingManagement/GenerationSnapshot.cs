@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using Abp.Domain.Entities.Auditing;
 using SeeSpec.Authorization.Users;
 using SeeSpec.Domains.ProjectManagement;
+using SeeSpec.Domains.SpecManagement;
 
 namespace SeeSpec.Domains.CodingManagement
 {
@@ -20,6 +21,11 @@ namespace SeeSpec.Domains.CodingManagement
 
         [ForeignKey(nameof(BackendId))]
         public virtual Backend Backend { get; set; }
+
+        public Guid? SpecId { get; set; }
+
+        [ForeignKey(nameof(SpecId))]
+        public virtual Spec Spec { get; set; }
 
         public long TriggeredByUserId { get; set; }
 
@@ -38,6 +44,13 @@ namespace SeeSpec.Domains.CodingManagement
 
         [StringLength(12000)]
         public string PromptSent { get; set; }
+
+        [Required]
+        [StringLength(128)]
+        public string ModelName { get; set; }
+
+        [StringLength(32000)]
+        public string OutputText { get; set; }
 
         public virtual ICollection<Note> Notes { get; set; }
 
