@@ -73,7 +73,6 @@ export type DiagramSemanticActionResultDto = {
 export type RenderedDiagramDto = {
   svg: string;
   graphHash: string;
-  plantUmlText?: string | null;
 };
 
 export type DiagramElementDto = {
@@ -309,15 +308,14 @@ export async function applyDiagramSemanticAction(
 }
 
 export async function renderDiagramSvg(
-  diagramElementId: string,
-  includePlantUmlText = false
+  diagramElementId: string
 ): Promise<RenderedDiagramDto> {
   try {
     return await postOne<RenderedDiagramDto, { diagramElementId: string; includePlantUmlText: boolean }>(
       "/services/app/DiagramElement/RenderSvg",
       {
         diagramElementId,
-        includePlantUmlText
+        includePlantUmlText: false
       }
     );
   } catch (error) {

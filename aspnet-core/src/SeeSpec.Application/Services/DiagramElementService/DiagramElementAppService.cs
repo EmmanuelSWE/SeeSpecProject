@@ -158,6 +158,24 @@ namespace SeeSpec.Services.DiagramElementService
         {
             try
             {
+                RenderedDiagramDebugDto render = await RenderSvgDebugAsync(input);
+                return new RenderedDiagramDto
+                {
+                    Svg = render.Svg,
+                    GraphHash = render.GraphHash
+                };
+            }
+            catch (Exception exception)
+            {
+                Logger.Error("Failed to render diagram SVG.", exception);
+                throw;
+            }
+        }
+
+        public async Task<RenderedDiagramDebugDto> RenderSvgDebugAsync(RenderDiagramDto input)
+        {
+            try
+            {
                 DiagramElement diagram = await Repository.GetAsync(input.DiagramElementId);
                 await EnsureSpecBootstrappedAsync(diagram.BackendId);
                 RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
@@ -171,11 +189,11 @@ namespace SeeSpec.Services.DiagramElementService
                 string graphHash = ComputeGraphHash(graph);
                 if (RenderCache.TryGetValue(graphHash, out RenderedDiagramDto cachedRender))
                 {
-                    return new RenderedDiagramDto
+                    return new RenderedDiagramDebugDto
                     {
                         Svg = cachedRender.Svg,
                         GraphHash = cachedRender.GraphHash,
-                        PlantUmlText = input.IncludePlantUmlText ? cachedRender.PlantUmlText : null
+                        PlantUmlText = cachedRender is RenderedDiagramDebugDto cachedDebug ? cachedDebug.PlantUmlText : null
                     };
                 }
 
@@ -188,31 +206,21 @@ namespace SeeSpec.Services.DiagramElementService
                 catch (Exception)
                 {
                     svg = BuildFallbackSvg(diagram, graph);
-                   
                 }
-               
 
-
-
-                RenderedDiagramDto render = new RenderedDiagramDto
-                {
-                    Svg = svg,
-                    GraphHash = graphHash,
-                    PlantUmlText = input.IncludePlantUmlText ? plantUmlText : null
-                };
-
-                RenderCache[graphHash] = new RenderedDiagramDto
+                RenderedDiagramDebugDto render = new RenderedDiagramDebugDto
                 {
                     Svg = svg,
                     GraphHash = graphHash,
                     PlantUmlText = plantUmlText
                 };
 
+                RenderCache[graphHash] = render;
                 return render;
             }
             catch (Exception exception)
             {
-                Logger.Error("Failed to render diagram SVG.", exception);
+                Logger.Error("Failed to render diagram SVG debug payload.", exception);
                 throw;
             }
         }
