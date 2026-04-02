@@ -330,8 +330,13 @@ export function SemanticSvgDiagramEditor({
   }, [diagramElementId, displayedRender, inlineEditor.targetId, inlineEditor.targetKind, newlyCreatedNodeId, selection]);
 
   useEffect(() => {
-    getDiagramGraph(diagramElementId).catch(() => {});
-  }, [diagramElementId, getDiagramGraph]);
+    getDiagramGraph(diagramElementId).catch((error) => {
+      setControllerMessageOverride({
+        diagramElementId,
+        message: toEditorMessage(error, "Unable to load the diagram graph.")
+      });
+    });
+  }, [diagramElementId, getDiagramGraph, toEditorMessage]);
 
   useEffect(() => {
     lastRenderedHashRef.current = null;
@@ -400,13 +405,19 @@ export function SemanticSvgDiagramEditor({
             graphHash: result.graphHash
           });
         })
-        .catch(() => {});
+        .catch((error) => {
+          pendingRenderHashRef.current = null;
+          setControllerMessageOverride({
+            diagramElementId,
+            message: toEditorMessage(error, "Unable to render the latest diagram state.")
+          });
+        });
     }, 200);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [diagramElementId, graph, renderSvg]);
+  }, [diagramElementId, graph, renderSvg, toEditorMessage]);
 
   const openFormTab = useCallback(() => {
     if (selectedNode) {
@@ -1033,7 +1044,12 @@ export function SemanticSvgDiagramEditor({
     });
 
     if (!sanitizedSvg && graph?.validation.isValid) {
-      void renderSvg(diagramElementId).catch(() => {});
+      void renderSvg(diagramElementId).catch((error) => {
+        setControllerMessageOverride({
+          diagramElementId,
+          message: toEditorMessage(error, "Unable to render the current diagram state.")
+        });
+      });
     }
 
     focusScene(sceneRef.current);
@@ -1046,7 +1062,8 @@ export function SemanticSvgDiagramEditor({
     sanitizedSvg,
     selection,
     setEditorMode,
-    setSelection
+    setSelection,
+    toEditorMessage
   ]);
 
   const handleExitEditMode = useCallback(() => {
@@ -1079,7 +1096,7 @@ export function SemanticSvgDiagramEditor({
                 className="requirements-action-button semantic-diagram-exit-button"
                 onClick={handleExitEditMode}
               >
-                ✕ Exit edit mode
+                Exit edit mode
               </button>
             ) : (
               <button
@@ -1140,14 +1157,14 @@ export function SemanticSvgDiagramEditor({
               <details className="semantic-diagram-instructions">
                 <summary>Instructions</summary>
                 <ul className="semantic-diagram-help-list">
-                  <li>Edit {"→"} enable controller mode</li>
-                  <li>Arrow keys {"→"} navigate selection</li>
-                  <li>Ctrl + Arrow {"→"} travel directed edges or create in direction</li>
-                  <li>Alt + Arrow {"→"} select relationships</li>
-                  <li>Enter {"→"} open or commit typing</li>
-                  <li>Ctrl + Enter {"→"} commit method/function</li>
-                  <li>Ctrl + S {"→"} validate and save</li>
-                  <li>Escape {"→"} cancel and exit edit mode</li>
+                  <li>Edit - enable controller mode</li>
+                  <li>Arrow keys - navigate selection</li>
+                  <li>Ctrl + Arrow - travel directed edges or create in direction</li>
+                  <li>Alt + Arrow - select relationships</li>
+                  <li>Enter - open or commit typing</li>
+                  <li>Ctrl + Enter - commit method/function</li>
+                  <li>Ctrl + S - validate and save</li>
+                  <li>Escape - cancel and exit edit mode</li>
                 </ul>
               </details>
             )}

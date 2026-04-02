@@ -36,13 +36,15 @@ export function SpecReducer(
       return {
         ...state,
         isGeneratingPreview: true,
-        previewErrorMessage: null
+        previewErrorMessage: null,
+        applyGeneratedCodeErrorMessage: null
       };
     case SpecActionEnums.generatePreviewSuccess:
       return {
         ...state,
         isGeneratingPreview: false,
         previewErrorMessage: null,
+        applyGeneratedCodeErrorMessage: null,
         generatedPreview: action.payload
       };
     case SpecActionEnums.generatePreviewError:
@@ -51,12 +53,39 @@ export function SpecReducer(
         isGeneratingPreview: false,
         previewErrorMessage: action.payload
       };
+    case SpecActionEnums.applyGeneratedCodePending:
+      return {
+        ...state,
+        isApplyingGeneratedCode: true,
+        applyGeneratedCodeErrorMessage: null
+      };
+    case SpecActionEnums.applyGeneratedCodeSuccess:
+      return {
+        ...state,
+        isApplyingGeneratedCode: false,
+        applyGeneratedCodeErrorMessage: null,
+        generatedPreview: state.generatedPreview
+          ? {
+              ...state.generatedPreview,
+              hasAppliedArtifacts: action.payload.anyArtifactsApplied,
+              artifacts: action.payload.artifacts
+            }
+          : state.generatedPreview
+      };
+    case SpecActionEnums.applyGeneratedCodeError:
+      return {
+        ...state,
+        isApplyingGeneratedCode: false,
+        applyGeneratedCodeErrorMessage: action.payload
+      };
     case SpecActionEnums.clearGeneratedPreview:
       return {
         ...state,
         isGeneratingPreview: false,
         previewErrorMessage: null,
-        generatedPreview: null
+        generatedPreview: null,
+        isApplyingGeneratedCode: false,
+        applyGeneratedCodeErrorMessage: null
       };
     case SpecActionEnums.getSpecsSuccess:
       return {

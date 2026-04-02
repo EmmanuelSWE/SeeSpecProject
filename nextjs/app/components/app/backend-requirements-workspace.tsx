@@ -54,6 +54,11 @@ export function BackendRequirementsWorkspace({
     const [isLoading, setIsLoading] = useState(true);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [requirementForm, setRequirementForm] = useState<BackendRequirementFormState>(EMPTY_REQUIREMENT_FORM);
+    const [actionErrorMessage, setActionErrorMessage] = useState<string | null>(null);
+    const [isSavingRequirement, setIsSavingRequirement] = useState(false);
+    const [isAddingReviewNote, setIsAddingReviewNote] = useState(false);
+    const [isOpeningUseCase, setIsOpeningUseCase] = useState(false);
+    const [isOpeningActivity, setIsOpeningActivity] = useState(false);
 
     useEffect(() => {
         const timer = window.setTimeout(() => setIsLoading(false), 180);
@@ -83,30 +88,38 @@ export function BackendRequirementsWorkspace({
     const activeRequirement = filteredRequirements.find((item) => item.id === effectiveSelectedId) ?? null;
 
     async function saveRequirement() {
-        const createdRequirement = await onCreateRequirement({
-            backendId: backend.id,
-            type: "requirement",
-            code: requirementForm.code || `REQ-${requirementSections.length + 1}`,
-            title: requirementForm.title,
-            summary: requirementForm.summary,
-            content: [requirementForm.summary],
-            tags: [requirementForm.category, requirementForm.owner].filter(Boolean),
-            category: requirementForm.category,
-            owner: requirementForm.owner,
-            status: "Draft",
-            priority: requirementForm.priority,
-            excerpt: requirementForm.excerpt,
-            acceptanceCriteria: requirementForm.acceptanceCriteria
-                .split("\n")
-                .map((line) => line.trim())
-                .filter(Boolean),
-            linkedArtifacts: [],
-            traceItems: [],
-            activityItems: [{ author: requirementForm.owner || "Business Analyst", text: "Created initial requirement draft.", timestamp: "Now" }]
-        });
-        setSelectedId(createdRequirement.id);
-        setRequirementForm(EMPTY_REQUIREMENT_FORM);
-        setIsCreateOpen(false);
+        setActionErrorMessage(null);
+        setIsSavingRequirement(true);
+        try {
+            const createdRequirement = await onCreateRequirement({
+                backendId: backend.id,
+                type: "requirement",
+                code: requirementForm.code || `REQ-${requirementSections.length + 1}`,
+                title: requirementForm.title,
+                summary: requirementForm.summary,
+                content: [requirementForm.summary],
+                tags: [requirementForm.category, requirementForm.owner].filter(Boolean),
+                category: requirementForm.category,
+                owner: requirementForm.owner,
+                status: "Draft",
+                priority: requirementForm.priority,
+                excerpt: requirementForm.excerpt,
+                acceptanceCriteria: requirementForm.acceptanceCriteria
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter(Boolean),
+                linkedArtifacts: [],
+                traceItems: [],
+                activityItems: [{ author: requirementForm.owner || "Business Analyst", text: "Created initial requirement draft.", timestamp: "Now" }]
+            });
+            setSelectedId(createdRequirement.id);
+            setRequirementForm(EMPTY_REQUIREMENT_FORM);
+            setIsCreateOpen(false);
+        } catch (error) {
+            setActionErrorMessage(error instanceof Error ? error.message : "Unable to create the requirement.");
+        } finally {
+            setIsSavingRequirement(false);
+        }
     }
 
     async function addReviewNote() {
@@ -114,13 +127,21 @@ export function BackendRequirementsWorkspace({
             return;
         }
 
-        await onUpdateRequirement({
-            id: activeRequirement.id,
-            activityItems: [
-                { author: "Project Lead", text: "Added a review note from the frontend dummy flow.", timestamp: "Now" },
-                ...(activeRequirement.activityItems ?? [])
-            ]
-        });
+        setActionErrorMessage(null);
+        setIsAddingReviewNote(true);
+        try {
+            await onUpdateRequirement({
+                id: activeRequirement.id,
+                activityItems: [
+                    { author: "Project Lead", text: "Added a review note from the frontend dummy flow.", timestamp: "Now" },
+                    ...(activeRequirement.activityItems ?? [])
+                ]
+            });
+        } catch (error) {
+            setActionErrorMessage(error instanceof Error ? error.message : "Unable to add the review note.");
+        } finally {
+            setIsAddingReviewNote(false);
+        }
     }
 
     async function createOrOpenUseCaseDiagram() {
@@ -128,18 +149,26 @@ export function BackendRequirementsWorkspace({
             return;
         }
 
-        const existingDiagram = useCaseDiagrams.find((diagram) =>
-            diagram.linkedRequirementIds.includes(activeRequirement.id)
-        );
+        setActionErrorMessage(null);
+        setIsOpeningUseCase(true);
+        try {
+            const existingDiagram = useCaseDiagrams.find((diagram) =>
+                diagram.linkedRequirementIds.includes(activeRequirement.id)
+            );
 
-        if (existingDiagram) {
-            await onEnsureUseCaseDiagramBinding(existingDiagram, activeRequirement);
-            router.push(`/app/backends/${backend.slug}/usecase-diagrams/${existingDiagram.slug}`);
-            return;
+            if (existingDiagram) {
+                await onEnsureUseCaseDiagramBinding(existingDiagram, activeRequirement);
+                router.push(`/app/backends/${backend.slug}/usecase-diagrams/${existingDiagram.slug}`);
+                return;
+            }
+
+            const diagram = await onCreateUseCaseDiagram(activeRequirement);
+            router.push(`/app/backends/${backend.slug}/usecase-diagrams/${diagram.slug}`);
+        } catch (error) {
+            setActionErrorMessage(error instanceof Error ? error.message : "Unable to open the use case diagram.");
+        } finally {
+            setIsOpeningUseCase(false);
         }
-
-        const diagram = await onCreateUseCaseDiagram(activeRequirement);
-        router.push(`/app/backends/${backend.slug}/usecase-diagrams/${diagram.slug}`);
     }
 
     async function createOrOpenActivityDiagram() {
@@ -147,24 +176,32 @@ export function BackendRequirementsWorkspace({
             return;
         }
 
-        const existingUseCase = useCaseDiagrams.find((diagram) =>
-            diagram.linkedRequirementIds.includes(activeRequirement.id)
-        );
-        const useCaseDiagram = existingUseCase ?? await onCreateUseCaseDiagram(activeRequirement);
-        const existingActivityDiagram = activityDiagrams.find(
-            (diagram) =>
-                diagram.linkedUseCaseSlug === useCaseDiagram.slug &&
+        setActionErrorMessage(null);
+        setIsOpeningActivity(true);
+        try {
+            const existingUseCase = useCaseDiagrams.find((diagram) =>
                 diagram.linkedRequirementIds.includes(activeRequirement.id)
-        );
+            );
+            const useCaseDiagram = existingUseCase ?? await onCreateUseCaseDiagram(activeRequirement);
+            const existingActivityDiagram = activityDiagrams.find(
+                (diagram) =>
+                    diagram.linkedUseCaseSlug === useCaseDiagram.slug &&
+                    diagram.linkedRequirementIds.includes(activeRequirement.id)
+            );
 
-        if (existingActivityDiagram) {
-            await onEnsureActivityDiagramBinding(existingActivityDiagram, activeRequirement, useCaseDiagram);
+            if (existingActivityDiagram) {
+                await onEnsureActivityDiagramBinding(existingActivityDiagram, activeRequirement, useCaseDiagram);
+                router.push(`/app/backends/${backend.slug}/activity-diagram/${useCaseDiagram.slug}`);
+                return;
+            }
+
+            await onCreateActivityDiagram(activeRequirement, useCaseDiagram);
             router.push(`/app/backends/${backend.slug}/activity-diagram/${useCaseDiagram.slug}`);
-            return;
+        } catch (error) {
+            setActionErrorMessage(error instanceof Error ? error.message : "Unable to open the activity diagram.");
+        } finally {
+            setIsOpeningActivity(false);
         }
-
-        await onCreateActivityDiagram(activeRequirement, useCaseDiagram);
-        router.push(`/app/backends/${backend.slug}/activity-diagram/${useCaseDiagram.slug}`);
     }
 
     if (!hasOverview || !isOverviewAccepted) {
@@ -225,6 +262,13 @@ export function BackendRequirementsWorkspace({
                     </div>
                 </div>
             </div>
+
+            {actionErrorMessage ? (
+                <div className="backend-feedback-banner" role="alert">
+                    <strong>Action failed.</strong>
+                    <span>{actionErrorMessage}</span>
+                </div>
+            ) : null}
 
             {filteredRequirements.length === 0 ? (
                 <div className="card requirements-state-card">
@@ -297,10 +341,12 @@ export function BackendRequirementsWorkspace({
                         canEdit={true}
                         hasUseCaseDiagram={useCaseDiagrams.some((diagram) => diagram.linkedRequirementIds.includes(activeRequirement.id))}
                         hasActivityDiagram={activityDiagrams.some((diagram) => diagram.linkedRequirementIds.includes(activeRequirement.id))}
-                        onCreateUseCaseDiagram={() => { createOrOpenUseCaseDiagram().catch(() => {}); }}
-                        onOpenUseCaseDiagram={() => { createOrOpenUseCaseDiagram().catch(() => {}); }}
-                        onCreateActivityDiagram={() => { createOrOpenActivityDiagram().catch(() => {}); }}
-                        onOpenActivityDiagram={() => { createOrOpenActivityDiagram().catch(() => {}); }}
+                        isUseCaseBusy={isOpeningUseCase}
+                        isActivityBusy={isOpeningActivity}
+                        onCreateUseCaseDiagram={() => { void createOrOpenUseCaseDiagram(); }}
+                        onOpenUseCaseDiagram={() => { void createOrOpenUseCaseDiagram(); }}
+                        onCreateActivityDiagram={() => { void createOrOpenActivityDiagram(); }}
+                        onOpenActivityDiagram={() => { void createOrOpenActivityDiagram(); }}
                     />
 
                     <div className="requirements-side-stack">
@@ -315,8 +361,8 @@ export function BackendRequirementsWorkspace({
                                 <button type="button" className="requirements-action-button" onClick={() => setIsCreateOpen(true)}>
                                     New requirement
                                 </button>
-                                <button type="button" className="secondary-button" onClick={addReviewNote}>
-                                    Add review note
+                                <button type="button" className="secondary-button" onClick={addReviewNote} disabled={isAddingReviewNote}>
+                                    {isAddingReviewNote ? "Saving note..." : "Add review note"}
                                 </button>
                             </div>
                         </div>
@@ -336,8 +382,8 @@ export function BackendRequirementsWorkspace({
                         <button type="button" className="secondary-button" onClick={() => setIsCreateOpen(false)}>
                             Cancel
                         </button>
-                        <button type="button" className="requirements-action-button" onClick={saveRequirement}>
-                            Save requirement
+                        <button type="button" className="requirements-action-button" onClick={saveRequirement} disabled={isSavingRequirement}>
+                            {isSavingRequirement ? "Saving..." : "Save requirement"}
                         </button>
                     </div>
                 </BackendModal>

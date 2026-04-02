@@ -22,7 +22,9 @@ export function RequirementsDetailPanel({
   onCreateActivityDiagram,
   onOpenActivityDiagram,
   hasUseCaseDiagram,
-  hasActivityDiagram
+  hasActivityDiagram,
+  isUseCaseBusy,
+  isActivityBusy
 }: {
   requirement: RequirementDetail;
   canEdit: boolean;
@@ -32,6 +34,8 @@ export function RequirementsDetailPanel({
   onOpenActivityDiagram: () => void;
   hasUseCaseDiagram: boolean;
   hasActivityDiagram: boolean;
+  isUseCaseBusy: boolean;
+  isActivityBusy: boolean;
 }) {
   return (
     <article className="card requirements-detail-panel">
@@ -83,17 +87,31 @@ export function RequirementsDetailPanel({
               type="button"
               className="requirements-link-card requirements-link-button"
               onClick={hasUseCaseDiagram ? onOpenUseCaseDiagram : onCreateUseCaseDiagram}
+              disabled={isUseCaseBusy}
             >
               <span>Diagram</span>
-              <strong>{hasUseCaseDiagram ? "Open use case diagram" : "Create use case diagram"}</strong>
+              <strong>
+                {isUseCaseBusy
+                  ? "Opening use case diagram..."
+                  : hasUseCaseDiagram
+                    ? "Open use case diagram"
+                    : "Create use case diagram"}
+              </strong>
             </button>
             <button
               type="button"
               className="requirements-link-card requirements-link-button"
               onClick={hasActivityDiagram ? onOpenActivityDiagram : onCreateActivityDiagram}
+              disabled={isActivityBusy}
             >
               <span>Diagram</span>
-              <strong>{hasActivityDiagram ? "Open activity diagram" : "Create activity diagram"}</strong>
+              <strong>
+                {isActivityBusy
+                  ? "Opening activity diagram..."
+                  : hasActivityDiagram
+                    ? "Open activity diagram"
+                    : "Create activity diagram"}
+              </strong>
             </button>
           </div>
         </div>

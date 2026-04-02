@@ -35,9 +35,11 @@ import {
   type BackendRole,
   type BackendRoleName,
   type BackendStatus,
+  type AllowedGenerationFolder,
   type BackendFolderImportInput,
   type BackendUploadResult,
   type CreateBackendInput,
+  type GenerationArtifactType,
   type UpdateBackendInput
 } from "./context";
 import { BackendReducer } from "./reducer";
@@ -491,6 +493,27 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const getAllowedGenerationFolders = useCallback(
+    async (backendId: string, artifactType: GenerationArtifactType) => {
+      try {
+        const response = await getOne<{ items?: AllowedGenerationFolder[] }>(
+          "/services/app/Backend/GetAllowedGenerationFolders",
+          {
+            BackendId: backendId,
+            ArtifactType: artifactType
+          }
+        );
+
+        return response.items ?? [];
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to load allowed generation folders.";
+        throw new Error(mapErrorMessage(error, message));
+      }
+    },
+    []
+  );
+
   const deleteBackend = useCallback(async (id: string) => {
     dispatch(getBackendsPending());
     try {
@@ -525,6 +548,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       updateBackend,
       uploadBackendArchive,
       importBackendFolder,
+      getAllowedGenerationFolders,
       deleteBackend,
       setActiveBackend: setBackend,
       reset
@@ -535,6 +559,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       getBackend,
       getBackendBySlug,
       getBackends,
+      getAllowedGenerationFolders,
       importBackendFolder,
       reset,
       setBackend,

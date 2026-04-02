@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using BackendEntity = SeeSpec.Domains.ProjectManagement.Backend;
 using BackendStatus = SeeSpec.Domains.ProjectManagement.BackendStatus;
+using SeeSpec.Services.AIGenerationService.DTO;
 using SeeSpec.Services.BackendService.DTO;
 using SeeSpec.Services.SpecService;
 using Abp.Application.Services.Dto;
@@ -96,7 +97,57 @@ namespace SeeSpec.Services.BackendService
             // Folder import is only meaningful for trusted server-side/admin workflows where the
             // server can already access the supplied path; deployed browser clients should use ZIP upload.
             // Direct folder imports reuse the same workspace validation path as extracted zip uploads.
-            return await ImportResolvedWorkspaceAsync(normalizedFolderPath, null, cancellationToken);
+            var tempWorkspace = CreateTemporaryWorkspace();
+            try
+            {
+                return await ImportResolvedWorkspaceAsync(normalizedFolderPath, tempWorkspace.RootPath, cancellationToken);
+            }
+            catch
+            {
+                DeleteDirectoryIfExists(tempWorkspace.RootPath);
+                throw;
+            }
+        }
+
+        public async Task<List<AllowedGenerationFolderDto>> GetAllowedGenerationFoldersAsync(
+            GetAllowedGenerationFoldersInputDto input,
+            CancellationToken cancellationToken)
+        {
+            EnsureTenantContext();
+            ValidateGenerationFolderRequest(input?.BackendId ?? Guid.Empty, input?.ArtifactType ?? GenerationArtifactType.Unknown);
+
+            ImportContextFile importContext = await GetImportContextAsync(input.BackendId, cancellationToken);
+            return BuildAllowedFolderOptions(importContext, input.ArtifactType);
+        }
+
+        public async Task<AllowedGenerationFolderDto> ValidateGenerationFolderAsync(
+            ValidateGenerationFolderInputDto input,
+            CancellationToken cancellationToken)
+        {
+            EnsureTenantContext();
+            ValidateGenerationFolderRequest(input?.BackendId ?? Guid.Empty, input?.ArtifactType ?? GenerationArtifactType.Unknown);
+            if (input == null || string.IsNullOrWhiteSpace(input.FolderPath))
+            {
+                throw new UserFriendlyException("A generation target folder is required.");
+            }
+
+            string normalizedFolderPath = NormalizeFolderPath(input.FolderPath);
+            List<AllowedGenerationFolderDto> allowedFolders = await GetAllowedGenerationFoldersAsync(
+                new GetAllowedGenerationFoldersInputDto
+                {
+                    BackendId = input.BackendId,
+                    ArtifactType = input.ArtifactType
+                },
+                cancellationToken);
+
+            AllowedGenerationFolderDto selectedFolder = allowedFolders.FirstOrDefault(
+                folder => string.Equals(folder.FolderPath, normalizedFolderPath, StringComparison.OrdinalIgnoreCase));
+            if (selectedFolder == null)
+            {
+                throw new UserFriendlyException("The selected folder is not an approved target for that artifact type.");
+            }
+
+            return selectedFolder;
         }
 
         private void EnsureTenantContext()
@@ -496,6 +547,240 @@ namespace SeeSpec.Services.BackendService
             await File.WriteAllTextAsync(contextPath, serializedContext, cancellationToken);
         }
 
+        private static void ValidateGenerationFolderRequest(Guid backendId, GenerationArtifactType artifactType)
+        {
+            if (backendId == Guid.Empty)
+            {
+                throw new UserFriendlyException("BackendId is required.");
+            }
+
+            if (artifactType == GenerationArtifactType.Unknown)
+            {
+                throw new UserFriendlyException("A supported artifact type is required.");
+            }
+        }
+
+        private static List<AllowedGenerationFolderDto> BuildAllowedFolderOptions(
+            ImportContextFile importContext,
+            GenerationArtifactType artifactType)
+        {
+            ProjectContext applicationProject = FindProjectContext(importContext.ProjectFiles, ".Application");
+            ProjectContext entityFrameworkCoreProject = FindProjectContext(importContext.ProjectFiles, ".EntityFrameworkCore");
+            ProjectContext coreProject = BuildCoreProjectContext(importContext);
+
+            List<AllowedGenerationFolderDto> folders = artifactType switch
+            {
+                GenerationArtifactType.AppServiceInterface or GenerationArtifactType.AppServiceClass
+                    => BuildApplicationServiceFolders(applicationProject, artifactType),
+                GenerationArtifactType.Dto
+                    => BuildDtoFolders(applicationProject),
+                GenerationArtifactType.Repository
+                    => BuildRepositoryFolders(entityFrameworkCoreProject),
+                GenerationArtifactType.DomainEntity
+                    => BuildDomainFolders(coreProject),
+                GenerationArtifactType.PermissionSeed
+                    => BuildPermissionFolders(coreProject),
+                _ => new List<AllowedGenerationFolderDto>()
+            };
+
+            if (folders.Count == 0)
+            {
+                throw new UserFriendlyException("No approved folders were discovered for the requested artifact type.");
+            }
+
+            return folders
+                .OrderBy(folder => folder.FolderPath, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static List<AllowedGenerationFolderDto> BuildApplicationServiceFolders(ProjectContext projectContext, GenerationArtifactType artifactType)
+        {
+            if (projectContext == null)
+            {
+                throw new UserFriendlyException("The imported backend does not contain an Application project.");
+            }
+
+            return BuildFolderCandidates(projectContext, artifactType, "Services", "services");
+        }
+
+        private static List<AllowedGenerationFolderDto> BuildDtoFolders(ProjectContext projectContext)
+        {
+            if (projectContext == null)
+            {
+                throw new UserFriendlyException("The imported backend does not contain an Application project.");
+            }
+
+            List<AllowedGenerationFolderDto> dtoFolders = BuildFolderCandidates(projectContext, GenerationArtifactType.Dto, Path.Combine("Services", "Dto"), "services.dto");
+            dtoFolders.AddRange(FindExistingMatchingDirectories(projectContext, "Dto", "services.dto", GenerationArtifactType.Dto));
+            return DistinctFolders(dtoFolders);
+        }
+
+        private static List<AllowedGenerationFolderDto> BuildRepositoryFolders(ProjectContext projectContext)
+        {
+            if (projectContext == null)
+            {
+                throw new UserFriendlyException("The imported backend does not contain an EntityFrameworkCore project.");
+            }
+
+            List<AllowedGenerationFolderDto> repositoryFolders = BuildFolderCandidates(projectContext, GenerationArtifactType.Repository, "Repositories", "repositories");
+            repositoryFolders.AddRange(FindExistingMatchingDirectories(projectContext, "Repositories", "repositories", GenerationArtifactType.Repository));
+            return DistinctFolders(repositoryFolders);
+        }
+
+        private static List<AllowedGenerationFolderDto> BuildDomainFolders(ProjectContext projectContext)
+        {
+            if (projectContext == null)
+            {
+                throw new UserFriendlyException("The imported backend does not contain a Core project.");
+            }
+
+            return BuildFolderCandidates(projectContext, GenerationArtifactType.DomainEntity, "Domain", "domain");
+        }
+
+        private static List<AllowedGenerationFolderDto> BuildPermissionFolders(ProjectContext projectContext)
+        {
+            if (projectContext == null)
+            {
+                throw new UserFriendlyException("The imported backend does not contain a Core project.");
+            }
+
+            List<AllowedGenerationFolderDto> permissionFolders = new List<AllowedGenerationFolderDto>();
+            permissionFolders.AddRange(BuildFolderCandidates(projectContext, GenerationArtifactType.PermissionSeed, "Authorization", "authorization"));
+            permissionFolders.AddRange(BuildFolderCandidates(projectContext, GenerationArtifactType.PermissionSeed, Path.Combine("Authorization", "Roles"), "authorization.roles"));
+            permissionFolders.AddRange(BuildFolderCandidates(projectContext, GenerationArtifactType.PermissionSeed, Path.Combine("Authorization", "Users"), "authorization.users"));
+            return DistinctFolders(permissionFolders);
+        }
+
+        private static List<AllowedGenerationFolderDto> BuildFolderCandidates(
+            ProjectContext projectContext,
+            GenerationArtifactType artifactType,
+            string relativeFolderPath,
+            string moduleName)
+        {
+            string targetFolder = Path.Combine(projectContext.ProjectDirectoryPath, relativeFolderPath);
+            List<AllowedGenerationFolderDto> folders = new List<AllowedGenerationFolderDto>
+            {
+                CreateAllowedFolderDto(projectContext, targetFolder, moduleName, artifactType)
+            };
+
+            if (Directory.Exists(targetFolder))
+            {
+                folders.AddRange(
+                    Directory.EnumerateDirectories(targetFolder, "*", SearchOption.AllDirectories)
+                        .Where(directoryPath => !ShouldIgnoreDirectory(directoryPath))
+                        .Select(directoryPath => CreateAllowedFolderDto(projectContext, directoryPath, moduleName, artifactType)));
+            }
+
+            return DistinctFolders(folders);
+        }
+
+        private static List<AllowedGenerationFolderDto> FindExistingMatchingDirectories(
+            ProjectContext projectContext,
+            string directoryName,
+            string moduleName,
+            GenerationArtifactType artifactType)
+        {
+            if (!Directory.Exists(projectContext.ProjectDirectoryPath))
+            {
+                return new List<AllowedGenerationFolderDto>();
+            }
+
+            return DistinctFolders(
+                Directory.EnumerateDirectories(projectContext.ProjectDirectoryPath, "*", SearchOption.AllDirectories)
+                    .Where(directoryPath => !ShouldIgnoreDirectory(directoryPath))
+                    .Where(directoryPath => string.Equals(Path.GetFileName(directoryPath), directoryName, StringComparison.OrdinalIgnoreCase))
+                    .Select(directoryPath => CreateAllowedFolderDto(projectContext, directoryPath, moduleName, artifactType))
+                    .ToList());
+        }
+
+        private static AllowedGenerationFolderDto CreateAllowedFolderDto(
+            ProjectContext projectContext,
+            string folderPath,
+            string moduleName,
+            GenerationArtifactType artifactType)
+        {
+            return new AllowedGenerationFolderDto
+            {
+                FolderPath = NormalizeFolderPath(folderPath),
+                ProjectPath = projectContext.ProjectPath,
+                ProjectName = projectContext.ProjectName,
+                ModuleName = moduleName,
+                ProjectKind = projectContext.ProjectKind,
+                ArtifactType = artifactType,
+                FolderExists = Directory.Exists(folderPath)
+            };
+        }
+
+        private static List<AllowedGenerationFolderDto> DistinctFolders(List<AllowedGenerationFolderDto> folders)
+        {
+            return folders
+                .GroupBy(folder => folder.FolderPath, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
+        }
+
+        private async Task<ImportContextFile> GetImportContextAsync(Guid backendId, CancellationToken cancellationToken)
+        {
+            string importRoot = Path.Combine(Path.GetTempPath(), TempRootFolderName);
+            if (!Directory.Exists(importRoot))
+            {
+                throw new UserFriendlyException("No imported backend workspace is available for folder discovery.");
+            }
+
+            List<string> contextFiles = Directory.EnumerateFiles(importRoot, "import-context.json", SearchOption.AllDirectories)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ToList();
+
+            foreach (string contextFilePath in contextFiles)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ImportContextFile context = JsonConvert.DeserializeObject<ImportContextFile>(
+                    await File.ReadAllTextAsync(contextFilePath, cancellationToken));
+                if (context != null && context.BackendId == backendId)
+                {
+                    return context;
+                }
+            }
+
+            throw new UserFriendlyException("No imported backend context was found for the selected backend.");
+        }
+
+        private static ProjectContext BuildCoreProjectContext(ImportContextFile importContext)
+        {
+            if (string.IsNullOrWhiteSpace(importContext.CoreProjectPath))
+            {
+                return null;
+            }
+
+            return new ProjectContext
+            {
+                ProjectPath = importContext.CoreProjectPath,
+                ProjectDirectoryPath = importContext.CoreDirectoryPath,
+                ProjectName = Path.GetFileNameWithoutExtension(importContext.CoreProjectPath) ?? "Core",
+                ProjectKind = "Core"
+            };
+        }
+
+        private static ProjectContext FindProjectContext(IEnumerable<string> projectFiles, string projectSuffix)
+        {
+            string projectPath = projectFiles
+                .FirstOrDefault(path =>
+                    (Path.GetFileNameWithoutExtension(path) ?? string.Empty).EndsWith(projectSuffix, StringComparison.OrdinalIgnoreCase)
+                    || (Path.GetFileName(Path.GetDirectoryName(path) ?? string.Empty) ?? string.Empty).EndsWith(projectSuffix, StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrWhiteSpace(projectPath))
+            {
+                return null;
+            }
+
+            return new ProjectContext
+            {
+                ProjectPath = projectPath,
+                ProjectDirectoryPath = Path.GetDirectoryName(projectPath) ?? string.Empty,
+                ProjectName = Path.GetFileNameWithoutExtension(projectPath) ?? projectSuffix.Trim('.'),
+                ProjectKind = projectSuffix.Trim('.')
+            };
+        }
+
         private static void DeleteDirectoryIfExists(string directoryPath)
         {
             if (!Directory.Exists(directoryPath))
@@ -555,6 +840,17 @@ namespace SeeSpec.Services.BackendService
             public string CoreDirectoryPath { get; set; }
 
             public List<string> DetectedPackages { get; set; }
+        }
+
+        private sealed class ProjectContext
+        {
+            public string ProjectPath { get; set; }
+
+            public string ProjectDirectoryPath { get; set; }
+
+            public string ProjectName { get; set; }
+
+            public string ProjectKind { get; set; }
         }
     }
 }

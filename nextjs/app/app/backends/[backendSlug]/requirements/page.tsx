@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendRequirementsWorkspace } from "@/app/components/app/backend-requirements-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
@@ -20,20 +20,87 @@ export default function BackendRequirementsPage() {
     const { createDiagramElement, getDiagramElementsByBackend, updateDiagramElement } = useDiagramElementActions();
     const { createSection, getSectionsByBackend, updateSection } = useSpecSectionActions();
     const backendId = backend?.id ?? null;
+    const [hasResolvedBackend, setHasResolvedBackend] = useState(false);
+    const [hasResolvedData, setHasResolvedData] = useState(false);
+    const [pageErrorMessage, setPageErrorMessage] = useState<string | null>(null);
 
     useEffect(() => {
-        getBackendBySlug(params.backendSlug).catch(() => {});
+        let isActive = true;
+
+        getBackendBySlug(params.backendSlug)
+            .catch((error) => {
+                if (!isActive) {
+                    return;
+                }
+
+                setPageErrorMessage(error instanceof Error ? error.message : "Unable to load this backend.");
+            })
+            .finally(() => {
+                if (isActive) {
+                    setHasResolvedBackend(true);
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
     }, [params.backendSlug, getBackendBySlug]);
 
     useEffect(() => {
+        let isActive = true;
         if (backendId !== null) {
-            getSectionsByBackend(backendId).catch(() => {});
-            getDiagramElementsByBackend(backendId).catch(() => {});
+            Promise.all([getSectionsByBackend(backendId), getDiagramElementsByBackend(backendId)])
+                .catch((error) => {
+                    if (!isActive) {
+                        return;
+                    }
+
+                    setPageErrorMessage(
+                        error instanceof Error ? error.message : "Unable to load backend requirements."
+                    );
+                })
+                .finally(() => {
+                    if (isActive) {
+                        setHasResolvedData(true);
+                    }
+                });
+            return () => {
+                isActive = false;
+            };
         }
+        return () => {
+            isActive = false;
+        };
     }, [backendId, getDiagramElementsByBackend, getSectionsByBackend]);
 
     if (!hasPermission(session, APP_PERMISSIONS.requirements)) {
         return <AccessPanel title="Requirements" message="Your current role does not allow access to backend requirements." />;
+    }
+
+    if (pageErrorMessage) {
+        return (
+            <section className="page-section">
+                <div className="card backend-state-card">
+                    <div className="card-body backend-blocked-state">
+                        <strong>Requirements workspace failed to load.</strong>
+                        <p>{pageErrorMessage}</p>
+                    </div>
+                </div>
+            </section>
+        );
+    }
+
+    if (!hasResolvedBackend || (backend !== null && !hasResolvedData)) {
+        return (
+            <section className="page-section">
+                <div className="card backend-state-card">
+                    <div className="card-body backend-blocked-state">
+                        <strong>Loading requirements workspace...</strong>
+                        <p>Fetching requirement sections and linked diagrams for this backend.</p>
+                    </div>
+                </div>
+            </section>
+        );
     }
 
     if (backend === null) {
