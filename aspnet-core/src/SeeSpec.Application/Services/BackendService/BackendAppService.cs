@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Abp.Application.Services;
 using Abp.Application.Services.Dto;
 using Abp.Authorization;
+using Abp.Collections.Extensions;
 using Abp.Domain.Repositories;
 using Abp.UI;
 using Microsoft.AspNetCore.Http;
@@ -28,6 +29,20 @@ namespace SeeSpec.Services.BackendService
         {
             _specAppService = specAppService;
             _backendImportService = backendImportService;
+        }
+
+        public async Task<BackendDto> GetBySlugAsync(GetBackendBySlugInputDto input)
+        {
+            if (input == null || string.IsNullOrWhiteSpace(input.Slug))
+            {
+                throw new UserFriendlyException("A backend slug is required.");
+            }
+
+            // Route-scoped pages must resolve the backend directly instead of depending on a paged list lookup.
+            var backend = await AsyncQueryableExecuter.FirstOrDefaultAsync(
+                Repository.GetAll().Where(x => x.Slug == input.Slug));
+
+            return backend == null ? null : MapToEntityDto(backend);
         }
 
         public override async Task<BackendDto> CreateAsync(BackendDto input)

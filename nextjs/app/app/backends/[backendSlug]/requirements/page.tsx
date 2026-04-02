@@ -1,18 +1,21 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendRequirementsWorkspace } from "@/app/components/app/backend-requirements-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
+import { withAuth, type WithAuthProps } from "@/app/lib/auth/with-auth";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import { useDiagramElementActions, useDiagramElementState } from "@/app/lib/providers/diagramElementProvider";
 import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
-import { useUserState } from "@/app/lib/providers/userProvider";
+import { selectOverviewSection } from "@/app/lib/workflow/overview-gate";
 
-export default function BackendRequirementsPage() {
+const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "System Architect", "Project Lead"] as const;
+
+function BackendRequirementsPage({ session }: WithAuthProps) {
     const params = useParams<{ backendSlug: string }>();
-    const { session } = useUserState();
+    const router = useRouter();
     const { backend } = useBackendState();
     const { sections } = useSpecSectionState();
     const { diagramElements } = useDiagramElementState();
@@ -73,6 +76,19 @@ export default function BackendRequirementsPage() {
         };
     }, [backendId, getDiagramElementsByBackend, getSectionsByBackend]);
 
+    const overviewSection = backend ? selectOverviewSection(sections, backend.slug) : null;
+    const requirementSections = sections.filter((item) => item.type === "requirement");
+
+    useEffect(() => {
+        if (!backend || !hasResolvedBackend || !hasResolvedData) {
+            return;
+        }
+
+        if (!overviewSection || !overviewSection.isAccepted) {
+            router.replace(`/app/backends/${backend.slug}/overview`);
+        }
+    }, [backend, hasResolvedBackend, hasResolvedData, overviewSection, router]);
+
     if (!hasPermission(session, APP_PERMISSIONS.requirements)) {
         return <AccessPanel title="Requirements" message="Your current role does not allow access to backend requirements." />;
     }
@@ -116,12 +132,9 @@ export default function BackendRequirementsPage() {
         );
     }
 
-    // Roles stay on the overview page only; requirements only consume the real overview section for gating.
-    const overviewSection =
-        sections.find((item) => item.type === "overview" && item.slug === `${backend.slug}-overview`) ??
-        sections.find((item) => item.type === "overview") ??
-        null;
-    const requirementSections = sections.filter((item) => item.type === "requirement");
+    if (!overviewSection || !overviewSection.isAccepted) {
+        return null;
+    }
 
     return (
         <BackendRequirementsWorkspace
@@ -198,3 +211,5 @@ export default function BackendRequirementsPage() {
         />
     );
 }
+
+export default withAuth(BackendRequirementsPage, { roles: [...WORKFLOW_ROLES] });

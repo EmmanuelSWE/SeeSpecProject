@@ -114,6 +114,10 @@ type SectionMetadata = {
   isAccepted?: boolean;
 };
 
+function isOverviewSlug(slug: string) {
+  return slug === "overview" || slug.endsWith("-overview");
+}
+
 function slugify(value: string) {
   return value
     .trim()
@@ -143,7 +147,7 @@ function apiTypeToSectionType(section: SpecSectionApiDto): SpecSectionType | nul
     return "requirement";
   }
 
-  if (section.sectionType === 4 && section.slug.endsWith("-overview")) {
+  if (section.sectionType === 4 && isOverviewSlug(section.slug)) {
     return "overview";
   }
 
@@ -228,7 +232,7 @@ function serializeMetadata(type: SpecSectionType, payload: CreateSpecSectionInpu
 
 function buildSectionSlug(type: SpecSectionType, title: string, backendSlug: string) {
   if (type === "overview") {
-    return `${backendSlug}-overview`;
+    return "overview";
   }
 
   if (type === "role") {

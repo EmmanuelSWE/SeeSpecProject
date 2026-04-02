@@ -1,18 +1,21 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { DomainModelWorkspace } from "@/app/components/app/domain-model-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
+import { withAuth, type WithAuthProps } from "@/app/lib/auth/with-auth";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import { useDiagramElementActions, useDiagramElementState } from "@/app/lib/providers/diagramElementProvider";
 import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
-import { useUserState } from "@/app/lib/providers/userProvider";
+import { selectOverviewSection } from "@/app/lib/workflow/overview-gate";
 
-export default function BackendDomainModelPage() {
+const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "System Architect", "Project Lead"] as const;
+
+function BackendDomainModelPage({ session }: WithAuthProps) {
     const params = useParams<{ backendSlug: string }>();
-    const { session } = useUserState();
+    const router = useRouter();
     const { backend } = useBackendState();
     const { sections } = useSpecSectionState();
     const { diagramElements } = useDiagramElementState();
@@ -76,6 +79,18 @@ export default function BackendDomainModelPage() {
         };
     }, [backendId, getDiagramElementsByBackendAndType, getSectionsByBackend]);
 
+    const overviewSection = backend ? selectOverviewSection(sections, backend.slug) : null;
+
+    useEffect(() => {
+        if (!backend || !hasResolvedBackend || !hasResolvedData) {
+            return;
+        }
+
+        if (!overviewSection || !overviewSection.isAccepted) {
+            router.replace(`/app/backends/${backend.slug}/overview`);
+        }
+    }, [backend, hasResolvedBackend, hasResolvedData, overviewSection, router]);
+
     if (!hasPermission(session, APP_PERMISSIONS.domainModel)) {
         return <AccessPanel title="Domain model" message="Your current role does not allow access to the domain model." />;
     }
@@ -119,23 +134,11 @@ export default function BackendDomainModelPage() {
         );
     }
 
-    const overviewSection =
-        sections.find((item) => item.type === "overview" && item.slug === `${backend.slug}-overview`) ??
-        sections.find((item) => item.type === "overview") ??
-        null;
-
     if (!overviewSection || !overviewSection.isAccepted) {
-        return (
-            <section className="page-section">
-                <div className="card backend-state-card">
-                    <div className="card-body backend-blocked-state">
-                        <strong>Overview acceptance required.</strong>
-                        <p>Complete and accept the overview before opening the domain model step.</p>
-                    </div>
-                </div>
-            </section>
-        );
+        return null;
     }
 
     return <DomainModelWorkspace backend={backend} diagram={diagramElements[0] ?? null} />;
 }
+
+export default withAuth(BackendDomainModelPage, { roles: [...WORKFLOW_ROLES] });

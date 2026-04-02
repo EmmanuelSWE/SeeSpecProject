@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendOverviewWorkspace } from "@/app/components/app/backend-overview-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
+import { withAuth, type WithAuthProps } from "@/app/lib/auth/with-auth";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import type { AllowedGenerationFolder, GenerationArtifactType } from "@/app/lib/providers/backendProvider/context";
 import type { GenerationRunMode } from "@/app/lib/providers/specProvider/context";
@@ -14,11 +15,12 @@ import {
     createSectionItem,
     updateSectionItem
 } from "@/app/lib/utils/services/section-item-service";
-import { useUserState } from "@/app/lib/providers/userProvider";
+import { hasOverviewChanged, selectOverviewSection } from "@/app/lib/workflow/overview-gate";
 
-export default function BackendOverviewPage() {
+const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "System Architect", "Project Lead"] as const;
+
+function BackendOverviewPage({ session }: WithAuthProps) {
     const params = useParams<{ backendSlug: string }>();
-    const { session } = useUserState();
     const { backend } = useBackendState();
     const { generatedPreview, isGeneratingPreview, previewErrorMessage, isApplyingGeneratedCode, applyGeneratedCodeErrorMessage } = useSpecState();
     const { sections } = useSpecSectionState();
@@ -138,10 +140,7 @@ export default function BackendOverviewPage() {
         };
     }, [backend, generationArtifactType, generationRunMode, getAllowedGenerationFolders]);
 
-    const overviewSection =
-        sections.find((item) => item.type === "overview" && item.slug === `${backend?.slug ?? ""}-overview`) ??
-        sections.find((item) => item.type === "overview") ??
-        null;
+    const overviewSection = selectOverviewSection(sections, backend?.slug ?? null);
     const roleSections = sections.filter((item) => item.type === "role");
     const isPageLoading = !hasResolvedBackend || (backend !== null && !hasResolvedSections);
 
@@ -267,17 +266,19 @@ export default function BackendOverviewPage() {
             }}
             onSaveOverview={async (payload) => {
                 // Overview is a singleton per backend, so edit must always bind to the existing section identity.
-                const existingOverview =
-                    sections.find((item) => item.type === "overview" && item.slug === `${backend.slug}-overview`) ??
-                    sections.find((item) => item.type === "overview") ??
-                    null;
+                const existingOverview = selectOverviewSection(sections, backend.slug);
+                const nextOverviewContent: [string, string, string] = [payload.summary, payload.scope, payload.goals];
 
                 if (existingOverview) {
+                    if (!hasOverviewChanged(existingOverview, nextOverviewContent)) {
+                        return;
+                    }
+
                     await updateSection({
                         id: existingOverview.id,
                         title: `${backend.name} Overview`,
                         summary: payload.summary,
-                        content: [payload.summary, payload.scope, payload.goals],
+                        content: nextOverviewContent,
                         isAccepted: false
                     });
                     await getSectionsByBackend(backend.id);
@@ -289,17 +290,14 @@ export default function BackendOverviewPage() {
                     type: "overview",
                     title: `${backend.name} Overview`,
                     summary: payload.summary,
-                    content: [payload.summary, payload.scope, payload.goals],
+                    content: nextOverviewContent,
                     isAccepted: false,
                     tags: ["Overview", backend.name]
                 });
                 await getSectionsByBackend(backend.id);
             }}
             onAcceptOverview={async () => {
-                const existingOverview =
-                    sections.find((item) => item.type === "overview" && item.slug === `${backend.slug}-overview`) ??
-                    sections.find((item) => item.type === "overview") ??
-                    null;
+                const existingOverview = selectOverviewSection(sections, backend.slug);
 
                 if (!existingOverview) {
                     return;
@@ -357,3 +355,5 @@ export default function BackendOverviewPage() {
         />
     );
 }
+
+export default withAuth(BackendOverviewPage, { roles: [...WORKFLOW_ROLES] });

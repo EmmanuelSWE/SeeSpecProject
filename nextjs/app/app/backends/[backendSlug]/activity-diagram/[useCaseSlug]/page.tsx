@@ -1,21 +1,27 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { ActivityDiagramWorkspace } from "@/app/components/app/activity-diagram-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
+import { withAuth, type WithAuthProps } from "@/app/lib/auth/with-auth";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import { useDiagramElementActions, useDiagramElementState } from "@/app/lib/providers/diagramElementProvider";
-import { useUserState } from "@/app/lib/providers/userProvider";
+import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
+import { selectOverviewSection } from "@/app/lib/workflow/overview-gate";
 
-export default function BackendActivityDiagramPage() {
+const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "System Architect", "Project Lead"] as const;
+
+function BackendActivityDiagramPage({ session }: WithAuthProps) {
   const params = useParams<{ backendSlug: string; useCaseSlug: string }>();
-  const { session } = useUserState();
+  const router = useRouter();
   const { backend } = useBackendState();
   const { diagramElements } = useDiagramElementState();
   const { getBackendBySlug } = useBackendActions();
   const { getDiagramElementsByBackend } = useDiagramElementActions();
+  const { sections } = useSpecSectionState();
+  const { getSectionsByBackend } = useSpecSectionActions();
   const [hasResolvedBackend, setHasResolvedBackend] = useState(false);
   const [hasResolvedDiagrams, setHasResolvedDiagrams] = useState(false);
   const [pageErrorMessage, setPageErrorMessage] = useState<string | null>(null);
@@ -45,7 +51,10 @@ export default function BackendActivityDiagramPage() {
   useEffect(() => {
     let isActive = true;
     if (backend) {
-      getDiagramElementsByBackend(backend.id)
+      Promise.all([
+        getDiagramElementsByBackend(backend.id),
+        getSectionsByBackend(backend.id)
+      ])
         .catch((error) => {
           if (!isActive) {
             return;
@@ -65,7 +74,7 @@ export default function BackendActivityDiagramPage() {
     return () => {
       isActive = false;
     };
-  }, [backend, getDiagramElementsByBackend]);
+  }, [backend, getDiagramElementsByBackend, getSectionsByBackend]);
 
   const useCase = useMemo(
     () =>
@@ -88,6 +97,20 @@ export default function BackendActivityDiagramPage() {
       ) ?? null,
     [backend?.id, diagramElements, params.useCaseSlug]
   );
+  const overviewSection = useMemo(
+    () => selectOverviewSection(sections, backend?.slug ?? null),
+    [backend?.slug, sections]
+  );
+
+  useEffect(() => {
+    if (!backend || !hasResolvedBackend || !hasResolvedDiagrams) {
+      return;
+    }
+
+    if (!overviewSection || !overviewSection.isAccepted) {
+      router.replace(`/app/backends/${backend.slug}/overview`);
+    }
+  }, [backend, hasResolvedBackend, hasResolvedDiagrams, overviewSection, router]);
 
   if (!hasPermission(session, APP_PERMISSIONS.activityDiagram)) {
     return <AccessPanel title="Activity Diagram" message="Your current role does not allow access to activity diagrams." />;
@@ -120,7 +143,7 @@ export default function BackendActivityDiagramPage() {
   }
 
   if (!backend || !useCase || !activityDiagram) {
-    return (
+        return (
       <section className="page-section">
         <div className="card backend-state-card">
           <div className="card-body backend-blocked-state">
@@ -132,5 +155,11 @@ export default function BackendActivityDiagramPage() {
     );
   }
 
+  if (!overviewSection || !overviewSection.isAccepted) {
+    return null;
+  }
+
   return <ActivityDiagramWorkspace backend={backend} useCase={useCase} activityDiagram={activityDiagram} />;
 }
+
+export default withAuth(BackendActivityDiagramPage, { roles: [...WORKFLOW_ROLES] });
