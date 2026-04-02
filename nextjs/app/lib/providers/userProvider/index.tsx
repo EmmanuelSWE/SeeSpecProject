@@ -48,6 +48,7 @@ function readSession(): IUserSession | null {
       expireInSeconds: number;
       roleNames?: string[];
       grantedPermissions?: string[];
+      mustChangePassword?: boolean;
     };
 
     return {
@@ -60,7 +61,8 @@ function readSession(): IUserSession | null {
       fullName: parsed.fullName,
       emailAddress: parsed.emailAddress,
       roleNames: parsed.roleNames ?? [],
-      grantedPermissions: parsed.grantedPermissions ?? []
+      grantedPermissions: parsed.grantedPermissions ?? [],
+      mustChangePassword: parsed.mustChangePassword ?? false
     };
   } catch {
     return null;
@@ -97,7 +99,8 @@ async function fetchCurrentSession(): Promise<IUserSession | null> {
       fullName: `${result.user.name} ${result.user.surname}`.trim(),
       emailAddress: result.user.emailAddress,
       roleNames: result.user.roleNames ?? [],
-      grantedPermissions: result.user.grantedPermissions ?? []
+      grantedPermissions: result.user.grantedPermissions ?? [],
+      mustChangePassword: result.user.mustChangePassword ?? false
     };
   } catch {
     return readSession();

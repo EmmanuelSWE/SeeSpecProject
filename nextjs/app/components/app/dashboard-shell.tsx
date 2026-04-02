@@ -2,21 +2,33 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { Icon, type IconName } from "@/app/components/global/icons";
-import { APP_PERMISSIONS, hasPermission, isTenantAdminSession } from "@/app/lib/auth/permissions";
+import { APP_PERMISSIONS, hasAnyPermission, hasPermission, isTenantAdminSession } from "@/app/lib/auth/permissions";
 import { languages, sidebarItems, tenantAdminSidebarItems, versionText } from "@/app/lib/data";
 import { useUserActions, useUserState } from "@/app/lib/providers/userProvider";
 
-const tenantSidebarPermissionMap: Record<string, string | null> = {
-  "/app/home": APP_PERMISSIONS.dashboard,
-  "/app/backends": APP_PERMISSIONS.backends,
-  "/app/assignments": APP_PERMISSIONS.assignments,
-  "/app/domain-model": APP_PERMISSIONS.domainModel,
-  "/app/tenants": APP_PERMISSIONS.tenants,
-  "/app/users": APP_PERMISSIONS.users,
-  "/app/settings": APP_PERMISSIONS.settings
+const assignmentAccessPermissions = [
+  APP_PERMISSIONS.assignments,
+  APP_PERMISSIONS.assignmentsCreate,
+  APP_PERMISSIONS.assignmentsEdit,
+  APP_PERMISSIONS.assignmentsDelete,
+  APP_PERMISSIONS.assignmentsAssignPeople,
+  APP_PERMISSIONS.assignmentsComplete,
+  APP_PERMISSIONS.assignmentsReassign,
+  APP_PERMISSIONS.assignmentsViewAll,
+  APP_PERMISSIONS.assignmentsManageStatus
+];
+
+const tenantSidebarPermissionMap: Record<string, string[] | null> = {
+  "/app/home": [APP_PERMISSIONS.dashboard],
+  "/app/backends": [APP_PERMISSIONS.backends],
+  "/app/assignments": assignmentAccessPermissions,
+  "/app/domain-model": [APP_PERMISSIONS.diagramsView],
+  "/app/tenants": [APP_PERMISSIONS.tenants],
+  "/app/users": [APP_PERMISSIONS.users, APP_PERMISSIONS.teamView, APP_PERMISSIONS.teamViewAll, APP_PERMISSIONS.teamAddPeople, APP_PERMISSIONS.teamEditPeople],
+  "/app/settings": [APP_PERMISSIONS.settings]
 };
 
 function Flag({ code }: { code: string }) {
@@ -25,6 +37,8 @@ function Flag({ code }: { code: string }) {
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const currentPathname = pathname ?? "/app/home";
+  const router = useRouter();
   const { logout } = useUserActions();
   const { session } = useUserState();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -34,6 +48,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const currentLanguage = languages[0];
   const isHostContext = session?.tenantId == null;
   const isTenantAdmin = isTenantAdminSession(session);
+
+  useEffect(() => {
+    if (session?.mustChangePassword && currentPathname !== "/app/update-password") {
+      router.replace("/app/update-password");
+    }
+  }, [currentPathname, router, session?.mustChangePassword]);
+
   const visibleSidebarItems = useMemo(() => {
     if (isHostContext) {
       return sidebarItems
@@ -45,16 +66,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       return tenantAdminSidebarItems;
     }
 
-    return tenantAdminSidebarItems.filter((item) => {
-      const permission = tenantSidebarPermissionMap[item.href];
-      return permission ? hasPermission(session, permission) : false;
-    });
+      return tenantAdminSidebarItems.filter((item) => {
+        const permission = tenantSidebarPermissionMap[item.href];
+        return permission ? hasAnyPermission(session, permission) : false;
+      });
   }, [isHostContext, isTenantAdmin, session]);
   const activeLabel = useMemo(
     () =>
-      visibleSidebarItems.find((item) => pathname === item.href)?.label ??
-      (pathname.startsWith("/app/backends") ? "Backends" : isHostContext ? "Profile" : "Workspace"),
-    [isHostContext, pathname, visibleSidebarItems]
+      visibleSidebarItems.find((item) => currentPathname === item.href)?.label ??
+      (currentPathname.startsWith("/app/backends") ? "Backends" : isHostContext ? "Profile" : "Workspace"),
+    [currentPathname, isHostContext, visibleSidebarItems]
   );
 
   return (
@@ -69,6 +90,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           >
             <Icon name="menu" />
           </button>
+          <Link href="/app/home" className="topbar-brand-mark" aria-label="SeeSpec home">
+            <span className="topbar-brand-badge">S</span>
+          </Link>
           <Link href="/app/home" className="top-link">
             {isHostContext ? "Profile" : "Workspace"}
           </Link>
@@ -168,7 +192,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
       <aside className="sidebar">
         <Link href="/app/home" className="brand">
-          <Image src="/img/logo.png" alt="SeeSpec logo" width={36} height={36} className="brand-logo" />
+          <span className="brand-badge">S</span>
           <span>SeeSpec</span>
         </Link>
 
@@ -179,7 +203,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         <nav className="side-nav">
           {visibleSidebarItems.map((item) => {
-            const isActive = pathname === item.href || (item.href === "/app/backends" && pathname.startsWith("/app/backends/"));
+            const isActive = currentPathname === item.href || (item.href === "/app/backends" && currentPathname.startsWith("/app/backends/"));
             return (
               <Link key={item.href} href={item.href} className={`side-link ${isActive ? "active" : ""}`}>
                 <Icon name={item.icon as IconName} />

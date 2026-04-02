@@ -14,5 +14,6 @@ namespace SeeSpec.Users
         Task ChangeLanguage(ChangeUserLanguageDto input);
 
         Task<bool> ChangePassword(ChangePasswordDto input);
+        Task<bool> ResetPassword(ResetPasswordDto input);
     }
 }

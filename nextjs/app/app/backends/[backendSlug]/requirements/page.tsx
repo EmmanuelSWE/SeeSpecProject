@@ -16,6 +16,8 @@ const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "Syste
 
 function BackendRequirementsPage({ session }: WithAuthProps) {
     const params = useParams<{ backendSlug: string }>();
+    const backendSlug = params?.backendSlug ?? null;
+    const routeErrorMessage = backendSlug ? null : "Unable to resolve this backend route.";
     const { backend } = useBackendState();
     const { sections } = useSpecSectionState();
     const { diagramElements } = useDiagramElementState();
@@ -27,11 +29,22 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
     const [hasResolvedData, setHasResolvedData] = useState(false);
     const [pageErrorMessage, setPageErrorMessage] = useState<string | null>(null);
     const [workflowReadiness, setWorkflowReadiness] = useState<BackendWorkflowReadiness | null>(null);
+    const canViewRequirements = hasPermission(session, APP_PERMISSIONS.requirements);
+    const canCreateRequirementSections = hasPermission(session, APP_PERMISSIONS.requirementsCreate);
+    const canEditRequirementSections = hasPermission(session, APP_PERMISSIONS.requirementsEdit);
+    const canViewDiagrams = hasPermission(session, APP_PERMISSIONS.diagramsView);
+    const canEditDiagrams = hasPermission(session, APP_PERMISSIONS.diagramsEdit);
 
     useEffect(() => {
         let isActive = true;
 
-        getBackendBySlug(params.backendSlug)
+        if (!backendSlug) {
+            return () => {
+                isActive = false;
+            };
+        }
+
+        getBackendBySlug(backendSlug)
             .catch((error) => {
                 if (!isActive) {
                     return;
@@ -48,7 +61,7 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
         return () => {
             isActive = false;
         };
-    }, [params.backendSlug, getBackendBySlug]);
+    }, [backendSlug, getBackendBySlug]);
 
     useEffect(() => {
         let isActive = true;
@@ -93,17 +106,17 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
     const overviewSection = backend ? selectOverviewSection(sections, backend.slug) : null;
     const requirementSections = sections.filter((item) => item.type === "requirement");
 
-    if (!hasPermission(session, APP_PERMISSIONS.requirements)) {
+    if (!canViewRequirements) {
         return <AccessPanel title="Requirements" message="Your current role does not allow access to backend requirements." />;
     }
 
-    if (pageErrorMessage) {
+    if (routeErrorMessage || pageErrorMessage) {
         return (
             <section className="page-section">
                 <div className="card backend-state-card">
                     <div className="card-body backend-blocked-state">
                         <strong>Requirements workspace failed to load.</strong>
-                        <p>{pageErrorMessage}</p>
+                        <p>{routeErrorMessage ?? pageErrorMessage}</p>
                     </div>
                 </div>
             </section>
@@ -144,6 +157,10 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
             useCaseDiagrams={diagramElements.filter((item) => item.type === "use-case")}
             activityDiagrams={diagramElements.filter((item) => item.type === "activity")}
             workflowReadiness={workflowReadiness}
+            canCreateRequirementSections={canCreateRequirementSections}
+            canEditRequirementSections={canEditRequirementSections}
+            canViewDiagrams={canViewDiagrams}
+            canEditDiagrams={canEditDiagrams}
             onCreateRequirement={async (payload) => {
                 const created = await createSection(payload);
                 await getSectionsByBackend(backend.id);

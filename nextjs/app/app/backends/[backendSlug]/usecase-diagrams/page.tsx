@@ -13,6 +13,7 @@ import { useUserState } from "@/app/lib/providers/userProvider";
 
 export default function BackendUseCaseIndexPage() {
     const params = useParams<{ backendSlug: string }>();
+    const backendSlug = params?.backendSlug ?? null;
     const router = useRouter();
     const { session } = useUserState();
     const { backend } = useBackendState();
@@ -22,8 +23,12 @@ export default function BackendUseCaseIndexPage() {
     const backendId = backend?.id ?? null;
 
     useEffect(() => {
-        getBackendBySlug(params.backendSlug).catch(() => {});
-    }, [getBackendBySlug, params.backendSlug]);
+        if (!backendSlug) {
+            return;
+        }
+
+        getBackendBySlug(backendSlug).catch(() => {});
+    }, [backendSlug, getBackendBySlug]);
 
     useEffect(() => {
         if (backendId !== null) {
@@ -54,7 +59,13 @@ export default function BackendUseCaseIndexPage() {
                                 <button
                                     type="button"
                                     className="requirements-action-button"
-                                    onClick={() => router.push(`/app/backends/${params.backendSlug}/requirements`)}
+                                    onClick={() => {
+                                        if (!backendSlug) {
+                                            return;
+                                        }
+
+                                        router.push(`/app/backends/${backendSlug}/requirements`);
+                                    }}
                                 >
                                     Go to requirements
                                 </button>

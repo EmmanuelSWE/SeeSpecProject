@@ -18,5 +18,7 @@ namespace SeeSpec.Sessions.Dto
         public string[] RoleNames { get; set; }
 
         public string[] GrantedPermissions { get; set; }
+
+        public bool MustChangePassword { get; set; }
     }
 }

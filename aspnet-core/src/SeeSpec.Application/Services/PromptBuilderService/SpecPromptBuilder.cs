@@ -24,6 +24,11 @@ namespace SeeSpec.Services.PromptBuilderService
                 .ToList();
 
             var builder = new StringBuilder();
+            builder.AppendLine("GENERATION INSTRUCTIONS");
+            builder.AppendLine("Generate code only for the target backend/system described by this specification.");
+            builder.AppendLine("Do not use SeeSpec product names, namespaces, comments, base classes, DTO names, or implementation details unless they already exist in the uploaded backend itself.");
+            builder.AppendLine("Use the specification's domain language and backend context as the source of truth.");
+            builder.AppendLine();
             builder.AppendLine("SPECIFICATION CONTEXT");
             builder.AppendLine(string.Format("SpecId: {0}", spec.Id));
             builder.AppendLine(string.Format("BackendId: {0}", spec.BackendId));

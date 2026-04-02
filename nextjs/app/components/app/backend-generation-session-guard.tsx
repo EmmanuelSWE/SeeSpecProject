@@ -41,6 +41,7 @@ function writeTracker(tracker: BackendTracker): void {
 
 export function BackendGenerationSessionGuard() {
     const params = useParams<{ backendSlug: string }>();
+    const backendSlug = params?.backendSlug ?? null;
     const { getBackendBySlug } = useBackendActions();
     const { cleanupGenerationWorkspace } = useSpecActions();
 
@@ -48,7 +49,11 @@ export function BackendGenerationSessionGuard() {
         let isActive = true;
 
         void (async () => {
-            const nextBackend = await getBackendBySlug(params.backendSlug);
+            if (!backendSlug) {
+                return;
+            }
+
+            const nextBackend = await getBackendBySlug(backendSlug);
             if (!isActive || !nextBackend) {
                 return;
             }
@@ -67,7 +72,7 @@ export function BackendGenerationSessionGuard() {
         return () => {
             isActive = false;
         };
-    }, [cleanupGenerationWorkspace, getBackendBySlug, params.backendSlug]);
+    }, [backendSlug, cleanupGenerationWorkspace, getBackendBySlug]);
 
     return null;
 }

@@ -8,10 +8,12 @@ import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element
 
 export function DomainModelWorkspace({
     backend,
-    diagram
+    diagram,
+    canEditDiagram
 }: {
     backend: BackendRecord;
     diagram: DiagramElementDto | null;
+    canEditDiagram: boolean;
 }) {
     const { graph } = useDiagramElementState();
     const activeGraph = graph?.diagramElementId === diagram?.id ? graph : null;
@@ -64,6 +66,7 @@ export function DomainModelWorkspace({
                                     title={`${backend.name} domain model`}
                                     defaultNodeType="entity"
                                     allowMembers
+                                    canEdit={canEditDiagram}
                                 />
                             ) : (
                                 <div className="semantic-diagram-empty">

@@ -8,6 +8,7 @@ using Abp.Domain.Repositories;
 using Abp.UI;
 using Newtonsoft.Json.Linq;
 using Microsoft.EntityFrameworkCore;
+using SeeSpec.Authorization;
 using SeeSpec.Domains.SpecManagement;
 using SeeSpec.Services.SpecSectionService.DTO;
 
@@ -76,6 +77,11 @@ namespace SeeSpec.Services.SpecSectionService
 
         public override async Task<SpecSectionDto> UpdateAsync(SpecSectionDto input)
         {
+            if (input.SectionType == SectionType.Requirement)
+            {
+                PermissionChecker.Authorize(PermissionNames.Pages_Requirements_Edit);
+            }
+
             var updated = await base.UpdateAsync(input);
 
             if (updated.SectionType == SectionType.Shared && IsOverviewSlug(updated.Slug))
@@ -103,6 +109,8 @@ namespace SeeSpec.Services.SpecSectionService
             {
                 return;
             }
+
+            PermissionChecker.Authorize(PermissionNames.Pages_Requirements_Create);
 
             // Overview acceptance is the hard semantic gate before requirements and the later
             // diagram flow are allowed to progress.
