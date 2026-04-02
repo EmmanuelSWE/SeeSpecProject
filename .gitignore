@@ -26,3 +26,5 @@ aspnet-core/docker/mvc/Mvc-Logs/
 nextjs/node_modules/
 nextjs/.next/
 nextjs/out/
+
+docs/designs/srcTemplate

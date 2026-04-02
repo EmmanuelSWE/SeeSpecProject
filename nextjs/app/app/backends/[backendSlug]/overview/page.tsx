@@ -1,10 +1,11 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendOverviewWorkspace } from "@/app/components/app/backend-overview-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
+import { withAuth, type WithAuthProps } from "@/app/lib/auth/with-auth";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
 import type { AllowedGenerationFolder, GenerationArtifactType } from "@/app/lib/providers/backendProvider/context";
 import type { GenerationRunMode } from "@/app/lib/providers/specProvider/context";
@@ -14,15 +15,18 @@ import {
     createSectionItem,
     updateSectionItem
 } from "@/app/lib/utils/services/section-item-service";
-import { useUserState } from "@/app/lib/providers/userProvider";
+import { hasOverviewChanged, selectOverviewSection } from "@/app/lib/workflow/overview-gate";
 
-export default function BackendOverviewPage() {
+const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "System Architect", "Project Lead"] as const;
+
+function BackendOverviewPage({ session }: WithAuthProps) {
     const params = useParams<{ backendSlug: string }>();
-    const { session } = useUserState();
+    const router = useRouter();
+    const searchParams = useSearchParams();
     const { backend } = useBackendState();
     const { generatedPreview, isGeneratingPreview, previewErrorMessage, isApplyingGeneratedCode, applyGeneratedCodeErrorMessage } = useSpecState();
     const { sections } = useSpecSectionState();
-    const { getAllowedGenerationFolders, getBackendBySlug, updateBackend } = useBackendActions();
+    const { getAllowedGenerationFolders, getBackendBySlug, getWorkflowReadiness, updateBackend } = useBackendActions();
     const { applyGeneratedCode, clearGeneratedPreview, generateSpecCode, getSpecByBackend } = useSpecActions();
     const { getSectionsByBackend, createSection, updateSection } = useSpecSectionActions();
     const [hasResolvedBackend, setHasResolvedBackend] = useState(false);
@@ -34,6 +38,11 @@ export default function BackendOverviewPage() {
     const [selectedGenerationFolderPath, setSelectedGenerationFolderPath] = useState<string>("");
     const [isLoadingGenerationFolders, setIsLoadingGenerationFolders] = useState(false);
     const [generationFolderErrorMessage, setGenerationFolderErrorMessage] = useState<string | null>(null);
+    const [workflowReadiness, setWorkflowReadiness] = useState<Awaited<ReturnType<typeof getWorkflowReadiness>> | null>(null);
+    const [isLoadingWorkflowReadiness, setIsLoadingWorkflowReadiness] = useState(false);
+    const [shouldPromptOverviewCreation, setShouldPromptOverviewCreation] = useState(false);
+    const overviewSection = selectOverviewSection(sections, backend?.slug ?? null);
+    const roleSections = sections.filter((item) => item.type === "role");
 
     useEffect(() => {
         let isActive = true;
@@ -82,6 +91,56 @@ export default function BackendOverviewPage() {
             isActive = false;
         };
     }, [backend, getSectionsByBackend]);
+
+    useEffect(() => {
+        let isActive = true;
+
+        if (!backend) {
+            setWorkflowReadiness(null);
+            return () => {
+                isActive = false;
+            };
+        }
+
+        void (async () => {
+            setIsLoadingWorkflowReadiness(true);
+
+            try {
+                const readiness = await getWorkflowReadiness(backend.id);
+                if (!isActive) {
+                    return;
+                }
+
+                setWorkflowReadiness(readiness);
+            } catch (error) {
+                if (!isActive) {
+                    return;
+                }
+
+                setPageErrorMessage(error instanceof Error ? error.message : "Unable to load backend workflow readiness.");
+            } finally {
+                if (isActive) {
+                    setIsLoadingWorkflowReadiness(false);
+                }
+            }
+        })();
+
+        return () => {
+            isActive = false;
+        };
+    }, [backend, getWorkflowReadiness, sections.length]);
+
+    useEffect(() => {
+        if (!backend || !hasResolvedSections || searchParams.get("prompt") !== "create-overview") {
+            return;
+        }
+
+        if (!overviewSection) {
+            setShouldPromptOverviewCreation(true);
+        }
+
+        router.replace(`/app/backends/${backend.slug}/overview`);
+    }, [backend, hasResolvedSections, overviewSection, router, searchParams]);
 
     useEffect(() => {
         let isActive = true;
@@ -138,12 +197,7 @@ export default function BackendOverviewPage() {
         };
     }, [backend, generationArtifactType, generationRunMode, getAllowedGenerationFolders]);
 
-    const overviewSection =
-        sections.find((item) => item.type === "overview" && item.slug === `${backend?.slug ?? ""}-overview`) ??
-        sections.find((item) => item.type === "overview") ??
-        null;
-    const roleSections = sections.filter((item) => item.type === "role");
-    const isPageLoading = !hasResolvedBackend || (backend !== null && !hasResolvedSections);
+    const isPageLoading = !hasResolvedBackend || (backend !== null && (!hasResolvedSections || isLoadingWorkflowReadiness));
 
     if (!hasPermission(session, APP_PERMISSIONS.backends)) {
         return <AccessPanel title="Backends" message="Your current role does not allow access to backend workspaces." />;
@@ -262,25 +316,32 @@ export default function BackendOverviewPage() {
                 });
             }}
             onClearPreview={clearGeneratedPreview}
+            workflowReadiness={workflowReadiness}
+            shouldPromptOverviewCreation={shouldPromptOverviewCreation}
+            onOverviewPromptConsumed={() => setShouldPromptOverviewCreation(false)}
             onSaveBackend={async (payload) => {
                 await updateBackend({ id: backend.id, ...payload });
+                setWorkflowReadiness(await getWorkflowReadiness(backend.id));
             }}
             onSaveOverview={async (payload) => {
                 // Overview is a singleton per backend, so edit must always bind to the existing section identity.
-                const existingOverview =
-                    sections.find((item) => item.type === "overview" && item.slug === `${backend.slug}-overview`) ??
-                    sections.find((item) => item.type === "overview") ??
-                    null;
+                const existingOverview = selectOverviewSection(sections, backend.slug);
+                const nextOverviewContent: [string, string, string] = [payload.summary, payload.scope, payload.goals];
 
                 if (existingOverview) {
+                    if (!hasOverviewChanged(existingOverview, nextOverviewContent)) {
+                        return;
+                    }
+
                     await updateSection({
                         id: existingOverview.id,
                         title: `${backend.name} Overview`,
                         summary: payload.summary,
-                        content: [payload.summary, payload.scope, payload.goals],
+                        content: nextOverviewContent,
                         isAccepted: false
                     });
                     await getSectionsByBackend(backend.id);
+                    setWorkflowReadiness(await getWorkflowReadiness(backend.id));
                     return;
                 }
 
@@ -289,17 +350,15 @@ export default function BackendOverviewPage() {
                     type: "overview",
                     title: `${backend.name} Overview`,
                     summary: payload.summary,
-                    content: [payload.summary, payload.scope, payload.goals],
+                    content: nextOverviewContent,
                     isAccepted: false,
                     tags: ["Overview", backend.name]
                 });
                 await getSectionsByBackend(backend.id);
+                setWorkflowReadiness(await getWorkflowReadiness(backend.id));
             }}
             onAcceptOverview={async () => {
-                const existingOverview =
-                    sections.find((item) => item.type === "overview" && item.slug === `${backend.slug}-overview`) ??
-                    sections.find((item) => item.type === "overview") ??
-                    null;
+                const existingOverview = selectOverviewSection(sections, backend.slug);
 
                 if (!existingOverview) {
                     return;
@@ -313,6 +372,7 @@ export default function BackendOverviewPage() {
                     isAccepted: true
                 });
                 await getSectionsByBackend(backend.id);
+                setWorkflowReadiness(await getWorkflowReadiness(backend.id));
             }}
             onSaveRole={async (role) => {
                 // Roles are stored in the spec model as Shared SpecSections, and the editable role details live in SectionItems.
@@ -353,7 +413,10 @@ export default function BackendOverviewPage() {
                     })
                 );
                 await getSectionsByBackend(backend.id);
+                setWorkflowReadiness(await getWorkflowReadiness(backend.id));
             }}
         />
     );
 }
+
+export default withAuth(BackendOverviewPage, { roles: [...WORKFLOW_ROLES] });

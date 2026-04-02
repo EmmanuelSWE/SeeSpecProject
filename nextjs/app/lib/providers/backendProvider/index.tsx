@@ -36,6 +36,7 @@ import {
   type BackendRoleName,
   type BackendStatus,
   type AllowedGenerationFolder,
+  type BackendWorkflowReadiness,
   type BackendFolderImportInput,
   type BackendUploadResult,
   type CreateBackendInput,
@@ -184,6 +185,10 @@ function parseOverview(content: string): BackendOverview | null {
   };
 }
 
+function isOverviewSection(section: SpecSectionApiRecord, backendSlug: string) {
+  return section.sectionType === 4 && (section.slug === "overview" || section.slug === `${backendSlug}-overview`);
+}
+
 function parseDomainMetadata(metadataJson?: string | null): {
   entities: BackendDomainEntity[];
   relationships: BackendDomainRelationship[];
@@ -218,8 +223,8 @@ function buildBackendRecord(
   const spec = enrichment.specs.find((item) => item.backendId === backend.id) ?? null;
   const specSections = spec ? enrichment.sections.filter((item) => item.specId === spec.id) : [];
   const overviewSection =
-    specSections.find((item) => item.slug === `${backend.slug}-overview`) ??
-    specSections.find((item) => item.sectionType === 4) ??
+    specSections.find((item) => isOverviewSection(item, backend.slug) && item.slug === `${backend.slug}-overview`) ??
+    specSections.find((item) => isOverviewSection(item, backend.slug) && item.slug === "overview") ??
     null;
   const roleSections = specSections.filter((item) => item.sectionType === 4 && item.slug.startsWith("role-"));
   const requirementSections = specSections.filter((item) => item.sectionType === 1);
@@ -296,6 +301,19 @@ async function loadBackendByIdFromApi(id: string): Promise<BackendRecord> {
   return buildBackendRecord(backend, enrichment);
 }
 
+async function loadBackendBySlugFromApi(slug: string): Promise<BackendRecord | null> {
+  const [backend, enrichment] = await Promise.all([
+    getOne<BackendApiRecord | null>("/services/app/Backend/GetBySlug", { Slug: slug }),
+    getBackendEnrichment()
+  ]);
+
+  if (!backend) {
+    return null;
+  }
+
+  return buildBackendRecord(backend, enrichment);
+}
+
 export function BackendProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(BackendReducer, INITIAL_STATE);
   const backendsRequestRef = useRef<Promise<BackendRecord[]> | null>(null);
@@ -328,9 +346,10 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
         return cachedBackend;
       }
 
-      const backends = await loadBackendsFromApi();
-      dispatch(getBackendsSuccess(backends));
-      const backend = backends.find((item) => item.slug === slug) ?? null;
+      const backend = await loadBackendBySlugFromApi(slug);
+      if (backend) {
+        dispatch(getBackendsSuccess(upsertBackends(state.backends, backend)));
+      }
       dispatch(getBackendSuccess(backend));
       return backend;
     } catch (error) {
@@ -530,6 +549,17 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const getWorkflowReadiness = useCallback(async (backendId: string) => {
+    try {
+      return await getOne<BackendWorkflowReadiness>("/services/app/Backend/GetWorkflowReadiness", {
+        BackendId: backendId
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load backend workflow readiness.";
+      throw new Error(mapErrorMessage(error, message));
+    }
+  }, []);
+
   const setBackend = useCallback((backend: BackendRecord | null) => {
     dispatch(setActiveBackend(backend));
   }, []);
@@ -549,6 +579,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       uploadBackendArchive,
       importBackendFolder,
       getAllowedGenerationFolders,
+      getWorkflowReadiness,
       deleteBackend,
       setActiveBackend: setBackend,
       reset
@@ -560,6 +591,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       getBackendBySlug,
       getBackends,
       getAllowedGenerationFolders,
+      getWorkflowReadiness,
       importBackendFolder,
       reset,
       setBackend,
@@ -575,6 +607,15 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       </BackendActionContext.Provider>
     </BackendStateContext.Provider>
   );
+}
+
+function upsertBackends(existingBackends: BackendRecord[], nextBackend: BackendRecord): BackendRecord[] {
+  const existingIndex = existingBackends.findIndex((backend) => backend.id === nextBackend.id);
+  if (existingIndex === -1) {
+    return [...existingBackends, nextBackend];
+  }
+
+  return existingBackends.map((backend) => (backend.id === nextBackend.id ? nextBackend : backend));
 }
 
 export function useBackendState() {

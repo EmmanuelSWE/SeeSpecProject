@@ -56,7 +56,7 @@ export interface IDiagramElementActionContext {
   deleteDiagramElement: (id: string) => Promise<void>;
   getDiagramGraph: (diagramElementId: string) => Promise<DiagramGraphDto>;
   applySemanticAction: (payload: ApplyDiagramSemanticActionInput) => Promise<DiagramGraphDto>;
-  renderSvg: (diagramElementId: string, includePlantUmlText?: boolean) => Promise<RenderedDiagramDto>;
+  renderSvg: (diagramElementId: string) => Promise<RenderedDiagramDto>;
   setActiveDiagramElement: (diagramElement: DiagramElementDto | null) => void;
   setActiveType: (type: DiagramElementType | null) => void;
   setEditorMode: (mode: DiagramEditorMode) => void;

@@ -24,7 +24,8 @@ export function RequirementsDetailPanel({
   hasUseCaseDiagram,
   hasActivityDiagram,
   isUseCaseBusy,
-  isActivityBusy
+  isActivityBusy,
+  canManageActivityFromRequirement
 }: {
   requirement: RequirementDetail;
   canEdit: boolean;
@@ -36,6 +37,7 @@ export function RequirementsDetailPanel({
   hasActivityDiagram: boolean;
   isUseCaseBusy: boolean;
   isActivityBusy: boolean;
+  canManageActivityFromRequirement: boolean;
 }) {
   return (
     <article className="card requirements-detail-panel">
@@ -102,11 +104,13 @@ export function RequirementsDetailPanel({
               type="button"
               className="requirements-link-card requirements-link-button"
               onClick={hasActivityDiagram ? onOpenActivityDiagram : onCreateActivityDiagram}
-              disabled={isActivityBusy}
+              disabled={isActivityBusy || !canManageActivityFromRequirement}
             >
               <span>Diagram</span>
               <strong>
-                {isActivityBusy
+                {!canManageActivityFromRequirement
+                  ? "Manage from use case diagram"
+                  : isActivityBusy
                   ? "Opening activity diagram..."
                   : hasActivityDiagram
                     ? "Open activity diagram"

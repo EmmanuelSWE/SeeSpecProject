@@ -270,6 +270,7 @@ export function RequirementsWorkspace({ session }: { session: IUserSession | nul
             onOpenUseCaseDiagram={() => {}}
             onCreateActivityDiagram={() => {}}
             onOpenActivityDiagram={() => {}}
+            canManageActivityFromRequirement={false}
           />
 
           <RequirementsTraceabilityPanel

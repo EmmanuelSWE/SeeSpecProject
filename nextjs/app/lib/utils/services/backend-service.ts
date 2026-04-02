@@ -211,6 +211,10 @@ function parseOverview(content: string): BackendOverviewDto | null {
   };
 }
 
+function isOverviewSection(section: SpecSectionApiDto, backendSlug: string) {
+  return section.sectionType === 4 && (section.slug === "overview" || section.slug === `${backendSlug}-overview`);
+}
+
 function parseDomainMetadata(metadataJson?: string | null) {
   const parsed = parseJson<{
     entities?: BackendDomainEntityDto[];
@@ -239,8 +243,8 @@ function buildBackendDto(backend: BackendApiDto, enrichment: EnrichmentPayload):
   const spec = enrichment.specs.find((item) => item.backendId === backend.id) ?? null;
   const specSections = spec ? enrichment.sections.filter((item) => item.specId === spec.id) : [];
   const overviewSection =
-    specSections.find((item) => item.slug === `${backend.slug}-overview`) ??
-    specSections.find((item) => item.sectionType === 4);
+    specSections.find((item) => isOverviewSection(item, backend.slug) && item.slug === `${backend.slug}-overview`) ??
+    specSections.find((item) => isOverviewSection(item, backend.slug) && item.slug === "overview");
   const roleSections = specSections.filter((item) => item.sectionType === 4 && item.slug.startsWith("role-"));
   const requirementSections = specSections.filter((item) => item.sectionType === 1);
   const diagramElements = enrichment.diagrams.filter((item) => item.backendId === backend.id);
@@ -324,8 +328,16 @@ export async function getBackendById(id: string) {
 }
 
 export async function getBackendBySlug(slug: string) {
-  const backends = await getBackends();
-  return backends.find((backend) => backend.slug === slug) ?? null;
+  try {
+    const [backend, enrichment] = await Promise.all([
+      getOne<BackendApiDto | null>("/services/app/Backend/GetBySlug", { Slug: slug }),
+      getBackendEnrichment()
+    ]);
+
+    return backend ? buildBackendDto(backend, enrichment) : null;
+  } catch (error) {
+    throw new Error(mapErrorMessage(error, "Unable to load backend."));
+  }
 }
 
 export async function createBackend(payload: CreateBackendInput) {

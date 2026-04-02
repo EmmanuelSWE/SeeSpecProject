@@ -49,126 +49,180 @@ namespace SeeSpec.Services.DiagramElementService
 
         public override async Task<DiagramElementDto> CreateAsync(DiagramElementDto input)
         {
-            await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
-            await ValidateDiagramCreationRulesAsync(input);
-
-            DiagramElement existingDiagram = await Repository.FirstOrDefaultAsync(
-                item => item.BackendId == input.BackendId && item.ExternalElementKey == input.ExternalElementKey
-            );
-
-            if (existingDiagram != null)
+            try
             {
-                existingDiagram.SpecSectionId = input.SpecSectionId;
-                existingDiagram.DiagramType = input.DiagramType;
-                existingDiagram.Name = input.Name;
-                existingDiagram.MetadataJson = input.MetadataJson;
+                input.SpecSectionId = await ResolveSpecSectionIdAsync(input.BackendId, input.DiagramType, input.SpecSectionId);
+                await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
+                await ValidateDiagramCreationRulesAsync(input);
 
-                DiagramElement updatedDiagram = await Repository.UpdateAsync(existingDiagram);
-                await PersistDiagramMetadataAsync(updatedDiagram, input.MetadataJson);
-                return MapToEntityDto(updatedDiagram);
+                DiagramElement existingDiagram = await Repository.FirstOrDefaultAsync(
+                    item => item.BackendId == input.BackendId && item.ExternalElementKey == input.ExternalElementKey
+                );
+
+                if (existingDiagram != null)
+                {
+                    existingDiagram.SpecSectionId = input.SpecSectionId;
+                    existingDiagram.DiagramType = input.DiagramType;
+                    existingDiagram.Name = input.Name;
+                    existingDiagram.MetadataJson = input.MetadataJson;
+
+                    await PersistDiagramMetadataAsync(existingDiagram, input.MetadataJson);
+                    return MapToEntityDto(existingDiagram);
+                }
+
+                DiagramElementDto created = await base.CreateAsync(input);
+                DiagramElement createdEntity = await Repository.GetAsync(created.Id);
+                await PersistDiagramMetadataAsync(createdEntity, input.MetadataJson);
+                return MapToEntityDto(createdEntity);
             }
-
-            DiagramElementDto created = await base.CreateAsync(input);
-            DiagramElement createdEntity = await Repository.GetAsync(created.Id);
-            await PersistDiagramMetadataAsync(createdEntity, input.MetadataJson);
-            return MapToEntityDto(createdEntity);
+            catch (Exception exception)
+            {
+                Logger.Error("Failed to create diagram element.", exception);
+                throw;
+            }
         }
 
         public override async Task<DiagramElementDto> UpdateAsync(DiagramElementDto input)
         {
-            await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
-            await ValidateDiagramCreationRulesAsync(input);
-            DiagramElementDto updated = await base.UpdateAsync(input);
-            DiagramElement updatedEntity = await Repository.GetAsync(updated.Id);
-            await PersistDiagramMetadataAsync(updatedEntity, input.MetadataJson);
-            return MapToEntityDto(updatedEntity);
+            try
+            {
+                input.SpecSectionId = await ResolveSpecSectionIdAsync(input.BackendId, input.DiagramType, input.SpecSectionId);
+                await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
+                await ValidateDiagramCreationRulesAsync(input);
+                DiagramElementDto updated = await base.UpdateAsync(input);
+                DiagramElement updatedEntity = await Repository.GetAsync(updated.Id);
+                await PersistDiagramMetadataAsync(updatedEntity, input.MetadataJson);
+                return MapToEntityDto(updatedEntity);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error("Failed to update diagram element.", exception);
+                throw;
+            }
         }
 
         public async Task<DiagramGraphDto> GetGraphAsync(GetDiagramGraphDto input)
         {
-            DiagramElement diagram = await Repository.GetAsync(input.Id);
-            await EnsureSpecBootstrappedAsync(diagram.BackendId);
-            RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
-            return BuildGraphDto(diagram, graph);
+            try
+            {
+                DiagramElement diagram = await Repository.GetAsync(input.Id);
+                await EnsureSpecBootstrappedAsync(diagram.BackendId);
+                RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
+                return BuildGraphDto(diagram, graph);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error("Failed to get diagram graph.", exception);
+                throw;
+            }
         }
 
         public async Task<DiagramSemanticActionResultDto> ApplySemanticActionAsync(ApplyDiagramSemanticActionDto input)
         {
-            DiagramElement diagram = await Repository.GetAsync(input.DiagramElementId);
-            await EnsureSpecBootstrappedAsync(diagram.BackendId);
-            RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
-
-            ApplySemanticAction(graph, input);
-
-            DiagramValidationResultDto validation = ValidateGraph(graph, diagram.DiagramType);
-            if (!validation.IsValid)
+            try
             {
-                throw new UserFriendlyException(string.Join(Environment.NewLine, validation.Errors));
+                DiagramElement diagram = await Repository.GetAsync(input.DiagramElementId);
+                await EnsureSpecBootstrappedAsync(diagram.BackendId);
+                RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
+
+                ApplySemanticAction(graph, input);
+
+                DiagramValidationResultDto validation = ValidateGraph(graph, diagram.DiagramType);
+                if (!validation.IsValid)
+                {
+                    throw new UserFriendlyException(string.Join(Environment.NewLine, validation.Errors));
+                }
+
+                string metadataJson = SerializeGraph(diagram, graph);
+                await PersistDiagramMetadataAsync(diagram, metadataJson);
+                await SyncLinkedActivityDiagramsAsync(diagram, graph);
+
+                DiagramGraphDto graphDto = BuildGraphDto(diagram, graph);
+
+                return new DiagramSemanticActionResultDto
+                {
+                    Graph = graphDto,
+                    Validation = graphDto.Validation,
+                    GraphHash = graphDto.GraphHash,
+                    MetadataJson = diagram.MetadataJson
+                };
             }
-
-            string metadataJson = SerializeGraph(diagram, graph);
-            await PersistDiagramMetadataAsync(diagram, metadataJson);
-
-            DiagramGraphDto graphDto = BuildGraphDto(diagram, graph);
-
-            return new DiagramSemanticActionResultDto
+            catch (Exception exception)
             {
-                Graph = graphDto,
-                Validation = graphDto.Validation,
-                GraphHash = graphDto.GraphHash,
-                MetadataJson = diagram.MetadataJson
-            };
+                Logger.Error("Failed to apply semantic diagram action.", exception);
+                throw;
+            }
         }
 
         public async Task<RenderedDiagramDto> RenderSvgAsync(RenderDiagramDto input)
         {
-            DiagramElement diagram = await Repository.GetAsync(input.DiagramElementId);
-            await EnsureSpecBootstrappedAsync(diagram.BackendId);
-            RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
-            DiagramValidationResultDto validation = ValidateGraph(graph, diagram.DiagramType);
-
-            if (!validation.IsValid)
-            {
-                throw new UserFriendlyException(string.Join(Environment.NewLine, validation.Errors));
-            }
-
-            string graphHash = ComputeGraphHash(graph);
-            if (RenderCache.TryGetValue(graphHash, out RenderedDiagramDto cachedRender))
-            {
-                return new RenderedDiagramDto
-                {
-                    Svg = cachedRender.Svg,
-                    GraphHash = cachedRender.GraphHash,
-                    PlantUmlText = input.IncludePlantUmlText ? cachedRender.PlantUmlText : null
-                };
-            }
-
-            string plantUmlText = BuildPlantUml(diagram, graph);
-            string svg;
             try
             {
-                svg = await RenderPlantUmlSvgAsync(plantUmlText);
+                RenderedDiagramDebugDto render = await RenderSvgDebugAsync(input);
+                return new RenderedDiagramDto
+                {
+                    Svg = render.Svg,
+                    GraphHash = render.GraphHash
+                };
             }
-            catch (Exception)
+            catch (Exception exception)
             {
-                svg = BuildFallbackSvg(diagram, graph);
+                Logger.Error("Failed to render diagram SVG.", exception);
+                throw;
             }
+        }
 
-            RenderedDiagramDto render = new RenderedDiagramDto
+        public async Task<RenderedDiagramDebugDto> RenderSvgDebugAsync(RenderDiagramDto input)
+        {
+            try
             {
-                Svg = svg,
-                GraphHash = graphHash,
-                PlantUmlText = input.IncludePlantUmlText ? plantUmlText : null
-            };
+                DiagramElement diagram = await Repository.GetAsync(input.DiagramElementId);
+                await EnsureSpecBootstrappedAsync(diagram.BackendId);
+                RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
+                DiagramValidationResultDto validation = ValidateGraph(graph, diagram.DiagramType);
 
-            RenderCache[graphHash] = new RenderedDiagramDto
+                if (!validation.IsValid)
+                {
+                    throw new UserFriendlyException(string.Join(Environment.NewLine, validation.Errors));
+                }
+
+                string graphHash = ComputeGraphHash(graph);
+                if (RenderCache.TryGetValue(graphHash, out RenderedDiagramDto cachedRender))
+                {
+                    return new RenderedDiagramDebugDto
+                    {
+                        Svg = cachedRender.Svg,
+                        GraphHash = cachedRender.GraphHash,
+                        PlantUmlText = cachedRender is RenderedDiagramDebugDto cachedDebug ? cachedDebug.PlantUmlText : null
+                    };
+                }
+
+                string plantUmlText = BuildPlantUml(diagram, graph);
+                string svg;
+                try
+                {
+                    svg = await RenderPlantUmlSvgAsync(plantUmlText);
+                }
+                catch (Exception)
+                {
+                    svg = BuildFallbackSvg(diagram, graph);
+                }
+
+                RenderedDiagramDebugDto render = new RenderedDiagramDebugDto
+                {
+                    Svg = svg,
+                    GraphHash = graphHash,
+                    PlantUmlText = plantUmlText
+                };
+
+                RenderCache[graphHash] = render;
+                return render;
+            }
+            catch (Exception exception)
             {
-                Svg = svg,
-                GraphHash = graphHash,
-                PlantUmlText = plantUmlText
-            };
-
-            return render;
+                Logger.Error("Failed to render diagram SVG debug payload.", exception);
+                throw;
+            }
         }
 
         private async Task<RuntimeGraph> BuildRuntimeGraphAsync(DiagramElement diagram)
@@ -222,6 +276,32 @@ namespace SeeSpec.Services.DiagramElementService
             {
                 throw new UserFriendlyException("The selected diagram section does not belong to the current backend.");
             }
+        }
+
+        private async Task<Guid?> ResolveSpecSectionIdAsync(Guid backendId, DiagramType diagramType, Guid? specSectionId)
+        {
+            if (specSectionId.HasValue || diagramType != DiagramType.DomainModel)
+            {
+                return specSectionId;
+            }
+
+            Spec spec = await _specRepository.FirstOrDefaultAsync(item => item.BackendId == backendId);
+            if (spec == null)
+            {
+                throw new UserFriendlyException("Create the specification before generating diagrams.");
+            }
+
+            SpecSection domainSection = await _specSectionRepository.FirstOrDefaultAsync(item =>
+                item.SpecId == spec.Id
+                && item.SectionType == SectionType.Domain
+                && item.Slug == "domain-model");
+
+            if (domainSection == null)
+            {
+                throw new UserFriendlyException("Create the domain model section before editing the domain diagram.");
+            }
+
+            return domainSection.Id;
         }
 
         private async Task ValidateDiagramCreationRulesAsync(DiagramElementDto input)
@@ -287,13 +367,16 @@ namespace SeeSpec.Services.DiagramElementService
                 return false;
             }
 
-            SpecSection overviewSection = await _specSectionRepository.GetAll()
+            List<SpecSection> overviewCandidates = await _specSectionRepository.GetAll()
                 .Where(item => item.SpecId == overviewSpec.Id && item.SectionType == SectionType.Shared)
                 .OrderBy(item => item.Order)
                 .ThenBy(item => item.Id)
-                .FirstOrDefaultAsync(item =>
-                    string.Equals(item.Slug, "overview", StringComparison.OrdinalIgnoreCase)
-                    || item.Slug.EndsWith("-overview", StringComparison.OrdinalIgnoreCase));
+                .ToListAsync();
+
+            SpecSection overviewSection = overviewCandidates.FirstOrDefault(item =>
+                string.Equals(item.Slug, "overview", StringComparison.OrdinalIgnoreCase)
+                || (!string.IsNullOrWhiteSpace(item.Slug)
+                    && item.Slug.EndsWith("-overview", StringComparison.OrdinalIgnoreCase)));
 
             if (overviewSection == null || string.IsNullOrWhiteSpace(overviewSection.Content))
             {
@@ -314,11 +397,6 @@ namespace SeeSpec.Services.DiagramElementService
             {
                 throw new UserFriendlyException("Create the specification before generating diagrams.");
             }
-
-            if (spec.Status != SpecStatus.Bootstrapped)
-            {
-                throw new UserFriendlyException("Complete and bootstrap the specification before generating diagrams.");
-            }
         }
 
         private async Task PersistDiagramMetadataAsync(DiagramElement diagram, string metadataJson)
@@ -338,10 +416,76 @@ namespace SeeSpec.Services.DiagramElementService
             };
 
             sectionItem.Content = JsonSerializer.Serialize(payload, SerializerOptions);
-            await _sectionItemRepository.UpdateAsync(sectionItem);
 
             diagram.MetadataJson = payload.MetadataJson;
-            await Repository.UpdateAsync(diagram);
+        }
+
+        private async Task SyncLinkedActivityDiagramsAsync(DiagramElement useCaseDiagram, RuntimeGraph graph)
+        {
+            if (useCaseDiagram.DiagramType != DiagramType.UseCase)
+            {
+                return;
+            }
+
+            PersistedDiagramMetadata useCaseMetadata = DeserializeMetadata<PersistedDiagramMetadata>(useCaseDiagram.MetadataJson) ?? new PersistedDiagramMetadata();
+            List<RuntimeGraphNode> useCaseNodes = graph.Nodes
+                .Where(node => NormalizeToken(node.NodeType) == "use-case")
+                .ToList();
+            List<DiagramElement> linkedActivityDiagrams = await Repository.GetAll()
+                .Where(item => item.BackendId == useCaseDiagram.BackendId && item.DiagramType == DiagramType.Activity)
+                .ToListAsync();
+
+            foreach (RuntimeGraphNode useCaseNode in useCaseNodes)
+            {
+                DiagramElement linkedActivityDiagram = linkedActivityDiagrams.FirstOrDefault(item =>
+                {
+                    PersistedDiagramMetadata metadata = DeserializeMetadata<PersistedDiagramMetadata>(item.MetadataJson);
+                    return string.Equals(metadata?.LinkedUseCaseSlug, useCaseDiagram.ExternalElementKey, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(metadata?.LinkedUseCaseNodeId, useCaseNode.Id, StringComparison.Ordinal);
+                });
+
+                PersistedDiagramMetadata nextMetadata = linkedActivityDiagram == null
+                    ? CreateEmptyActivityMetadata(useCaseMetadata, useCaseDiagram.ExternalElementKey, useCaseNode)
+                    : MergeLinkedActivityMetadata(linkedActivityDiagram.MetadataJson, useCaseMetadata, useCaseDiagram.ExternalElementKey, useCaseNode);
+
+                if (linkedActivityDiagram == null)
+                {
+                    await Repository.InsertAsync(new DiagramElement
+                    {
+                        BackendId = useCaseDiagram.BackendId,
+                        SpecSectionId = useCaseDiagram.SpecSectionId,
+                        DiagramType = DiagramType.Activity,
+                        ExternalElementKey = BuildStableId("activity", useCaseDiagram.ExternalElementKey + ":" + useCaseNode.Id),
+                        Name = useCaseNode.Label + " Activity",
+                        MetadataJson = JsonSerializer.Serialize(nextMetadata, SerializerOptions)
+                    });
+                    continue;
+                }
+
+                linkedActivityDiagram.SpecSectionId = useCaseDiagram.SpecSectionId;
+                linkedActivityDiagram.Name = useCaseNode.Label + " Activity";
+                linkedActivityDiagram.MetadataJson = JsonSerializer.Serialize(nextMetadata, SerializerOptions);
+            }
+
+            HashSet<string> activeUseCaseNodeIds = useCaseNodes
+                .Select(node => node.Id)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (DiagramElement linkedActivityDiagram in linkedActivityDiagrams)
+            {
+                PersistedDiagramMetadata metadata = DeserializeMetadata<PersistedDiagramMetadata>(linkedActivityDiagram.MetadataJson);
+                if (!string.Equals(metadata?.LinkedUseCaseSlug, useCaseDiagram.ExternalElementKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(metadata.LinkedUseCaseNodeId) || activeUseCaseNodeIds.Contains(metadata.LinkedUseCaseNodeId))
+                {
+                    continue;
+                }
+
+                await Repository.DeleteAsync(linkedActivityDiagram);
+            }
         }
 
         private async Task<SectionItem> FindDiagramSectionItemAsync(DiagramElement diagram)
@@ -403,6 +547,59 @@ namespace SeeSpec.Services.DiagramElementService
             metadata.Graph = BuildGraphPayload(graph);
             UpdatePersistedMetadataFromGraph(diagram, metadata, graph);
             return JsonSerializer.Serialize(metadata, SerializerOptions);
+        }
+
+        private static PersistedDiagramMetadata CreateEmptyActivityMetadata(
+            PersistedDiagramMetadata useCaseMetadata,
+            string linkedUseCaseSlug,
+            RuntimeGraphNode useCaseNode)
+        {
+            return new PersistedDiagramMetadata
+            {
+                Summary = useCaseNode.Label,
+                Description = useCaseNode.Description ?? useCaseNode.Label,
+                LinkedRequirementIds = new List<string>(useCaseMetadata.LinkedRequirementIds ?? new List<string>()),
+                LinkedUseCaseSlug = linkedUseCaseSlug,
+                LinkedUseCaseNodeId = useCaseNode.Id,
+                LinkedUseCaseNodeLabel = useCaseNode.Label,
+                Actors = new List<string>(),
+                Dependencies = new List<LegacyUseCaseDependency>(),
+                Entities = new List<LegacyDomainEntity>(),
+                Relationships = new List<LegacyDomainRelationship>(),
+                Graph = new RuntimeGraphPayload
+                {
+                    Metadata = new Dictionary<string, string>(),
+                    Nodes = new List<RuntimeGraphNodePayload>(),
+                    Edges = new List<RuntimeGraphEdgePayload>()
+                }
+            };
+        }
+
+        private static PersistedDiagramMetadata MergeLinkedActivityMetadata(
+            string existingMetadataJson,
+            PersistedDiagramMetadata useCaseMetadata,
+            string linkedUseCaseSlug,
+            RuntimeGraphNode useCaseNode)
+        {
+            PersistedDiagramMetadata metadata = DeserializeMetadata<PersistedDiagramMetadata>(existingMetadataJson)
+                ?? CreateEmptyActivityMetadata(useCaseMetadata, linkedUseCaseSlug, useCaseNode);
+
+            metadata.Summary = string.IsNullOrWhiteSpace(metadata.Summary) ? useCaseNode.Label : metadata.Summary;
+            metadata.Description = string.IsNullOrWhiteSpace(metadata.Description)
+                ? useCaseNode.Description ?? useCaseNode.Label
+                : metadata.Description;
+            metadata.LinkedRequirementIds = new List<string>(useCaseMetadata.LinkedRequirementIds ?? new List<string>());
+            metadata.LinkedUseCaseSlug = linkedUseCaseSlug;
+            metadata.LinkedUseCaseNodeId = useCaseNode.Id;
+            metadata.LinkedUseCaseNodeLabel = useCaseNode.Label;
+            metadata.Graph ??= new RuntimeGraphPayload
+            {
+                Metadata = new Dictionary<string, string>(),
+                Nodes = new List<RuntimeGraphNodePayload>(),
+                Edges = new List<RuntimeGraphEdgePayload>()
+            };
+
+            return metadata;
         }
 
         private static RuntimeGraphPayload BuildGraphPayload(RuntimeGraph graph)
@@ -1215,11 +1412,19 @@ namespace SeeSpec.Services.DiagramElementService
                 .ThenBy(n => n.Id, StringComparer.Ordinal))
             {
                 string alias = BuildPlantUmlAlias(node.Id);
-                string link = BuildSemanticLink("node", node.Id);
-                builder.AppendLine("class \"" + EscapePlantUml(node.Label) + "\" as " + alias + " [[" + link + "]] {");
-                foreach (RuntimeGraphMember member in node.Members
+                List<RuntimeGraphMember> orderedMembers = node.Members
                     .OrderBy(m => m.Position)
-                    .ThenBy(m => m.Id, StringComparer.Ordinal))
+                    .ThenBy(m => m.Id, StringComparer.Ordinal)
+                    .ToList();
+
+                if (orderedMembers.Count == 0)
+                {
+                    builder.AppendLine("class \"" + EscapePlantUml(node.Label) + "\" as " + alias);
+                    continue;
+                }
+
+                builder.AppendLine("class \"" + EscapePlantUml(node.Label) + "\" as " + alias + " {");
+                foreach (RuntimeGraphMember member in orderedMembers)
                 {
                     // Prefix with + (property) or ~ (function) so PlantUML renders
                     // the correct visibility icon without needing the user to type it.
@@ -1495,56 +1700,182 @@ namespace SeeSpec.Services.DiagramElementService
 
         private static string BuildFallbackSvg(DiagramElement diagram, RuntimeGraph graph)
         {
-            const int width = 920;
-            int nodeCount = Math.Max(graph.Nodes.Count, 1);
-            int height = Math.Max(260, 120 + (nodeCount * 96));
-            StringBuilder builder = new StringBuilder();
-            builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-            builder.AppendLine("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + width + "\" height=\"" + height + "\" viewBox=\"0 0 " + width + " " + height + "\">");
-            builder.AppendLine("<rect width=\"100%\" height=\"100%\" fill=\"#0c0f0e\" />");
-            builder.AppendLine("<text x=\"40\" y=\"46\" fill=\"#fafaf9\" font-size=\"28\" font-family=\"Segoe UI, sans-serif\" font-weight=\"700\">" + EscapeXml(diagram.Name) + "</text>");
-            builder.AppendLine("<text x=\"40\" y=\"76\" fill=\"#fdba74\" font-size=\"14\" font-family=\"Segoe UI, sans-serif\">Fallback SVG renderer</text>");
+            switch (diagram.DiagramType)
+            {
+                case DiagramType.DomainModel:
+                    return BuildDomainFallbackSvg(diagram, graph);
+                case DiagramType.Activity:
+                    return BuildActivityFallbackSvg(diagram, graph);
+                default:
+                    return BuildUseCaseFallbackSvg(diagram, graph);
+            }
+        }
+
+        private static string BuildUseCaseFallbackSvg(DiagramElement diagram, RuntimeGraph graph)
+        {
+            const int width = 1120;
+            List<RuntimeGraphNode> actorNodes = graph.Nodes.Where(node => NormalizeToken(node.NodeType) == "actor").ToList();
+            List<RuntimeGraphNode> useCaseNodes = graph.Nodes.Where(node => NormalizeToken(node.NodeType) == "use-case").ToList();
+            int laneHeight = Math.Max(actorNodes.Count, useCaseNodes.Count) * 110;
+            int height = Math.Max(420, laneHeight + 180);
+            StringBuilder builder = CreateFallbackSvgShell(width, height, diagram.Name, "Use case fallback renderer");
+
+            builder.AppendLine("<rect x=\"320\" y=\"110\" width=\"720\" height=\"" + (height - 170) + "\" rx=\"26\" ry=\"26\" fill=\"#111827\" stroke=\"#f97316\" stroke-width=\"2\" />");
+            builder.AppendLine("<text x=\"352\" y=\"150\" fill=\"#fb923c\" font-size=\"18\" font-family=\"Segoe UI, sans-serif\" font-weight=\"700\">System boundary</text>");
+
+            Dictionary<string, (int X, int Y)> nodePositions = new Dictionary<string, (int X, int Y)>(StringComparer.Ordinal);
+            for (int index = 0; index < actorNodes.Count; index++)
+            {
+                RuntimeGraphNode actor = actorNodes[index];
+                int y = 210 + (index * 110);
+                nodePositions[actor.Id] = (140, y);
+                string href = BuildSemanticLink("node", actor.Id);
+                builder.AppendLine("<a href=\"" + EscapeXml(href) + "\">");
+                builder.AppendLine("<circle cx=\"140\" cy=\"" + (y - 18) + "\" r=\"18\" fill=\"none\" stroke=\"#f8fafc\" stroke-width=\"2\" />");
+                builder.AppendLine("<line x1=\"140\" y1=\"" + y + "\" x2=\"140\" y2=\"" + (y + 46) + "\" stroke=\"#f8fafc\" stroke-width=\"2\" />");
+                builder.AppendLine("<line x1=\"112\" y1=\"" + (y + 16) + "\" x2=\"168\" y2=\"" + (y + 16) + "\" stroke=\"#f8fafc\" stroke-width=\"2\" />");
+                builder.AppendLine("<line x1=\"140\" y1=\"" + (y + 46) + "\" x2=\"116\" y2=\"" + (y + 78) + "\" stroke=\"#f8fafc\" stroke-width=\"2\" />");
+                builder.AppendLine("<line x1=\"140\" y1=\"" + (y + 46) + "\" x2=\"164\" y2=\"" + (y + 78) + "\" stroke=\"#f8fafc\" stroke-width=\"2\" />");
+                builder.AppendLine("<text x=\"140\" y=\"" + (y + 108) + "\" text-anchor=\"middle\" fill=\"#e5e7eb\" font-size=\"16\" font-family=\"Segoe UI, sans-serif\">" + EscapeXml(actor.Label) + "</text>");
+                builder.AppendLine("</a>");
+            }
+
+            for (int index = 0; index < useCaseNodes.Count; index++)
+            {
+                RuntimeGraphNode useCaseNode = useCaseNodes[index];
+                int y = 200 + (index * 110);
+                nodePositions[useCaseNode.Id] = (680, y);
+                string href = BuildSemanticLink("node", useCaseNode.Id);
+                builder.AppendLine("<a href=\"" + EscapeXml(href) + "\">");
+                builder.AppendLine("<ellipse cx=\"680\" cy=\"" + y + "\" rx=\"180\" ry=\"44\" fill=\"#1f2937\" stroke=\"#60a5fa\" stroke-width=\"2\" />");
+                builder.AppendLine("<text x=\"680\" y=\"" + (y + 6) + "\" text-anchor=\"middle\" fill=\"#f8fafc\" font-size=\"16\" font-family=\"Segoe UI, sans-serif\" font-weight=\"600\">" + EscapeXml(useCaseNode.Label) + "</text>");
+                builder.AppendLine("</a>");
+            }
+
+            AppendFallbackEdges(builder, graph, nodePositions, true);
+            builder.AppendLine("</svg>");
+            return builder.ToString();
+        }
+
+        private static string BuildDomainFallbackSvg(DiagramElement diagram, RuntimeGraph graph)
+        {
+            const int width = 1180;
+            int columns = 2;
+            int rows = Math.Max((int)Math.Ceiling(graph.Nodes.Count / (double)columns), 1);
+            int height = Math.Max(460, 180 + (rows * 220));
+            StringBuilder builder = CreateFallbackSvgShell(width, height, diagram.Name, "Domain model fallback renderer");
+            Dictionary<string, (int X, int Y)> nodePositions = new Dictionary<string, (int X, int Y)>(StringComparer.Ordinal);
 
             List<RuntimeGraphNode> orderedNodes = graph.Nodes
                 .OrderBy(node => node.Label, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(node => node.Id, StringComparer.Ordinal)
                 .ToList();
-            Dictionary<string, int> nodeYPositions = new Dictionary<string, int>(StringComparer.Ordinal);
 
             for (int index = 0; index < orderedNodes.Count; index++)
             {
                 RuntimeGraphNode node = orderedNodes[index];
-                int y = 110 + (index * 96);
-                nodeYPositions[node.Id] = y;
+                int column = index % columns;
+                int row = index / columns;
+                int x = 90 + (column * 500);
+                int y = 120 + (row * 220);
+                int boxHeight = Math.Max(120, 76 + (node.Members.Count * 24));
                 string href = BuildSemanticLink("node", node.Id);
+                nodePositions[node.Id] = (x + 170, y + (boxHeight / 2));
 
                 builder.AppendLine("<a href=\"" + EscapeXml(href) + "\">");
-                builder.AppendLine("<rect x=\"40\" y=\"" + y + "\" rx=\"16\" ry=\"16\" width=\"340\" height=\"68\" fill=\"#141917\" stroke=\"#f97316\" stroke-width=\"1.5\" />");
-                builder.AppendLine("<text x=\"64\" y=\"" + (y + 28) + "\" fill=\"#fafaf9\" font-size=\"18\" font-family=\"Segoe UI, sans-serif\" font-weight=\"600\">" + EscapeXml(node.Label) + "</text>");
-                builder.AppendLine("<text x=\"64\" y=\"" + (y + 50) + "\" fill=\"#d6d3d1\" font-size=\"13\" font-family=\"Segoe UI, sans-serif\">" + EscapeXml(node.NodeType) + "</text>");
+                builder.AppendLine("<rect x=\"" + x + "\" y=\"" + y + "\" width=\"340\" height=\"" + boxHeight + "\" rx=\"20\" ry=\"20\" fill=\"#111827\" stroke=\"#38bdf8\" stroke-width=\"2\" />");
+                builder.AppendLine("<line x1=\"" + x + "\" y1=\"" + (y + 44) + "\" x2=\"" + (x + 340) + "\" y2=\"" + (y + 44) + "\" stroke=\"#38bdf8\" stroke-width=\"1.5\" />");
+                builder.AppendLine("<text x=\"" + (x + 24) + "\" y=\"" + (y + 30) + "\" fill=\"#f8fafc\" font-size=\"18\" font-family=\"Segoe UI, sans-serif\" font-weight=\"700\">" + EscapeXml(node.Label) + "</text>");
+
+                for (int memberIndex = 0; memberIndex < node.Members.Count; memberIndex++)
+                {
+                    RuntimeGraphMember member = node.Members[memberIndex];
+                    string prefix = NormalizeToken(member.MemberKind) == "function" ? "~ " : "+ ";
+                    builder.AppendLine("<text x=\"" + (x + 24) + "\" y=\"" + (y + 72 + (memberIndex * 24)) + "\" fill=\"#dbeafe\" font-size=\"14\" font-family=\"Consolas, monospace\">" + EscapeXml(prefix + member.Signature) + "</text>");
+                }
+
                 builder.AppendLine("</a>");
             }
 
-            int edgeBaseX = 420;
-            int edgeWidth = 420;
-            int edgeOffset = 0;
-            foreach (RuntimeGraphEdge edge in graph.Edges.OrderBy(item => item.SourceNodeId, StringComparer.Ordinal).ThenBy(item => item.TargetNodeId, StringComparer.Ordinal))
-            {
-                int sourceY = nodeYPositions.TryGetValue(edge.SourceNodeId, out int sourceValue) ? sourceValue : 110;
-                int targetY = nodeYPositions.TryGetValue(edge.TargetNodeId, out int targetValue) ? targetValue : sourceY + 96;
-                int lineY = Math.Min(sourceY, targetY) + 34;
-                int textY = lineY - 8 + edgeOffset;
-                string href = BuildSemanticLink("edge", edge.Id);
-
-                builder.AppendLine("<a href=\"" + EscapeXml(href) + "\">");
-                builder.AppendLine("<line x1=\"" + edgeBaseX + "\" y1=\"" + lineY + "\" x2=\"" + (edgeBaseX + edgeWidth) + "\" y2=\"" + (targetY + 34) + "\" stroke=\"#60a5fa\" stroke-width=\"2\" />");
-                builder.AppendLine("<text x=\"" + edgeBaseX + "\" y=\"" + textY + "\" fill=\"#93c5fd\" font-size=\"13\" font-family=\"Segoe UI, sans-serif\">" + EscapeXml(string.IsNullOrWhiteSpace(edge.Label) ? edge.EdgeType : edge.Label) + "</text>");
-                builder.AppendLine("</a>");
-                edgeOffset = (edgeOffset + 12) % 24;
-            }
-
+            AppendFallbackEdges(builder, graph, nodePositions, false);
             builder.AppendLine("</svg>");
             return builder.ToString();
+        }
+
+        private static string BuildActivityFallbackSvg(DiagramElement diagram, RuntimeGraph graph)
+        {
+            const int width = 940;
+            List<RuntimeGraphNode> orderedNodes = graph.Nodes
+                .OrderBy(node => node.Label, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(node => node.Id, StringComparer.Ordinal)
+                .ToList();
+            int height = Math.Max(420, 180 + (orderedNodes.Count * 120));
+            StringBuilder builder = CreateFallbackSvgShell(width, height, diagram.Name, "Activity fallback renderer");
+            Dictionary<string, (int X, int Y)> nodePositions = new Dictionary<string, (int X, int Y)>(StringComparer.Ordinal);
+
+            for (int index = 0; index < orderedNodes.Count; index++)
+            {
+                RuntimeGraphNode node = orderedNodes[index];
+                int x = width / 2;
+                int y = 140 + (index * 120);
+                string href = BuildSemanticLink("node", node.Id);
+                string nodeType = NormalizeToken(node.NodeType);
+                nodePositions[node.Id] = (x, y);
+
+                builder.AppendLine("<a href=\"" + EscapeXml(href) + "\">");
+                if (nodeType == "start" || nodeType == "end")
+                {
+                    builder.AppendLine("<circle cx=\"" + x + "\" cy=\"" + y + "\" r=\"28\" fill=\"" + (nodeType == "start" ? "#10b981" : "#ef4444") + "\" stroke=\"#f8fafc\" stroke-width=\"2\" />");
+                }
+                else if (nodeType == "decision")
+                {
+                    builder.AppendLine("<polygon points=\"" + x + "," + (y - 34) + " " + (x + 44) + "," + y + " " + x + "," + (y + 34) + " " + (x - 44) + "," + y + "\" fill=\"#7c3aed\" stroke=\"#f8fafc\" stroke-width=\"2\" />");
+                }
+                else
+                {
+                    builder.AppendLine("<rect x=\"" + (x - 170) + "\" y=\"" + (y - 32) + "\" width=\"340\" height=\"64\" rx=\"18\" ry=\"18\" fill=\"#0f172a\" stroke=\"#f59e0b\" stroke-width=\"2\" />");
+                }
+
+                builder.AppendLine("<text x=\"" + x + "\" y=\"" + (y + 6) + "\" text-anchor=\"middle\" fill=\"#f8fafc\" font-size=\"15\" font-family=\"Segoe UI, sans-serif\" font-weight=\"600\">" + EscapeXml(node.Label) + "</text>");
+                builder.AppendLine("</a>");
+            }
+
+            AppendFallbackEdges(builder, graph, nodePositions, false);
+            builder.AppendLine("</svg>");
+            return builder.ToString();
+        }
+
+        private static StringBuilder CreateFallbackSvgShell(int width, int height, string title, string subtitle)
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+            builder.AppendLine("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + width + "\" height=\"" + height + "\" viewBox=\"0 0 " + width + " " + height + "\">");
+            builder.AppendLine("<defs><marker id=\"seespec-arrow\" markerWidth=\"12\" markerHeight=\"12\" refX=\"10\" refY=\"6\" orient=\"auto\"><path d=\"M0,0 L12,6 L0,12 z\" fill=\"#93c5fd\" /></marker></defs>");
+            builder.AppendLine("<rect width=\"100%\" height=\"100%\" fill=\"#0c0f0e\" />");
+            builder.AppendLine("<text x=\"40\" y=\"46\" fill=\"#fafaf9\" font-size=\"28\" font-family=\"Segoe UI, sans-serif\" font-weight=\"700\">" + EscapeXml(title) + "</text>");
+            builder.AppendLine("<text x=\"40\" y=\"76\" fill=\"#fdba74\" font-size=\"14\" font-family=\"Segoe UI, sans-serif\">" + EscapeXml(subtitle) + "</text>");
+            return builder;
+        }
+
+        private static void AppendFallbackEdges(StringBuilder builder, RuntimeGraph graph, Dictionary<string, (int X, int Y)> nodePositions, bool useCaseMode)
+        {
+            foreach (RuntimeGraphEdge edge in graph.Edges.OrderBy(item => item.SourceNodeId, StringComparer.Ordinal).ThenBy(item => item.TargetNodeId, StringComparer.Ordinal))
+            {
+                if (!nodePositions.TryGetValue(edge.SourceNodeId, out (int X, int Y) source) || !nodePositions.TryGetValue(edge.TargetNodeId, out (int X, int Y) target))
+                {
+                    continue;
+                }
+
+                string href = BuildSemanticLink("edge", edge.Id);
+                string stroke = useCaseMode && NormalizeToken(edge.EdgeType) == "actor-link" ? "#f59e0b" : "#93c5fd";
+                int labelX = (source.X + target.X) / 2;
+                int labelY = ((source.Y + target.Y) / 2) - 10;
+
+                builder.AppendLine("<a href=\"" + EscapeXml(href) + "\">");
+                builder.AppendLine("<line x1=\"" + source.X + "\" y1=\"" + source.Y + "\" x2=\"" + target.X + "\" y2=\"" + target.Y + "\" stroke=\"" + stroke + "\" stroke-width=\"2.5\" marker-end=\"url(#seespec-arrow)\" />");
+                builder.AppendLine("<text x=\"" + labelX + "\" y=\"" + labelY + "\" text-anchor=\"middle\" fill=\"" + stroke + "\" font-size=\"13\" font-family=\"Segoe UI, sans-serif\">" + EscapeXml(string.IsNullOrWhiteSpace(edge.Label) ? edge.EdgeType : edge.Label) + "</text>");
+                builder.AppendLine("</a>");
+            }
         }
 
         private static string EscapeXml(string value)
@@ -1659,6 +1990,8 @@ namespace SeeSpec.Services.DiagramElementService
             public string Description { get; set; }
             public List<string> LinkedRequirementIds { get; set; } = new List<string>();
             public string LinkedUseCaseSlug { get; set; }
+            public string LinkedUseCaseNodeId { get; set; }
+            public string LinkedUseCaseNodeLabel { get; set; }
             public List<string> Actors { get; set; } = new List<string>();
             public List<LegacyUseCaseDependency> Dependencies { get; set; } = new List<LegacyUseCaseDependency>();
             public List<LegacyDomainEntity> Entities { get; set; } = new List<LegacyDomainEntity>();

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     BackendFormFields,
     type BackendFormState,
@@ -14,6 +14,7 @@ import { BackendModal } from "@/app/components/app/backend-modal";
 import type {
     AllowedGenerationFolder,
     BackendRecord,
+    BackendWorkflowReadiness,
     GenerationArtifactType
 } from "@/app/lib/providers/backendProvider/context";
 import type { GenerationRunMode, IGeneratedSpecPreview } from "@/app/lib/providers/specProvider/context";
@@ -75,6 +76,9 @@ export function BackendOverviewWorkspace({
     selectedGenerationFolderPath,
     isLoadingGenerationFolders,
     generationFolderErrorMessage,
+    workflowReadiness,
+    shouldPromptOverviewCreation,
+    onOverviewPromptConsumed,
     onSelectGenerationRunMode,
     onSelectGenerationArtifactType,
     onSelectGenerationFolder,
@@ -102,6 +106,9 @@ export function BackendOverviewWorkspace({
     selectedGenerationFolderPath: string;
     isLoadingGenerationFolders: boolean;
     generationFolderErrorMessage: string | null;
+    workflowReadiness: BackendWorkflowReadiness | null;
+    shouldPromptOverviewCreation: boolean;
+    onOverviewPromptConsumed: () => void;
     onSelectGenerationRunMode: (mode: GenerationRunMode) => void;
     onSelectGenerationArtifactType: (artifactType: GenerationArtifactType) => void;
     onSelectGenerationFolder: (folderPath: string) => void;
@@ -144,10 +151,22 @@ export function BackendOverviewWorkspace({
         () => [
             { label: "Project roles", value: String(projectRoles.length) },
             { label: "Requirements", value: String(backend.requirements.length) },
-            { label: "Overview gate", value: isOverviewAccepted ? "Accepted" : "Pending" }
+            { label: "Overview gate", value: isOverviewAccepted ? "Accepted" : "Pending" },
+            { label: "Code generation", value: workflowReadiness?.isCodeGenerationReady ? "Unlocked" : "Locked" }
         ],
-        [backend.requirements.length, isOverviewAccepted, projectRoles.length]
+        [backend.requirements.length, isOverviewAccepted, projectRoles.length, workflowReadiness?.isCodeGenerationReady]
     );
+
+    useEffect(() => {
+        if (!shouldPromptOverviewCreation || overviewSection) {
+            return;
+        }
+
+        setActionErrorMessage(null);
+        setOverviewForm(toOverviewFormState(overviewSection));
+        setModal("overview");
+        onOverviewPromptConsumed();
+    }, [onOverviewPromptConsumed, overviewSection, shouldPromptOverviewCreation]);
 
     async function saveBackend() {
         setActionErrorMessage(null);
@@ -378,6 +397,34 @@ export function BackendOverviewWorkspace({
                 </div>
             </div>
 
+            {workflowReadiness && !workflowReadiness.isCodeGenerationReady ? (
+                <div className="card backend-overview-card">
+                    <div className="card-header backend-table-header">
+                        <div>
+                            <span className="requirements-eyebrow">Code Generation</span>
+                            <h3>Complete the workflow to unlock code generation</h3>
+                        </div>
+                    </div>
+                    <div className="card-body backend-overview-body">
+                        <div className="backend-blocked-state">
+                            <strong>Code generation is hidden until the backend is fully prepared.</strong>
+                            <p>Complete the missing workflow items below to unlock code generation.</p>
+                        </div>
+                        <div className="backend-role-list">
+                            {workflowReadiness.missingItems.map((missingItem) => (
+                                <article key={missingItem} className="backend-role-item">
+                                    <div className="backend-role-heading">
+                                        <strong>Missing workflow item</strong>
+                                    </div>
+                                    <p>{missingItem}</p>
+                                </article>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {workflowReadiness?.isCodeGenerationReady ? (
             <div className="card backend-overview-card">
                 <div className="card-header backend-table-header">
                     <div>
@@ -401,7 +448,11 @@ export function BackendOverviewWorkspace({
                                     );
                                 }
                             }}
-                            disabled={isGeneratingPreview || !selectedGenerationFolderPath || isLoadingGenerationFolders}
+                            disabled={
+                                isGeneratingPreview
+                                || isLoadingGenerationFolders
+                                || (generationRunMode === 1 && !selectedGenerationFolderPath)
+                            }
                         >
                             {isGeneratingPreview ? "Generating..." : "Generate preview"}
                         </button>
@@ -691,6 +742,7 @@ export function BackendOverviewWorkspace({
                     ) : null}
                 </div>
             </div>
+            ) : null}
 
             {modal === "edit-backend" ? (
                 <BackendModal title="Edit backend" description="Update the backend metadata while keeping the current workspace routing intact." onClose={() => setModal(null)}>

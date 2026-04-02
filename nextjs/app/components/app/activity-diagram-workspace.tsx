@@ -14,14 +14,16 @@ export function ActivityDiagramWorkspace({
   useCase: DiagramElementDto;
   activityDiagram: DiagramElementDto;
 }) {
+  const activityTitle = activityDiagram.linkedUseCaseNodeLabel ?? useCase.name;
+
   return (
     <section className="page-section usecase-page">
       <div className="card usecase-hero-card">
         <div className="card-body usecase-hero-body">
           <div className="usecase-hero-copy">
             <span className="requirements-eyebrow">Activity Diagram</span>
-            <h1>{useCase.name}</h1>
-            <p>{useCase.description}</p>
+            <h1>{activityTitle}</h1>
+            <p>{activityDiagram.summary || useCase.description}</p>
           </div>
           <div className="usecase-hero-meta">
             <span className="badge">{backend.name}</span>
@@ -41,7 +43,7 @@ export function ActivityDiagramWorkspace({
           <div className="card-body usecase-summary-body">
             <div className="usecase-summary-block">
               <strong>Description</strong>
-              <p>{useCase.description}</p>
+              <p>{activityDiagram.description || useCase.description}</p>
             </div>
             <div className="usecase-summary-block">
               <strong>Actors</strong>
@@ -71,7 +73,7 @@ export function ActivityDiagramWorkspace({
             <div className="usecase-scene-frame">
               <SemanticSvgDiagramEditor
                 diagramElementId={activityDiagram.id}
-                title={`${useCase.name} activity diagram`}
+                title={`${activityTitle} activity diagram`}
                 defaultNodeType="action"
                 allowMembers={false}
               />

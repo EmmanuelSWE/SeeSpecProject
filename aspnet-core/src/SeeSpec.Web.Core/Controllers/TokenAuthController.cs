@@ -77,6 +77,7 @@ namespace SeeSpec.Controllers
                 UserId = authenticatedSession.User.Id,
                 TenantId = authenticatedSession.User.TenantId,
                 UserName = authenticatedSession.User.UserName,
+                Roles = authenticatedSession.User.Roles,
                 FullName = fullName,
                 EmailAddress = authenticatedSession.User.EmailAddress
             };

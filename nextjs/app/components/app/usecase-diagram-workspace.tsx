@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { SemanticSvgDiagramEditor } from "@/app/components/app/semantic-svg-diagram-editor";
+import { useDiagramElementActions } from "@/app/lib/providers/diagramElementProvider";
 import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
 import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
 import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-service";
@@ -9,12 +12,53 @@ import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-servi
 export function UseCaseDiagramWorkspace({
     backend,
     useCase,
-    linkedRequirements
+    linkedRequirements,
+    useCaseNodes
 }: {
     backend: BackendRecord;
     useCase: DiagramElementDto;
     linkedRequirements: SpecSectionDto[];
+    useCaseNodes: Array<{ id: string; label: string }>;
 }) {
+    const router = useRouter();
+    const { createDiagramElement, getDiagramElementsByBackend } = useDiagramElementActions();
+    const [activityNavigationNodeId, setActivityNavigationNodeId] = useState<string | null>(null);
+
+    const handleOpenActivityDiagram = async (node: { id: string; label: string }) => {
+        try {
+            setActivityNavigationNodeId(node.id);
+
+            const existingDiagrams = await getDiagramElementsByBackend(backend.id);
+            const existingActivity = existingDiagrams.find(
+                (item) =>
+                    item.backendId === backend.id &&
+                    item.type === "activity" &&
+                    item.linkedUseCaseSlug === useCase.slug &&
+                    item.linkedUseCaseNodeId === node.id
+            );
+
+            if (!existingActivity) {
+                await createDiagramElement({
+                    backendId: backend.id,
+                    specSectionId: useCase.specSectionId,
+                    type: "activity",
+                    slug: `activity-${useCase.slug}-${node.id}`.toLowerCase(),
+                    name: `${node.label} Activity`,
+                    summary: node.label,
+                    description: `${node.label} activity flow`,
+                    linkedRequirementIds: useCase.linkedRequirementIds,
+                    linkedUseCaseSlug: useCase.slug,
+                    linkedUseCaseNodeId: node.id,
+                    linkedUseCaseNodeLabel: node.label
+                });
+            }
+
+            router.push(`/app/backends/${backend.slug}/activity-diagram/${useCase.slug}/${node.id}`);
+        } finally {
+            setActivityNavigationNodeId(null);
+        }
+    };
+
     return (
         <section className="page-section usecase-page">
             <div className="card usecase-hero-card">
@@ -56,25 +100,6 @@ export function UseCaseDiagramWorkspace({
                                 </div>
                             ) : (
                                 <p>No actors have been mapped to this use case yet.</p>
-                            )}
-                        </div>
-                        <div className="usecase-summary-block">
-                            <strong>Dependencies</strong>
-                            {useCase.dependencies.length > 0 ? (
-                                <div className="usecase-link-list">
-                                    {useCase.dependencies.map((dependency, index) => (
-                                        <Link
-                                            key={`${dependency.slug}-${index}`}
-                                            href={`/app/backends/${backend.slug}/usecase-diagrams/${dependency.slug}`}
-                                            className="requirements-link-card"
-                                        >
-                                            <span>Dependency</span>
-                                            <strong>{dependency.name}</strong>
-                                        </Link>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p>No downstream use case dependencies are linked yet.</p>
                             )}
                         </div>
                     </div>
@@ -127,6 +152,32 @@ export function UseCaseDiagramWorkspace({
                             </div>
                         </div>
                         <div className="usecase-summary-block">
+                            <strong>Stored use cases</strong>
+                            <div className="usecase-link-list">
+                                {useCaseNodes.length > 0 ? (
+                                    useCaseNodes.map((node) => (
+                                        <button
+                                            key={node.id}
+                                            type="button"
+                                            className="requirements-link-card requirements-link-button"
+                                            onClick={() => void handleOpenActivityDiagram(node)}
+                                            disabled={activityNavigationNodeId === node.id}
+                                        >
+                                            <span>Use case</span>
+                                            <strong>{node.label}</strong>
+                                            <p>
+                                                {activityNavigationNodeId === node.id
+                                                    ? "Preparing activity diagram..."
+                                                    : "Open its activity diagram"}
+                                            </p>
+                                        </button>
+                                    ))
+                                ) : (
+                                    <p>Save at least one stored use case in the diagram to unlock its activity diagram.</p>
+                                )}
+                            </div>
+                        </div>
+                        <div className="usecase-summary-block">
                             <strong>Related backend pages</strong>
                             <div className="usecase-link-list">
                                 <Link href={`/app/backends/${backend.slug}/overview`} className="requirements-link-card">
@@ -136,10 +187,6 @@ export function UseCaseDiagramWorkspace({
                                 <Link href={`/app/backends/${backend.slug}/requirements`} className="requirements-link-card">
                                     <span>Backend</span>
                                     <strong>Requirements</strong>
-                                </Link>
-                                <Link href={`/app/backends/${backend.slug}/activity-diagram/${useCase.slug}`} className="requirements-link-card">
-                                    <span>Use case</span>
-                                    <strong>Activity diagram</strong>
                                 </Link>
                             </div>
                         </div>

@@ -12,6 +12,8 @@ namespace SeeSpec.Services.DiagramElementService
         System.Threading.Tasks.Task<DiagramSemanticActionResultDto> ApplySemanticActionAsync(ApplyDiagramSemanticActionDto input);
 
         System.Threading.Tasks.Task<RenderedDiagramDto> RenderSvgAsync(RenderDiagramDto input);
+
+        System.Threading.Tasks.Task<RenderedDiagramDebugDto> RenderSvgDebugAsync(RenderDiagramDto input);
     }
 }
 

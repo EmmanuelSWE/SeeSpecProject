@@ -1,4 +1,7 @@
-﻿namespace SeeSpec.Models.TokenAuth
+﻿using Abp.Authorization.Users;
+using System.Collections.Generic;
+
+namespace SeeSpec.Models.TokenAuth
 {
     public class AuthenticateResultModel
     {
@@ -13,6 +16,8 @@
         public int? TenantId { get; set; }
 
         public string UserName { get; set; }
+
+        public ICollection<UserRole> Roles { get; set; }
 
         public string FullName { get; set; }
 

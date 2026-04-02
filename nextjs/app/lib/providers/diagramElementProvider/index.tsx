@@ -146,10 +146,10 @@ export function DiagramElementProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const renderSvg = useCallback(async (diagramElementId: string, includePlantUmlText = false): Promise<RenderedDiagramDto> => {
+  const renderSvg = useCallback(async (diagramElementId: string): Promise<RenderedDiagramDto> => {
     dispatch(diagramElementRenderPending());
     try {
-      const render = await renderDiagramSvg(diagramElementId, includePlantUmlText);
+      const render = await renderDiagramSvg(diagramElementId);
       dispatch(getRenderedDiagramSuccess(render));
       return render;
     } catch (error) {

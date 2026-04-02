@@ -14,7 +14,7 @@ import { selectOverviewSection } from "@/app/lib/workflow/overview-gate";
 const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "System Architect", "Project Lead"] as const;
 
 function BackendActivityDiagramPage({ session }: WithAuthProps) {
-  const params = useParams<{ backendSlug: string; useCaseSlug: string }>();
+  const params = useParams<{ backendSlug: string; useCaseSlug: string; nodeId: string }>();
   const router = useRouter();
   const { backend } = useBackendState();
   const { diagramElements } = useDiagramElementState();
@@ -88,14 +88,14 @@ function BackendActivityDiagramPage({ session }: WithAuthProps) {
   );
   const activityDiagram = useMemo(
     () =>
-      // Reopen must bind to the persisted diagram for this backend/use-case pair instead of inventing a blank replacement.
       diagramElements.find(
         (item) =>
           item.backendId === backend?.id &&
           item.type === "activity" &&
-          item.linkedUseCaseSlug === params.useCaseSlug
+          item.linkedUseCaseSlug === params.useCaseSlug &&
+          item.linkedUseCaseNodeId === params.nodeId
       ) ?? null,
-    [backend?.id, diagramElements, params.useCaseSlug]
+    [backend?.id, diagramElements, params.nodeId, params.useCaseSlug]
   );
   const overviewSection = useMemo(
     () => selectOverviewSection(sections, backend?.slug ?? null),
@@ -135,7 +135,7 @@ function BackendActivityDiagramPage({ session }: WithAuthProps) {
         <div className="card backend-state-card">
           <div className="card-body backend-blocked-state">
             <strong>Loading activity diagram...</strong>
-            <p>Fetching the use case and its linked activity diagram for this backend.</p>
+            <p>Fetching the stored use case and its linked activity diagram.</p>
           </div>
         </div>
       </section>
@@ -143,12 +143,12 @@ function BackendActivityDiagramPage({ session }: WithAuthProps) {
   }
 
   if (!backend || !useCase || !activityDiagram) {
-        return (
+    return (
       <section className="page-section">
         <div className="card backend-state-card">
           <div className="card-body backend-blocked-state">
             <strong>Activity diagram not found.</strong>
-            <p>Select a valid backend use case with a linked activity diagram.</p>
+            <p>Select a stored use case from the use case diagram page first.</p>
           </div>
         </div>
       </section>
