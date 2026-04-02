@@ -15,6 +15,7 @@ using Abp.Authorization;
 using Abp.Domain.Repositories;
 using Abp.UI;
 using Microsoft.EntityFrameworkCore;
+using SeeSpec.Authorization;
 using SeeSpec.Domains.SpecManagement;
 using SeeSpec.Services.DiagramElementService.DTO;
 
@@ -30,6 +31,7 @@ namespace SeeSpec.Services.DiagramElementService
         private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
@@ -51,6 +53,7 @@ namespace SeeSpec.Services.DiagramElementService
         {
             try
             {
+                PermissionChecker.Authorize(PermissionNames.Pages_Diagrams_Create);
                 input.SpecSectionId = await ResolveSpecSectionIdAsync(input.BackendId, input.DiagramType, input.SpecSectionId);
                 await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
                 await ValidateDiagramCreationRulesAsync(input);
@@ -86,6 +89,7 @@ namespace SeeSpec.Services.DiagramElementService
         {
             try
             {
+                PermissionChecker.Authorize(PermissionNames.Pages_Diagrams_Edit);
                 input.SpecSectionId = await ResolveSpecSectionIdAsync(input.BackendId, input.DiagramType, input.SpecSectionId);
                 await ValidateSpecSectionLinkAsync(input.BackendId, input.SpecSectionId);
                 await ValidateDiagramCreationRulesAsync(input);
@@ -105,6 +109,7 @@ namespace SeeSpec.Services.DiagramElementService
         {
             try
             {
+                PermissionChecker.Authorize(PermissionNames.Pages_Diagrams_View);
                 DiagramElement diagram = await Repository.GetAsync(input.Id);
                 await EnsureSpecBootstrappedAsync(diagram.BackendId);
                 RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
@@ -121,6 +126,7 @@ namespace SeeSpec.Services.DiagramElementService
         {
             try
             {
+                PermissionChecker.Authorize(PermissionNames.Pages_Diagrams_Edit);
                 DiagramElement diagram = await Repository.GetAsync(input.DiagramElementId);
                 await EnsureSpecBootstrappedAsync(diagram.BackendId);
                 RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
@@ -158,6 +164,7 @@ namespace SeeSpec.Services.DiagramElementService
         {
             try
             {
+                PermissionChecker.Authorize(PermissionNames.Pages_Diagrams_View);
                 RenderedDiagramDebugDto render = await RenderSvgDebugAsync(input);
                 return new RenderedDiagramDto
                 {
@@ -176,6 +183,7 @@ namespace SeeSpec.Services.DiagramElementService
         {
             try
             {
+                PermissionChecker.Authorize(PermissionNames.Pages_Diagrams_View);
                 DiagramElement diagram = await Repository.GetAsync(input.DiagramElementId);
                 await EnsureSpecBootstrappedAsync(diagram.BackendId);
                 RuntimeGraph graph = await BuildRuntimeGraphAsync(diagram);
@@ -259,7 +267,7 @@ namespace SeeSpec.Services.DiagramElementService
                 return NormalizeGraphPayload(diagram, payload);
             }
 
-            return BuildLegacyGraph(diagram);
+            return BuildLegacyGraph(diagram, metadataJson);
         }
 
         private async Task ValidateSpecSectionLinkAsync(Guid backendId, Guid? specSectionId)
@@ -647,22 +655,22 @@ namespace SeeSpec.Services.DiagramElementService
             };
         }
 
-        private static RuntimeGraph BuildLegacyGraph(DiagramElement diagram)
+        private static RuntimeGraph BuildLegacyGraph(DiagramElement diagram, string metadataJson)
         {
             switch (diagram.DiagramType)
             {
                 case DiagramType.DomainModel:
-                    return BuildLegacyDomainModelGraph(diagram);
+                    return BuildLegacyDomainModelGraph(diagram, metadataJson);
                 case DiagramType.Activity:
-                    return BuildLegacyActivityGraph(diagram);
+                    return BuildLegacyActivityGraph(diagram, metadataJson);
                 default:
-                    return BuildLegacyUseCaseGraph(diagram);
+                    return BuildLegacyUseCaseGraph(diagram, metadataJson);
             }
         }
 
-        private static RuntimeGraph BuildLegacyUseCaseGraph(DiagramElement diagram)
+        private static RuntimeGraph BuildLegacyUseCaseGraph(DiagramElement diagram, string metadataJson)
         {
-            LegacyUseCaseMetadata metadata = DeserializeMetadata<LegacyUseCaseMetadata>(diagram.MetadataJson) ?? new LegacyUseCaseMetadata();
+            LegacyUseCaseMetadata metadata = DeserializeMetadata<LegacyUseCaseMetadata>(metadataJson) ?? new LegacyUseCaseMetadata();
             RuntimeGraph graph = CreateDefaultGraph(diagram);
 
             RuntimeGraphNode useCaseNode = new RuntimeGraphNode
@@ -719,9 +727,10 @@ namespace SeeSpec.Services.DiagramElementService
             return graph;
         }
 
-        private static RuntimeGraph BuildLegacyDomainModelGraph(DiagramElement diagram)
+        private static RuntimeGraph BuildLegacyDomainModelGraph(DiagramElement diagram, string metadataJson)
         {
-            LegacyDomainMetadata metadata = DeserializeMetadata<LegacyDomainMetadata>(diagram.MetadataJson) ?? new LegacyDomainMetadata();
+            LegacyDomainPersistedMetadata metadata = DeserializeMetadata<LegacyDomainPersistedMetadata>(metadataJson)
+                ?? new LegacyDomainPersistedMetadata();
             RuntimeGraph graph = CreateDefaultGraph(diagram);
 
             foreach (LegacyDomainEntity entity in metadata.Entities ?? new List<LegacyDomainEntity>())
@@ -755,19 +764,27 @@ namespace SeeSpec.Services.DiagramElementService
                 graph.Edges.Add(new RuntimeGraphEdge
                 {
                     Id = string.IsNullOrWhiteSpace(relationship.Id) ? BuildStableId("edge", sourceId + ":" + targetId + ":" + relationship.Label) : relationship.Id,
-                    EdgeType = "association",
+                    EdgeType = NormalizeToken(relationship.Type) switch
+                    {
+                        "composition" => "composition",
+                        "inheritance" => "inheritance",
+                        "dependency" => "dependency",
+                        _ => "association"
+                    },
                     SourceNodeId = sourceId,
                     TargetNodeId = targetId,
                     Label = relationship.Label ?? "relates"
                 });
             }
 
+            graph.Metadata["summary"] = metadata.Summary ?? diagram.Name;
+            graph.Metadata["description"] = metadata.Description ?? diagram.Name;
             return graph;
         }
 
-        private static RuntimeGraph BuildLegacyActivityGraph(DiagramElement diagram)
+        private static RuntimeGraph BuildLegacyActivityGraph(DiagramElement diagram, string metadataJson)
         {
-            LegacyUseCaseMetadata metadata = DeserializeMetadata<LegacyUseCaseMetadata>(diagram.MetadataJson) ?? new LegacyUseCaseMetadata();
+            LegacyUseCaseMetadata metadata = DeserializeMetadata<LegacyUseCaseMetadata>(metadataJson) ?? new LegacyUseCaseMetadata();
             RuntimeGraph graph = CreateDefaultGraph(diagram);
 
             RuntimeGraphNode startNode = new RuntimeGraphNode
@@ -1276,7 +1293,8 @@ namespace SeeSpec.Services.DiagramElementService
                             Id = edge.Id,
                             Source = graph.Nodes.FirstOrDefault(node => node.Id == edge.SourceNodeId)?.Label ?? edge.SourceNodeId,
                             Target = graph.Nodes.FirstOrDefault(node => node.Id == edge.TargetNodeId)?.Label ?? edge.TargetNodeId,
-                            Label = edge.Label
+                            Label = edge.Label,
+                            Type = NormalizeToken(edge.EdgeType)
                         })
                         .ToList();
                     break;
@@ -1303,6 +1321,40 @@ namespace SeeSpec.Services.DiagramElementService
                     metadata.Description = graph.Nodes.FirstOrDefault(node => NormalizeToken(node.NodeType) == "use-case")?.Description ?? metadata.Description;
                     break;
             }
+        }
+
+        private static LegacyDomainMetadata BuildLegacyDomainMetadata(RuntimeGraph graph)
+        {
+            return new LegacyDomainMetadata
+            {
+                Entities = graph.Nodes
+                    .OrderBy(node => node.Label, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(node => node.Id, StringComparer.Ordinal)
+                    .Select(node => new LegacyDomainEntity
+                    {
+                        Id = node.Id,
+                        Name = node.Label,
+                        Description = node.Description,
+                        Attributes = node.Members
+                            .OrderBy(member => member.Position)
+                            .ThenBy(member => member.Id, StringComparer.Ordinal)
+                            .Select(member => member.Signature)
+                            .ToList()
+                    })
+                    .ToList(),
+                Relationships = graph.Edges
+                    .OrderBy(edge => edge.SourceNodeId, StringComparer.Ordinal)
+                    .ThenBy(edge => edge.TargetNodeId, StringComparer.Ordinal)
+                    .Select(edge => new LegacyDomainRelationship
+                    {
+                        Id = edge.Id,
+                        Source = graph.Nodes.FirstOrDefault(node => node.Id == edge.SourceNodeId)?.Label ?? edge.SourceNodeId,
+                        Target = graph.Nodes.FirstOrDefault(node => node.Id == edge.TargetNodeId)?.Label ?? edge.TargetNodeId,
+                        Label = edge.Label,
+                        Type = NormalizeToken(edge.EdgeType)
+                    })
+                    .ToList()
+            };
         }
 
         // =====================================================================
@@ -1412,6 +1464,7 @@ namespace SeeSpec.Services.DiagramElementService
                 .ThenBy(n => n.Id, StringComparer.Ordinal))
             {
                 string alias = BuildPlantUmlAlias(node.Id);
+                string link = BuildSemanticLink("node", node.Id);
                 List<RuntimeGraphMember> orderedMembers = node.Members
                     .OrderBy(m => m.Position)
                     .ThenBy(m => m.Id, StringComparer.Ordinal)
@@ -1419,11 +1472,11 @@ namespace SeeSpec.Services.DiagramElementService
 
                 if (orderedMembers.Count == 0)
                 {
-                    builder.AppendLine("class \"" + EscapePlantUml(node.Label) + "\" as " + alias);
+                    builder.AppendLine("class \"" + EscapePlantUml(node.Label) + "\" as " + alias + " [[" + link + "]]");
                     continue;
                 }
 
-                builder.AppendLine("class \"" + EscapePlantUml(node.Label) + "\" as " + alias + " {");
+                builder.AppendLine("class \"" + EscapePlantUml(node.Label) + "\" as " + alias + " [[" + link + "]] {");
                 foreach (RuntimeGraphMember member in orderedMembers)
                 {
                     // Prefix with + (property) or ~ (function) so PlantUML renders
@@ -2067,6 +2120,12 @@ namespace SeeSpec.Services.DiagramElementService
             public List<LegacyDomainRelationship> Relationships { get; set; } = new List<LegacyDomainRelationship>();
         }
 
+        private class LegacyDomainPersistedMetadata : LegacyDomainMetadata
+        {
+            public string Summary { get; set; }
+            public string Description { get; set; }
+        }
+
         private class LegacyDomainEntity
         {
             public string Id { get; set; }
@@ -2081,6 +2140,7 @@ namespace SeeSpec.Services.DiagramElementService
             public string Source { get; set; }
             public string Target { get; set; }
             public string Label { get; set; }
+            public string Type { get; set; }
         }
     }
 }

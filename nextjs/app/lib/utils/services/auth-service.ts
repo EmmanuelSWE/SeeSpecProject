@@ -25,6 +25,7 @@ export type AuthenticateResult = {
   emailAddress: string;
   roleNames?: string[];
   grantedPermissions?: string[];
+  mustChangePassword?: boolean;
 };
 
 export type CurrentLoginInformationsResult = {
@@ -36,6 +37,7 @@ export type CurrentLoginInformationsResult = {
     emailAddress: string;
     roleNames: string[];
     grantedPermissions: string[];
+    mustChangePassword?: boolean;
   } | null;
   tenant: {
     id: number;
@@ -132,4 +134,38 @@ export async function getCurrentLoginInformations() {
   );
 
   return response.data.result;
+}
+
+export async function changePassword(payload: { currentPassword: string; newPassword: string }) {
+  try {
+    const response = await axiosInstance.post<{ result?: boolean }>("/services/app/User/ChangePassword", {
+      currentPassword: payload.currentPassword,
+      newPassword: payload.newPassword
+    });
+
+    return response.data.result ?? true;
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      typeof (error as { response?: unknown }).response === "object" &&
+      (error as { response?: unknown }).response !== null &&
+      "data" in ((error as { response: { data?: unknown } }).response)
+    ) {
+      const responseData = (error as { response: { data?: unknown } }).response.data;
+      if (
+        typeof responseData === "object" &&
+        responseData !== null &&
+        "error" in responseData &&
+        typeof (responseData as { error?: unknown }).error === "object" &&
+        (responseData as { error?: unknown }).error !== null
+      ) {
+        const errorPayload = (responseData as { error: { message?: string; details?: string } }).error;
+        throw new Error(errorPayload.details || errorPayload.message || "Unable to change password.");
+      }
+    }
+
+    throw new Error("Unable to change password.");
+  }
 }

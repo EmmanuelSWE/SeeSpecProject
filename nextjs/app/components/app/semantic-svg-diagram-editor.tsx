@@ -25,6 +25,7 @@ type SemanticSvgDiagramEditorProps = {
   title: string;
   defaultNodeType: string;
   allowMembers: boolean;
+  canEdit?: boolean;
 };
 
 type ParsedSelectionTarget = {
@@ -288,7 +289,8 @@ export function SemanticSvgDiagramEditor({
   diagramElementId,
   title,
   defaultNodeType,
-  allowMembers
+  allowMembers,
+  canEdit = true
 }: SemanticSvgDiagramEditorProps) {
   const {
     graph,
@@ -779,6 +781,13 @@ export function SemanticSvgDiagramEditor({
         if (editorMode === "view") {
           if (event.key === "Enter") {
             event.preventDefault();
+            if (!canEdit) {
+              setControllerMessageOverride({
+                diagramElementId,
+                message: "This diagram is read-only for your current role."
+              });
+              return;
+            }
             setEditorMode("edit");
             setInputPanelTab("form");
             setControllerMessageOverride({
@@ -892,6 +901,7 @@ export function SemanticSvgDiagramEditor({
       }
     },
     [
+        canEdit,
         closeInlineEditor,
         diagramElementId,
         editorMode,
@@ -1048,6 +1058,14 @@ export function SemanticSvgDiagramEditor({
   // ─── Enter / exit edit mode (shared by both tabs) ───────────────────────────
 
   const handleEnterEditMode = useCallback(() => {
+      if (!canEdit) {
+        setControllerMessageOverride({
+          diagramElementId,
+          message: "This diagram is read-only for your current role."
+        });
+        return;
+      }
+
       const initialNode =
         (selection?.kind === "node"
           ? orderedNodes.find((node) => node.id === selection.id) ?? null
@@ -1089,6 +1107,7 @@ export function SemanticSvgDiagramEditor({
 
     focusScene(sceneRef.current);
   }, [
+      canEdit,
       diagramElementId,
       graph,
       closeInlineEditor,
@@ -1154,8 +1173,9 @@ export function SemanticSvgDiagramEditor({
                 type="button"
                 className="requirements-action-button"
                 onClick={handleEnterEditMode}
+                disabled={!canEdit}
               >
-                Edit
+                {canEdit ? "Edit" : "Read only"}
               </button>
             )}
             <button

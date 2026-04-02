@@ -559,6 +559,20 @@ export function BackendOverviewWorkspace({
                             <p>{applyGeneratedCodeErrorMessage}</p>
                         </div>
                     ) : null}
+                    {generatedPreview && !previewErrorMessage && !applyGeneratedCodeErrorMessage ? (
+                        <div className="backend-blocked-state">
+                            <strong>
+                                {generatedPreview.hasAppliedArtifacts
+                                    ? "Code generation completed for the currently eligible files."
+                                    : "Preview is ready for review."}
+                            </strong>
+                            <p>
+                                {generatedPreview.hasAppliedArtifacts
+                                    ? "The staged preview remains visible below so you can confirm what was written and which files may still require overwrite approval."
+                                    : "Review the staged artifacts, protected-region warnings, and target paths below before continuing."}
+                            </p>
+                        </div>
+                    ) : null}
                     {generatedPreview ? (
                         <div className="backend-role-list">
                             <article className="backend-role-item">

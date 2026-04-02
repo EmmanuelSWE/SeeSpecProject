@@ -147,6 +147,13 @@ type DiagramMetadata = {
   relationships?: BackendDomainRelationship[];
 };
 
+type DomainDiagramMetadata = {
+  summary?: string;
+  description?: string;
+  entities?: BackendDomainEntity[];
+  relationships?: BackendDomainRelationship[];
+};
+
 function parseJson<T>(value?: string | null): T | null {
   if (!value) {
     return null;
@@ -182,6 +189,15 @@ function apiToDiagramType(value: number): DiagramElementType {
 }
 
 function buildMetadata(payload: Partial<CreateDiagramElementInput>): string {
+  if (payload.type === "domain-model") {
+    return JSON.stringify({
+      summary: payload.summary ?? "",
+      description: payload.description ?? payload.summary ?? "",
+      entities: payload.entities ?? [],
+      relationships: payload.relationships ?? []
+    } satisfies DomainDiagramMetadata);
+  }
+
   return JSON.stringify({
     summary: payload.summary ?? "",
     description: payload.description ?? payload.summary ?? "",
@@ -193,7 +209,7 @@ function buildMetadata(payload: Partial<CreateDiagramElementInput>): string {
     dependencies: payload.dependencies ?? [],
     entities: payload.entities ?? [],
     relationships: payload.relationships ?? []
-  });
+  } satisfies DiagramMetadata);
 }
 
 async function getBackendMap(): Promise<Map<string, BackendApiDto>> {
@@ -241,7 +257,8 @@ function extractDomainSummary(metadata: DiagramMetadata, graph: DiagramGraphDto 
           id: edge.id,
           source: graph?.nodes.find((node) => node.id === edge.sourceNodeId)?.label ?? edge.sourceNodeId,
           target: graph?.nodes.find((node) => node.id === edge.targetNodeId)?.label ?? edge.targetNodeId,
-          label: edge.label || edge.edgeType
+          label: edge.label || edge.edgeType,
+          type: edge.edgeType
         }));
 
   return { entities, relationships };

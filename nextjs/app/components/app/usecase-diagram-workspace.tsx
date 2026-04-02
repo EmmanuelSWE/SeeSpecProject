@@ -13,12 +13,14 @@ export function UseCaseDiagramWorkspace({
     backend,
     useCase,
     linkedRequirements,
-    useCaseNodes
+    useCaseNodes,
+    canEditDiagram
 }: {
     backend: BackendRecord;
     useCase: DiagramElementDto;
     linkedRequirements: SpecSectionDto[];
     useCaseNodes: Array<{ id: string; label: string }>;
+    canEditDiagram: boolean;
 }) {
     const router = useRouter();
     const { createDiagramElement, getDiagramElementsByBackend } = useDiagramElementActions();
@@ -119,6 +121,7 @@ export function UseCaseDiagramWorkspace({
                                 title={`${useCase.name} use case diagram`}
                                 defaultNodeType="use-case"
                                 allowMembers={false}
+                                canEdit={canEditDiagram}
                             />
                         </div>
                     </div>
@@ -161,12 +164,14 @@ export function UseCaseDiagramWorkspace({
                                             type="button"
                                             className="requirements-link-card requirements-link-button"
                                             onClick={() => void handleOpenActivityDiagram(node)}
-                                            disabled={activityNavigationNodeId === node.id}
+                                            disabled={activityNavigationNodeId === node.id || !canEditDiagram}
                                         >
                                             <span>Use case</span>
                                             <strong>{node.label}</strong>
                                             <p>
-                                                {activityNavigationNodeId === node.id
+                                                {!canEditDiagram
+                                                    ? "System Architect permission is required to create or update activity diagrams."
+                                                    : activityNavigationNodeId === node.id
                                                     ? "Preparing activity diagram..."
                                                     : "Open its activity diagram"}
                                             </p>

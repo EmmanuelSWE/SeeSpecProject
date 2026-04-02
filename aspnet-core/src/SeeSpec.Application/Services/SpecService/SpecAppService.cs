@@ -800,6 +800,28 @@ namespace SeeSpec.Services.SpecService
                 return JValue.CreateNull();
             }
 
+            string trimmed = content.TrimStart();
+            if (trimmed.Length == 0)
+            {
+                return JValue.CreateNull();
+            }
+
+            char firstCharacter = trimmed[0];
+            bool looksLikeJson =
+                firstCharacter == '{'
+                || firstCharacter == '['
+                || firstCharacter == '"'
+                || firstCharacter == '-'
+                || char.IsDigit(firstCharacter)
+                || firstCharacter == 't'
+                || firstCharacter == 'f'
+                || firstCharacter == 'n';
+
+            if (!looksLikeJson)
+            {
+                return new JValue(content);
+            }
+
             try
             {
                 return JToken.Parse(content);

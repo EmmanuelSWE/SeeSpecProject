@@ -15,6 +15,8 @@ const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "Syste
 
 function BackendDomainModelPage({ session }: WithAuthProps) {
     const params = useParams<{ backendSlug: string }>();
+    const backendSlug = params?.backendSlug ?? null;
+    const routeErrorMessage = backendSlug ? null : "Unable to resolve this backend route.";
     const router = useRouter();
     const { backend } = useBackendState();
     const { sections } = useSpecSectionState();
@@ -31,7 +33,13 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
     useEffect(() => {
         let isActive = true;
 
-        getBackendBySlug(params.backendSlug)
+        if (!backendSlug) {
+            return () => {
+                isActive = false;
+            };
+        }
+
+        getBackendBySlug(backendSlug)
             .catch((error) => {
                 if (!isActive) {
                     return;
@@ -48,7 +56,7 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
         return () => {
             isActive = false;
         };
-    }, [getBackendBySlug, params.backendSlug]);
+    }, [backendSlug, getBackendBySlug]);
 
     useEffect(() => {
         let isActive = true;
@@ -81,6 +89,8 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
     }, [backendId, getDiagramElementsByBackendAndType, getSectionsByBackend]);
 
     const overviewSection = backend ? selectOverviewSection(sections, backend.slug) : null;
+    const canViewDiagram = hasPermission(session, APP_PERMISSIONS.diagramsView);
+    const canEditDiagram = hasPermission(session, APP_PERMISSIONS.diagramsEdit);
 
     useEffect(() => {
         if (!backend || !hasResolvedBackend || !hasResolvedData) {
@@ -101,7 +111,7 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
             };
         }
 
-        if (diagramElements.length > 0 || diagramProvisionRequestedRef.current) {
+        if (!canEditDiagram || diagramElements.length > 0 || diagramProvisionRequestedRef.current) {
             return () => {
                 isActive = false;
             };
@@ -142,7 +152,8 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
         diagramElements.length,
         hasResolvedBackend,
         hasResolvedData,
-        overviewSection?.isAccepted
+        overviewSection?.isAccepted,
+        canEditDiagram
     ]);
 
     const isPreparingBlankDiagram =
@@ -153,17 +164,17 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
         diagramElements.length === 0 &&
         !pageErrorMessage;
 
-    if (!hasPermission(session, APP_PERMISSIONS.domainModel)) {
+    if (!canViewDiagram) {
         return <AccessPanel title="Domain model" message="Your current role does not allow access to the domain model." />;
     }
 
-    if (pageErrorMessage) {
+    if (routeErrorMessage || pageErrorMessage) {
         return (
             <section className="page-section">
                 <div className="card backend-state-card">
                     <div className="card-body backend-blocked-state">
                         <strong>Domain model workspace failed to load.</strong>
-                        <p>{pageErrorMessage}</p>
+                        <p>{routeErrorMessage ?? pageErrorMessage}</p>
                     </div>
                 </div>
             </section>
@@ -200,7 +211,7 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
         return null;
     }
 
-    return <DomainModelWorkspace backend={backend} diagram={diagramElements[0] ?? null} />;
+    return <DomainModelWorkspace backend={backend} diagram={diagramElements[0] ?? null} canEditDiagram={canEditDiagram} />;
 }
 
 export default withAuth(BackendDomainModelPage, { roles: [...WORKFLOW_ROLES] });

@@ -41,6 +41,7 @@ export type BackendDomainRelationship = {
   source: string;
   target: string;
   label: string;
+  type?: string;
 };
 
 export type BackendRecord = {

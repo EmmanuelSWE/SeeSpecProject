@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
-import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
+import { APP_PERMISSIONS, hasAnyPermission, hasPermission } from "@/app/lib/auth/permissions";
 import { useUserState } from "@/app/lib/providers/userProvider";
 import {
   activateUser,
@@ -42,7 +42,18 @@ const INITIAL_FORM: UserFormState = {
 
 export default function UsersPage() {
   const { session } = useUserState();
-  const canViewUsers = hasPermission(session, APP_PERMISSIONS.users);
+  const canViewUsers = hasAnyPermission(session, [
+    APP_PERMISSIONS.users,
+    APP_PERMISSIONS.teamView,
+    APP_PERMISSIONS.teamViewAll,
+    APP_PERMISSIONS.teamAddPeople,
+    APP_PERMISSIONS.teamEditPeople
+  ]);
+  const canCreateUsers = hasAnyPermission(session, [APP_PERMISSIONS.usersCreate, APP_PERMISSIONS.teamAddPeople]);
+  const canEditUsers = hasAnyPermission(session, [APP_PERMISSIONS.usersEdit, APP_PERMISSIONS.teamEditPeople]);
+  const canDeleteUsers = hasAnyPermission(session, [APP_PERMISSIONS.usersDelete, APP_PERMISSIONS.teamRemovePeople]);
+  const canToggleActivation = hasPermission(session, APP_PERMISSIONS.usersEdit);
+  const canAssignRolesFreely = hasPermission(session, APP_PERMISSIONS.usersAssignRoles);
   const [users, setUsers] = useState<UserDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [query, setQuery] = useState("");
@@ -128,6 +139,10 @@ export default function UsersPage() {
 
     try {
       if (isEditing && form.id !== null) {
+        if (!canEditUsers) {
+          throw new Error("Your current role cannot edit tenant users.");
+        }
+
         const payload: UpdateUserInput = {
           id: form.id,
           userName: form.userName,
@@ -141,6 +156,10 @@ export default function UsersPage() {
         await updateUser(payload);
         setStatusMessage(`User "${form.userName}" updated.`);
       } else {
+        if (!canCreateUsers) {
+          throw new Error("Your current role cannot add tenant users.");
+        }
+
         const payload: CreateUserInput = {
           userName: form.userName,
           name: form.name,
@@ -148,11 +167,11 @@ export default function UsersPage() {
           emailAddress: form.emailAddress,
           isActive: form.isActive,
           roleNames: form.roleNames,
-          password: form.password
+          password: "123456"
         };
 
         await createUser(payload);
-        setStatusMessage(`User "${form.userName}" created.`);
+        setStatusMessage(`User "${form.userName}" created with default password 123456.`);
       }
 
       resetForm();
@@ -165,6 +184,11 @@ export default function UsersPage() {
   }
 
   async function handleDelete(user: UserDto) {
+    if (!canDeleteUsers) {
+      setError("Your current role cannot remove tenant users.");
+      return;
+    }
+
     setError(null);
     setStatusMessage(null);
 
@@ -181,6 +205,11 @@ export default function UsersPage() {
   }
 
   async function handleActivationToggle(user: UserDto) {
+    if (!canToggleActivation) {
+      setError("Only tenant administrators can activate or deactivate users.");
+      return;
+    }
+
     setError(null);
     setStatusMessage(null);
 
@@ -220,7 +249,7 @@ export default function UsersPage() {
     <section className="page-section">
       <div className="section-header">
         <h1>Users</h1>
-        <button type="button" className="primary-button" onClick={resetForm}>
+        <button type="button" className="primary-button" onClick={resetForm} disabled={!canCreateUsers && !isEditing}>
           {isEditing ? "Create new user" : "Clear form"}
         </button>
       </div>
@@ -243,6 +272,15 @@ export default function UsersPage() {
             <h3>{isEditing ? "Edit user" : "Add user"}</h3>
           </div>
           <div className="card-body">
+            {!canAssignRolesFreely ? (
+              <p className="auth-status auth-status-neutral">
+                Project Leads can add people with the default password <strong>123456</strong> and may only assign Business Analyst, System Architect, or Team Member roles.
+              </p>
+            ) : (
+              <p className="auth-status auth-status-neutral">
+                New tenant users start with the default password <strong>123456</strong> and must change it on first login.
+              </p>
+            )}
             <form className="management-form" onSubmit={handleSubmit}>
               <label className="management-field">
                 <span>User name</span>
@@ -281,25 +319,14 @@ export default function UsersPage() {
                 />
               </label>
 
-              {!isEditing ? (
-                <label className="management-field">
-                  <span>Password</span>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                    required
-                  />
-                </label>
-              ) : null}
-
               <label className="management-toggle">
                 <input
                   type="checkbox"
                   checked={form.isActive}
                   onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
+                  disabled={!canToggleActivation}
                 />
-                <span>Active user</span>
+                <span>{canToggleActivation ? "Active user" : "Activation is managed by tenant administrators"}</span>
               </label>
 
               <div className="management-field">
@@ -384,15 +411,21 @@ export default function UsersPage() {
                       <td>{user.isActive ? "Active" : "Inactive"}</td>
                       <td>
                         <div className="action-row">
-                          <button type="button" className="table-action" onClick={() => startEdit(user)}>
-                            Edit
-                          </button>
-                          <button type="button" className="table-action" onClick={() => void handleActivationToggle(user)}>
-                            {user.isActive ? "Deactivate" : "Activate"}
-                          </button>
-                          <button type="button" className="table-action danger" onClick={() => void handleDelete(user)}>
-                            Delete
-                          </button>
+                          {canEditUsers ? (
+                            <button type="button" className="table-action" onClick={() => startEdit(user)}>
+                              Edit
+                            </button>
+                          ) : null}
+                          {canToggleActivation ? (
+                            <button type="button" className="table-action" onClick={() => void handleActivationToggle(user)}>
+                              {user.isActive ? "Deactivate" : "Activate"}
+                            </button>
+                          ) : null}
+                          {canDeleteUsers ? (
+                            <button type="button" className="table-action danger" onClick={() => void handleDelete(user)}>
+                              Delete
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>

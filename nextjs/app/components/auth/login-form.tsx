@@ -102,7 +102,7 @@ export function LoginForm() {
           : "Host Tenant";
 
       console.log(`user : ${session.userName} logged into tenant : ${tenantLabel}`);
-      router.push("/app/home");
+      router.push(session.mustChangePassword ? "/app/update-password" : "/app/home");
     } catch {}
   }
 
@@ -165,11 +165,7 @@ export function LoginForm() {
           onChange={(password) => setForm((current) => ({ ...current, password }))}
         />
 
-        <p className="auth-demo-note">Demo: Select a role to mock login</p>
-
-        <button type="button" className="auth-role-preview" disabled>
-          Host Admin
-        </button>
+    
 
         <div className="auth-submit-row">
           <button type="submit" className="primary-button auth-submit-button" disabled={isPending || isTenantPending}>

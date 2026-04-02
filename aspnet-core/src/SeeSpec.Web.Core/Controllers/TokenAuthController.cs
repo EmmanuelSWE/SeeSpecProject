@@ -19,6 +19,7 @@ using SeeSpec.Authorization.Roles;
 using SeeSpec.Authorization.Users;
 using SeeSpec.Models.TokenAuth;
 using SeeSpec.MultiTenancy;
+using SeeSpec.Users;
 
 namespace SeeSpec.Controllers
 {
@@ -65,6 +66,8 @@ namespace SeeSpec.Controllers
                 model.Password,
                 !string.IsNullOrWhiteSpace(model.TenancyName) ? model.TenancyName : GetTenancyNameOrNull()
             );
+            var roleNames = await _userManager.GetRolesAsync(authenticatedSession.User);
+            var grantedPermissions = await GetGrantedPermissionNamesAsync(authenticatedSession.User, roleNames);
 
             var accessToken = CreateAccessToken(CreateJwtClaims(authenticatedSession.Identity));
             var fullName = $"{authenticatedSession.User.Name} {authenticatedSession.User.Surname}".Trim();
@@ -77,9 +80,14 @@ namespace SeeSpec.Controllers
                 UserId = authenticatedSession.User.Id,
                 TenantId = authenticatedSession.User.TenantId,
                 UserName = authenticatedSession.User.UserName,
-                Roles = authenticatedSession.User.Roles,
+                Roles = authenticatedSession.User.Roles?.ToList() ?? new List<UserRole>(),
+                RoleNames = roleNames.ToArray(),
+                GrantedPermissions = grantedPermissions,
                 FullName = fullName,
-                EmailAddress = authenticatedSession.User.EmailAddress
+                EmailAddress = authenticatedSession.User.EmailAddress,
+                MustChangePassword = (await _userManager.GetClaimsAsync(authenticatedSession.User)).Any(claim =>
+                    claim.Type == UserAppService.MustChangePasswordClaimType &&
+                    claim.Value == "true")
             };
 
             AppendAuthCookies(result);
@@ -111,7 +119,7 @@ namespace SeeSpec.Controllers
 
             if (loginResult.Result == AbpLoginResultType.Success)
             {
-                return new AuthenticatedSession(loginResult.User, loginResult.Identity);
+                return await BuildAuthenticatedSessionAsync(loginResult.User, loginResult.Identity);
             }
 
             if (!string.IsNullOrWhiteSpace(tenancyName))
@@ -179,7 +187,58 @@ namespace SeeSpec.Controllers
                 return null;
             }
 
-            return new AuthenticatedSession(tenantAdminUser, identity);
+            return await BuildAuthenticatedSessionAsync(tenantAdminUser, identity);
+        }
+
+        private async Task<AuthenticatedSession> BuildAuthenticatedSessionAsync(User user, ClaimsIdentity identity)
+        {
+            var loadedUser = await _userManager.Users
+                .AsNoTracking()
+                .Include(existingUser => existingUser.Roles)
+                .FirstOrDefaultAsync(existingUser => existingUser.Id == user.Id);
+
+            return new AuthenticatedSession(loadedUser ?? user, identity);
+        }
+
+        private async Task<string[]> GetGrantedPermissionNamesAsync(User user, IEnumerable<string> roleNames)
+        {
+            if (roleNames == null)
+            {
+                return Array.Empty<string>();
+            }
+
+            var normalizedRoleNames = roleNames
+                .Where(roleName => !string.IsNullOrWhiteSpace(roleName))
+                .Select(roleName => roleName.ToUpperInvariant())
+                .ToList();
+
+            if (normalizedRoleNames.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            var roles = await _roleManager.Roles
+                .AsNoTracking()
+                .Where(role =>
+                    role.TenantId == user.TenantId &&
+                    role.NormalizedName != null &&
+                    normalizedRoleNames.Contains(role.NormalizedName))
+                .ToListAsync();
+
+            var grantedPermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var role in roles)
+            {
+                var permissions = await _roleManager.GetGrantedPermissionsAsync(role);
+                foreach (var permission in permissions)
+                {
+                    grantedPermissions.Add(permission.Name);
+                }
+            }
+
+            return grantedPermissions
+                .OrderBy(permissionName => permissionName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
         private string CreateAccessToken(IEnumerable<Claim> claims, TimeSpan? expiration = null)
@@ -234,7 +293,10 @@ namespace SeeSpec.Controllers
                 userName = result.UserName,
                 fullName = result.FullName,
                 emailAddress = result.EmailAddress,
-                expireInSeconds = result.ExpireInSeconds
+                expireInSeconds = result.ExpireInSeconds,
+                roleNames = result.RoleNames ?? Array.Empty<string>(),
+                grantedPermissions = result.GrantedPermissions ?? Array.Empty<string>(),
+                mustChangePassword = result.MustChangePassword
             });
 
             Response.Cookies.Append(

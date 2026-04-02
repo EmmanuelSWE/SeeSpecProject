@@ -91,7 +91,7 @@ namespace SeeSpec.Services.BackendService
                 readiness.MissingItems.Add("Complete and accept the overview.");
                 readiness.MissingItems.Add("Add at least one backend role.");
                 readiness.MissingItems.Add("Create at least one requirement.");
-                readiness.MissingItems.Add("Create a domain model with at least one entity.");
+                readiness.MissingItems.Add("Create the domain model.");
                 return readiness;
             }
 
@@ -137,7 +137,9 @@ namespace SeeSpec.Services.BackendService
                     useCaseDiagrams.Any(diagram => diagram.SpecSectionId == requirement.Id));
 
             readiness.DomainEntityCount = domainModelDiagrams.Sum(CountDomainEntities);
-            readiness.HasDomainEntities = readiness.DomainEntityCount > 0;
+            // During stabilization, a blank persisted domain model is enough to unlock preview/write flow
+            // while entity/member persistence is being repaired separately.
+            readiness.HasDomainEntities = readiness.HasDomainModel;
 
             var useCaseNodes = useCaseDiagrams
                 .SelectMany(diagram => ExtractUseCaseNodes(diagram)
@@ -191,7 +193,7 @@ namespace SeeSpec.Services.BackendService
 
             if (!readiness.HasDomainEntities)
             {
-                readiness.MissingItems.Add("Create a domain model with at least one entity.");
+                readiness.MissingItems.Add("Create the domain model.");
             }
 
             if (!readiness.EveryUseCaseHasActivityDiagram)

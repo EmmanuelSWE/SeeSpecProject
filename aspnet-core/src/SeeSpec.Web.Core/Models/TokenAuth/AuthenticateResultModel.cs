@@ -19,8 +19,14 @@ namespace SeeSpec.Models.TokenAuth
 
         public ICollection<UserRole> Roles { get; set; }
 
+        public string[] RoleNames { get; set; }
+
+        public string[] GrantedPermissions { get; set; }
+
         public string FullName { get; set; }
 
         public string EmailAddress { get; set; }
+
+        public bool MustChangePassword { get; set; }
     }
 }

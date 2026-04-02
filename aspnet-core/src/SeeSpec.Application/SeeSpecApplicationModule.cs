@@ -12,6 +12,7 @@ namespace SeeSpec
     {
         public override void PreInitialize()
         {
+            Configuration.Authorization.IsEnabled = false;
             Configuration.Authorization.Providers.Add<SeeSpecAuthorizationProvider>();
         }
 

@@ -30,6 +30,10 @@ export function BackendRequirementsWorkspace({
     useCaseDiagrams,
     activityDiagrams,
     workflowReadiness,
+    canCreateRequirementSections,
+    canEditRequirementSections,
+    canViewDiagrams,
+    canEditDiagrams,
     onCreateRequirement,
     onUpdateRequirement,
     onCreateUseCaseDiagram,
@@ -43,6 +47,10 @@ export function BackendRequirementsWorkspace({
     useCaseDiagrams: DiagramElementDto[];
     activityDiagrams: DiagramElementDto[];
     workflowReadiness: BackendWorkflowReadiness | null;
+    canCreateRequirementSections: boolean;
+    canEditRequirementSections: boolean;
+    canViewDiagrams: boolean;
+    canEditDiagrams: boolean;
     onCreateRequirement: (payload: CreateSpecSectionInput) => Promise<SpecSectionDto>;
     onUpdateRequirement: (payload: UpdateSpecSectionInput) => Promise<void>;
     onCreateUseCaseDiagram: (requirement: SpecSectionDto) => Promise<DiagramElementDto>;
@@ -70,7 +78,7 @@ export function BackendRequirementsWorkspace({
 
     const hasOverview = Boolean(overviewSection);
     const isOverviewAccepted = overviewSection?.isAccepted ?? false;
-    const canCreateRequirements = workflowReadiness?.canCreateRequirements ?? false;
+    const canCreateRequirements = Boolean(canCreateRequirementSections && (workflowReadiness?.canCreateRequirements ?? false));
     const workflowMissingItems = useMemo(
         () => (workflowReadiness?.missingItems ?? []).filter((item) => item.includes("overview") || item.includes("role")),
         [workflowReadiness?.missingItems]
@@ -162,6 +170,11 @@ export function BackendRequirementsWorkspace({
             return;
         }
 
+        if (!canViewDiagrams) {
+            setActionErrorMessage("Your current role cannot view requirement diagrams.");
+            return;
+        }
+
         setActionErrorMessage(null);
         setIsOpeningUseCase(true);
         try {
@@ -173,6 +186,10 @@ export function BackendRequirementsWorkspace({
                 await onEnsureUseCaseDiagramBinding(existingDiagram, activeRequirement);
                 router.push(`/app/backends/${backend.slug}/usecase-diagrams/${existingDiagram.slug}`);
                 return;
+            }
+
+            if (!canEditDiagrams) {
+                throw new Error("Only System Architects can create new diagrams.");
             }
 
             const diagram = await onCreateUseCaseDiagram(activeRequirement);
@@ -189,12 +206,21 @@ export function BackendRequirementsWorkspace({
             return;
         }
 
+        if (!canViewDiagrams) {
+            setActionErrorMessage("Your current role cannot view activity diagrams.");
+            return;
+        }
+
         setActionErrorMessage(null);
         setIsOpeningActivity(true);
         try {
             const existingUseCase = useCaseDiagrams.find((diagram) =>
                 diagram.linkedRequirementIds.includes(activeRequirement.id)
             );
+            if (!existingUseCase && !canEditDiagrams) {
+                throw new Error("Only System Architects can create the missing use case diagram for this requirement.");
+            }
+
             const useCaseDiagram = existingUseCase ?? await onCreateUseCaseDiagram(activeRequirement);
             const existingActivityDiagram = activityDiagrams.find(
                 (diagram) =>
@@ -206,6 +232,10 @@ export function BackendRequirementsWorkspace({
                 await onEnsureActivityDiagramBinding(existingActivityDiagram, activeRequirement, useCaseDiagram);
                 router.push(`/app/backends/${backend.slug}/activity-diagram/${useCaseDiagram.slug}`);
                 return;
+            }
+
+            if (!canEditDiagrams) {
+                throw new Error("Only System Architects can create new activity diagrams.");
             }
 
             await onCreateActivityDiagram(activeRequirement, useCaseDiagram);
@@ -311,7 +341,7 @@ export function BackendRequirementsWorkspace({
                             <button type="button" className="secondary-button" onClick={() => { setQuery(""); setStatusFilter("All"); }}>
                                 Reset filters
                             </button>
-                            <button type="button" className="requirements-action-button" onClick={() => setIsCreateOpen(true)}>
+                            <button type="button" className="requirements-action-button" onClick={() => setIsCreateOpen(true)} disabled={!canCreateRequirements}>
                                 Create requirement
                             </button>
                         </div>
@@ -370,7 +400,7 @@ export function BackendRequirementsWorkspace({
                             status: activeRequirement.status ?? "Draft",
                             updatedAt: activeRequirement.updatedAt
                         }}
-                        canEdit={true}
+                        canEdit={canEditRequirementSections}
                         hasUseCaseDiagram={useCaseDiagrams.some((diagram) => diagram.linkedRequirementIds.includes(activeRequirement.id))}
                         hasActivityDiagram={activityDiagrams.some((diagram) => diagram.linkedRequirementIds.includes(activeRequirement.id))}
                         isUseCaseBusy={isOpeningUseCase}

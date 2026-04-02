@@ -13,6 +13,7 @@ namespace SeeSpec.Authorization.Roles
             public const string ProjectLead = "Project Lead";
             public const string BusinessAnalyst = "Business Analyst";
             public const string SystemArchitect = "System Architect";
+            public const string TeamMember = "Team Member";
         }
     }
 }

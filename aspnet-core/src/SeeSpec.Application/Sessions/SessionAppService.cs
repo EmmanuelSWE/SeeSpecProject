@@ -5,6 +5,7 @@ using Abp.Auditing;
 using Abp.Authorization;
 using SeeSpec.Authorization.Users;
 using SeeSpec.Sessions.Dto;
+using SeeSpec.Users;
 
 namespace SeeSpec.Sessions
 {
@@ -53,6 +54,10 @@ namespace SeeSpec.Sessions
                 }
 
                 userDto.GrantedPermissions = grantedPermissions.ToArray();
+                var claims = await _userManager.GetClaimsAsync(currentUser);
+                userDto.MustChangePassword = claims.Any(claim =>
+                    claim.Type == UserAppService.MustChangePasswordClaimType &&
+                    claim.Value == "true");
 
                 output.User = userDto;
             }

@@ -8,11 +8,13 @@ import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element
 export function ActivityDiagramWorkspace({
   backend,
   useCase,
-  activityDiagram
+  activityDiagram,
+  canEditDiagram
 }: {
   backend: BackendRecord;
   useCase: DiagramElementDto;
   activityDiagram: DiagramElementDto;
+  canEditDiagram: boolean;
 }) {
   const activityTitle = activityDiagram.linkedUseCaseNodeLabel ?? useCase.name;
 
@@ -76,6 +78,7 @@ export function ActivityDiagramWorkspace({
                 title={`${activityTitle} activity diagram`}
                 defaultNodeType="action"
                 allowMembers={false}
+                canEdit={canEditDiagram}
               />
             </div>
           </div>

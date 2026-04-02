@@ -62,7 +62,7 @@ namespace SeeSpec.Services.AIGenerationService
             AppendUsingsRegion(builder, protectedRegions);
             builder.AppendLine($"namespace {namespaceName};");
             builder.AppendLine();
-            builder.AppendLine($"public class {typeName} : SeeSpecAppServiceBase, {interfaceName}");
+            builder.AppendLine($"public class {typeName} : {interfaceName}");
             builder.AppendLine("{");
             AppendRegionBlock(builder, protectedRegions, "custom-members", 1);
             builder.AppendLine();

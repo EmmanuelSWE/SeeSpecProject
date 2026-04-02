@@ -16,6 +16,9 @@ const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "Syste
 
 function BackendUseCaseDiagramPage({ session }: WithAuthProps) {
     const params = useParams<{ backendSlug: string; useCaseSlug: string }>();
+    const backendSlug = params?.backendSlug ?? null;
+    const useCaseSlug = params?.useCaseSlug ?? null;
+    const routeErrorMessage = backendSlug ? null : "Unable to resolve this backend route.";
     const router = useRouter();
     const { backend } = useBackendState();
     const { diagramElements } = useDiagramElementState();
@@ -32,7 +35,13 @@ function BackendUseCaseDiagramPage({ session }: WithAuthProps) {
     useEffect(() => {
         let isActive = true;
 
-        getBackendBySlug(params.backendSlug)
+        if (!backendSlug) {
+            return () => {
+                isActive = false;
+            };
+        }
+
+        getBackendBySlug(backendSlug)
             .catch((error) => {
                 if (!isActive) {
                     return;
@@ -49,7 +58,7 @@ function BackendUseCaseDiagramPage({ session }: WithAuthProps) {
         return () => {
             isActive = false;
         };
-    }, [getBackendBySlug, params.backendSlug]);
+    }, [backendSlug, getBackendBySlug]);
 
     useEffect(() => {
         let isActive = true;
@@ -87,9 +96,9 @@ function BackendUseCaseDiagramPage({ session }: WithAuthProps) {
                 (item) =>
                     item.backendId === backend?.id &&
                     item.type === "use-case" &&
-                    item.slug === params.useCaseSlug
+                    item.slug === useCaseSlug
             ) ?? null,
-        [backend?.id, diagramElements, params.useCaseSlug]
+        [backend?.id, diagramElements, useCaseSlug]
     );
     const linkedRequirements = useMemo(
         () => sections.filter((section) => useCase?.linkedRequirementIds.includes(section.id)),
@@ -99,6 +108,8 @@ function BackendUseCaseDiagramPage({ session }: WithAuthProps) {
         () => selectOverviewSection(sections, backend?.slug ?? null),
         [backend?.slug, sections]
     );
+    const canViewDiagram = hasPermission(session, APP_PERMISSIONS.diagramsView);
+    const canEditDiagram = hasPermission(session, APP_PERMISSIONS.diagramsEdit);
 
     useEffect(() => {
         if (!backend || !hasResolvedBackend || !hasResolvedData) {
@@ -141,17 +152,17 @@ function BackendUseCaseDiagramPage({ session }: WithAuthProps) {
         };
     }, [getDiagramGraph, useCase]);
 
-    if (!hasPermission(session, APP_PERMISSIONS.usecaseDiagrams)) {
+    if (!canViewDiagram) {
         return <AccessPanel title="Use Case Diagrams" message="Your current role does not allow access to use case diagrams." />;
     }
 
-    if (pageErrorMessage) {
+    if (routeErrorMessage || pageErrorMessage) {
         return (
             <section className="page-section">
                 <div className="card backend-state-card">
                     <div className="card-body backend-blocked-state">
                         <strong>Use case diagram failed to load.</strong>
-                        <p>{pageErrorMessage}</p>
+                        <p>{routeErrorMessage ?? pageErrorMessage}</p>
                     </div>
                 </div>
             </section>
@@ -193,6 +204,7 @@ function BackendUseCaseDiagramPage({ session }: WithAuthProps) {
             backend={backend}
             useCase={useCase}
             linkedRequirements={linkedRequirements}
+            canEditDiagram={canEditDiagram}
             useCaseNodes={
                 (useCaseGraph?.nodes ?? [])
                     .filter((node) => node.nodeType === "use-case")

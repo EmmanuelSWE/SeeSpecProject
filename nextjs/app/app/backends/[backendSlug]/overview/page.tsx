@@ -21,8 +21,11 @@ const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "Syste
 
 function BackendOverviewPage({ session }: WithAuthProps) {
     const params = useParams<{ backendSlug: string }>();
+    const backendSlug = params?.backendSlug ?? null;
+    const routeErrorMessage = backendSlug ? null : "Unable to resolve this backend route.";
     const router = useRouter();
     const searchParams = useSearchParams();
+    const prompt = searchParams?.get("prompt") ?? null;
     const { backend } = useBackendState();
     const { generatedPreview, isGeneratingPreview, previewErrorMessage, isApplyingGeneratedCode, applyGeneratedCodeErrorMessage } = useSpecState();
     const { sections } = useSpecSectionState();
@@ -44,10 +47,49 @@ function BackendOverviewPage({ session }: WithAuthProps) {
     const overviewSection = selectOverviewSection(sections, backend?.slug ?? null);
     const roleSections = sections.filter((item) => item.type === "role");
 
+    async function generatePreviewAndApply(
+        malformedRegionDecision: number
+    ) {
+        const spec = await getSpecByBackend(backend!.id);
+        if (!spec) {
+            throw new Error("No spec is available for this backend yet.");
+        }
+
+        if (generationRunMode === 1 && !selectedGenerationFolderPath) {
+            throw new Error("Choose one of the approved target folders before generating a preview.");
+        }
+
+        const preview = await generateSpecCode({
+            specId: spec.id,
+            generationMode: generationRunMode,
+            artifactType: generationArtifactType,
+            targetFolderPath: generationRunMode === 1 ? selectedGenerationFolderPath : "",
+            malformedRegionDecision
+        });
+
+        const requiresMalformedRegionDecision = preview.artifacts?.some((artifact) => artifact.requiresMalformedRegionDecision);
+        if (requiresMalformedRegionDecision) {
+            return;
+        }
+
+        await applyGeneratedCode({
+            specId: spec.id,
+            workspaceKey: preview.workspaceKey,
+            confirmApply: true,
+            confirmOverwriteExisting: false
+        });
+    }
+
     useEffect(() => {
         let isActive = true;
 
-        getBackendBySlug(params.backendSlug)
+        if (!backendSlug) {
+            return () => {
+                isActive = false;
+            };
+        }
+
+        getBackendBySlug(backendSlug)
             .catch((error) => {
                 if (!isActive) {
                     return;
@@ -64,7 +106,7 @@ function BackendOverviewPage({ session }: WithAuthProps) {
         return () => {
             isActive = false;
         };
-    }, [getBackendBySlug, params.backendSlug]);
+    }, [backendSlug, getBackendBySlug]);
 
     useEffect(() => {
         let isActive = true;
@@ -131,7 +173,7 @@ function BackendOverviewPage({ session }: WithAuthProps) {
     }, [backend, getWorkflowReadiness, sections.length]);
 
     useEffect(() => {
-        if (!backend || !hasResolvedSections || searchParams.get("prompt") !== "create-overview") {
+        if (!backend || !hasResolvedSections || prompt !== "create-overview") {
             return;
         }
 
@@ -140,7 +182,7 @@ function BackendOverviewPage({ session }: WithAuthProps) {
         }
 
         router.replace(`/app/backends/${backend.slug}/overview`);
-    }, [backend, hasResolvedSections, overviewSection, router, searchParams]);
+    }, [backend, hasResolvedSections, overviewSection, prompt, router]);
 
     useEffect(() => {
         let isActive = true;
@@ -203,13 +245,13 @@ function BackendOverviewPage({ session }: WithAuthProps) {
         return <AccessPanel title="Backends" message="Your current role does not allow access to backend workspaces." />;
     }
 
-    if (pageErrorMessage) {
+    if (routeErrorMessage || pageErrorMessage) {
         return (
             <section className="page-section">
                 <div className="card backend-state-card">
                     <div className="card-body backend-blocked-state">
                         <strong>Backend workspace failed to load.</strong>
-                        <p>{pageErrorMessage}</p>
+                        <p>{routeErrorMessage ?? pageErrorMessage}</p>
                     </div>
                 </div>
             </section>
@@ -263,40 +305,10 @@ function BackendOverviewPage({ session }: WithAuthProps) {
             onSelectGenerationArtifactType={setGenerationArtifactType}
             onSelectGenerationFolder={setSelectedGenerationFolderPath}
             onGeneratePreview={async () => {
-                const spec = await getSpecByBackend(backend.id);
-                if (!spec) {
-                    throw new Error("No spec is available for this backend yet.");
-                }
-
-                if (generationRunMode === 1 && !selectedGenerationFolderPath) {
-                    throw new Error("Choose one of the approved target folders before generating a preview.");
-                }
-
-                await generateSpecCode({
-                    specId: spec.id,
-                    generationMode: generationRunMode,
-                    artifactType: generationArtifactType,
-                    targetFolderPath: generationRunMode === 1 ? selectedGenerationFolderPath : "",
-                    malformedRegionDecision: 0
-                });
+                await generatePreviewAndApply(0);
             }}
             onResolveMalformedRegions={async (decision) => {
-                const spec = await getSpecByBackend(backend.id);
-                if (!spec) {
-                    throw new Error("No spec is available for this backend yet.");
-                }
-
-                if (generationRunMode === 1 && !selectedGenerationFolderPath) {
-                    throw new Error("Choose one of the approved target folders before generating a preview.");
-                }
-
-                await generateSpecCode({
-                    specId: spec.id,
-                    generationMode: generationRunMode,
-                    artifactType: generationArtifactType,
-                    targetFolderPath: generationRunMode === 1 ? selectedGenerationFolderPath : "",
-                    malformedRegionDecision: decision
-                });
+                await generatePreviewAndApply(decision);
             }}
             onApplyGeneratedCode={async (confirmOverwriteExisting) => {
                 const spec = await getSpecByBackend(backend.id);

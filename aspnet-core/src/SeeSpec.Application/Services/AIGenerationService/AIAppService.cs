@@ -180,12 +180,20 @@ namespace SeeSpec.Services.AIGenerationService
             GenerateSpecCodeRequestDto input)
         {
             List<PlannedArtifact> plans = new List<PlannedArtifact>();
-            foreach (AssembledSpecSectionDto section in assembledSpec.Sections ?? Array.Empty<AssembledSpecSectionDto>())
+            List<AssembledSpecSectionDto> sections = (assembledSpec.Sections ?? Array.Empty<AssembledSpecSectionDto>()).ToList();
+
+            GenerationArtifactType artifactTypeToPlan = input.ArtifactType;
+            if (input.GenerationMode == GenerationRunMode.SingleArtifactFamily)
+            {
+                artifactTypeToPlan = ResolvePreferredArtifactType(sections, input.ArtifactType);
+            }
+
+            foreach (AssembledSpecSectionDto section in sections)
             {
                 IEnumerable<GenerationArtifactType> sectionArtifactTypes = ResolveArtifactTypes(section);
                 foreach (GenerationArtifactType artifactType in sectionArtifactTypes)
                 {
-                    if (input.GenerationMode == GenerationRunMode.SingleArtifactFamily && artifactType != input.ArtifactType)
+                    if (input.GenerationMode == GenerationRunMode.SingleArtifactFamily && artifactType != artifactTypeToPlan)
                     {
                         continue;
                     }
@@ -203,10 +211,64 @@ namespace SeeSpec.Services.AIGenerationService
 
             if (plans.Count == 0)
             {
-                throw new UserFriendlyException("No generation artifacts could be planned for the selected backend sections.");
+                throw new UserFriendlyException(BuildNoArtifactsMessage(sections, input.ArtifactType));
             }
 
             return plans;
+        }
+
+        private static GenerationArtifactType ResolvePreferredArtifactType(
+            IReadOnlyList<AssembledSpecSectionDto> sections,
+            GenerationArtifactType requestedArtifactType)
+        {
+            HashSet<GenerationArtifactType> availableArtifactTypes = sections
+                .SelectMany(ResolveArtifactTypes)
+                .ToHashSet();
+
+            if (availableArtifactTypes.Contains(requestedArtifactType))
+            {
+                return requestedArtifactType;
+            }
+
+            GenerationArtifactType[] preferredFallbackOrder =
+            {
+                GenerationArtifactType.DomainEntity,
+                GenerationArtifactType.Dto,
+                GenerationArtifactType.Repository,
+                GenerationArtifactType.AppServiceInterface,
+                GenerationArtifactType.AppServiceClass,
+                GenerationArtifactType.PermissionSeed
+            };
+
+            return preferredFallbackOrder.FirstOrDefault(availableArtifactTypes.Contains);
+        }
+
+        private static string BuildNoArtifactsMessage(
+            IReadOnlyList<AssembledSpecSectionDto> sections,
+            GenerationArtifactType requestedArtifactType)
+        {
+            bool hasDomainModel = sections.Any(section => section?.DiagramType == DiagramType.DomainModel);
+            bool hasUseCase = sections.Any(section => section?.DiagramType == DiagramType.UseCase);
+
+            if (requestedArtifactType == GenerationArtifactType.DomainEntity
+                || requestedArtifactType == GenerationArtifactType.Dto
+                || requestedArtifactType == GenerationArtifactType.Repository)
+            {
+                return hasDomainModel
+                    ? "No approved generation folders are available for the requested domain artifact family."
+                    : "Code generation for domain entities, DTOs, and repositories requires a domain model section.";
+            }
+
+            if (requestedArtifactType == GenerationArtifactType.AppServiceInterface
+                || requestedArtifactType == GenerationArtifactType.AppServiceClass
+                || requestedArtifactType == GenerationArtifactType.PermissionSeed)
+            {
+                return hasUseCase
+                    ? "No approved generation folders are available for the requested application-service artifact family."
+                    : "Code generation for app services and permission seeds requires at least one use case diagram section.";
+            }
+
+            return "No generation artifacts could be planned from the current assembled spec.";
         }
 
         private async Task<AllowedGenerationFolderDto> ResolveTargetFolderAsync(
@@ -216,14 +278,39 @@ namespace SeeSpec.Services.AIGenerationService
         {
             if (input.GenerationMode == GenerationRunMode.SingleArtifactFamily)
             {
-                return await _backendImportService.ValidateGenerationFolderAsync(
-                    new ValidateGenerationFolderInputDto
+                if (!string.IsNullOrWhiteSpace(input.TargetFolderPath))
+                {
+                    try
+                    {
+                        return await _backendImportService.ValidateGenerationFolderAsync(
+                            new ValidateGenerationFolderInputDto
+                            {
+                                BackendId = backendId,
+                                ArtifactType = artifactType,
+                                FolderPath = input.TargetFolderPath
+                            },
+                            default);
+                    }
+                    catch (UserFriendlyException)
+                    {
+                    }
+                }
+
+                List<AllowedGenerationFolderDto> singleFamilyFolders = await _backendImportService.GetAllowedGenerationFoldersAsync(
+                    new GetAllowedGenerationFoldersInputDto
                     {
                         BackendId = backendId,
-                        ArtifactType = artifactType,
-                        FolderPath = input.TargetFolderPath
+                        ArtifactType = artifactType
                     },
                     default);
+
+                AllowedGenerationFolderDto singleFamilyFolder = singleFamilyFolders.FirstOrDefault();
+                if (singleFamilyFolder == null)
+                {
+                    throw new UserFriendlyException(string.Format("No approved target folder exists for artifact type {0}.", artifactType));
+                }
+
+                return singleFamilyFolder;
             }
 
             List<AllowedGenerationFolderDto> folders = await _backendImportService.GetAllowedGenerationFoldersAsync(
