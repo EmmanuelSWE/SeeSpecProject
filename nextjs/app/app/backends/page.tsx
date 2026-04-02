@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendFormFields, type BackendFormState } from "@/app/components/app/backend-form-fields";
 import { BackendModal } from "@/app/components/app/backend-modal";
@@ -20,6 +21,7 @@ const EMPTY_BACKEND_FORM: BackendFormState = {
 };
 
 export default function BackendsPage() {
+    const router = useRouter();
     const { session } = useUserState();
     const { backends } = useBackendState();
     const { getBackends, createBackend, updateBackend, uploadBackendArchive, deleteBackend } = useBackendActions();
@@ -98,17 +100,30 @@ export default function BackendsPage() {
             return;
         }
 
+        if (selectedUploadFile.size > 300 * 1024 * 1024) {
+            setUploadFeedback({
+                kind: "error",
+                message: "Backend uploads are limited to 300 MB."
+            });
+            return;
+        }
+
         setIsUploading(true);
         setUploadFeedback(null);
 
         try {
             const result = await uploadBackendArchive(selectedUploadFile);
-            await getBackends(true);
+            const refreshedBackends = await getBackends(true);
             setUploadFeedback({
                 kind: "success",
                 message: `${result.name} uploaded successfully and added to the workspace list.`
             });
             closeUploadModal();
+
+            const uploadedBackend = refreshedBackends.find((backend) => backend.id === result.backendId) ?? null;
+            if (uploadedBackend) {
+                router.push(`/app/backends/${uploadedBackend.slug}/overview?prompt=create-overview`);
+            }
         } catch (error) {
             setUploadFeedback({
                 kind: "error",
@@ -186,6 +201,16 @@ export default function BackendsPage() {
                                 accept=".zip"
                                 onChange={(event) => {
                                     const nextFile = event.target.files?.[0] ?? null;
+                                    if (nextFile && nextFile.size > 300 * 1024 * 1024) {
+                                        setSelectedUploadFile(null);
+                                        setUploadFeedback({
+                                            kind: "error",
+                                            message: "Backend uploads are limited to 300 MB."
+                                        });
+                                        return;
+                                    }
+
+                                    setUploadFeedback(null);
                                     setSelectedUploadFile(nextFile);
                                 }}
                             />

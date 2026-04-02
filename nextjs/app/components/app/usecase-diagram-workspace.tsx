@@ -9,11 +9,13 @@ import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-servi
 export function UseCaseDiagramWorkspace({
     backend,
     useCase,
-    linkedRequirements
+    linkedRequirements,
+    useCaseNodes
 }: {
     backend: BackendRecord;
     useCase: DiagramElementDto;
     linkedRequirements: SpecSectionDto[];
+    useCaseNodes: Array<{ id: string; label: string }>;
 }) {
     return (
         <section className="page-section usecase-page">
@@ -127,6 +129,25 @@ export function UseCaseDiagramWorkspace({
                             </div>
                         </div>
                         <div className="usecase-summary-block">
+                            <strong>Stored use cases</strong>
+                            <div className="usecase-link-list">
+                                {useCaseNodes.length > 0 ? (
+                                    useCaseNodes.map((node) => (
+                                        <Link
+                                            key={node.id}
+                                            href={`/app/backends/${backend.slug}/activity-diagram/${useCase.slug}/${node.id}`}
+                                            className="requirements-link-card"
+                                        >
+                                            <span>Use case</span>
+                                            <strong>{node.label}</strong>
+                                        </Link>
+                                    ))
+                                ) : (
+                                    <p>Save at least one stored use case in the diagram to unlock its activity diagram.</p>
+                                )}
+                            </div>
+                        </div>
+                        <div className="usecase-summary-block">
                             <strong>Related backend pages</strong>
                             <div className="usecase-link-list">
                                 <Link href={`/app/backends/${backend.slug}/overview`} className="requirements-link-card">
@@ -136,10 +157,6 @@ export function UseCaseDiagramWorkspace({
                                 <Link href={`/app/backends/${backend.slug}/requirements`} className="requirements-link-card">
                                     <span>Backend</span>
                                     <strong>Requirements</strong>
-                                </Link>
-                                <Link href={`/app/backends/${backend.slug}/activity-diagram/${useCase.slug}`} className="requirements-link-card">
-                                    <span>Use case</span>
-                                    <strong>Activity diagram</strong>
                                 </Link>
                             </div>
                         </div>

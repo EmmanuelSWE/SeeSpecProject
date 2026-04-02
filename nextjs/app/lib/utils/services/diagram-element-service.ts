@@ -88,6 +88,8 @@ export type DiagramElementDto = {
   summary: string;
   linkedRequirementIds: string[];
   linkedUseCaseSlug: string | null;
+  linkedUseCaseNodeId: string | null;
+  linkedUseCaseNodeLabel: string | null;
   actors: string[];
   dependencies: { slug: string; name: string }[];
   entities: BackendDomainEntity[];
@@ -106,6 +108,8 @@ export type CreateDiagramElementInput = {
   description?: string;
   linkedRequirementIds?: string[];
   linkedUseCaseSlug?: string | null;
+  linkedUseCaseNodeId?: string | null;
+  linkedUseCaseNodeLabel?: string | null;
   actors?: string[];
   dependencies?: { slug: string; name: string }[];
   entities?: BackendDomainEntity[];
@@ -136,6 +140,8 @@ type DiagramMetadata = {
   description?: string;
   linkedRequirementIds?: string[];
   linkedUseCaseSlug?: string | null;
+  linkedUseCaseNodeId?: string | null;
+  linkedUseCaseNodeLabel?: string | null;
   actors?: string[];
   dependencies?: { slug: string; name: string }[];
   entities?: BackendDomainEntity[];
@@ -182,6 +188,8 @@ function buildMetadata(payload: Partial<CreateDiagramElementInput>): string {
     description: payload.description ?? payload.summary ?? "",
     linkedRequirementIds: payload.linkedRequirementIds ?? [],
     linkedUseCaseSlug: payload.linkedUseCaseSlug ?? null,
+    linkedUseCaseNodeId: payload.linkedUseCaseNodeId ?? null,
+    linkedUseCaseNodeLabel: payload.linkedUseCaseNodeLabel ?? null,
     actors: payload.actors ?? [],
     dependencies: payload.dependencies ?? [],
     entities: payload.entities ?? [],
@@ -263,6 +271,8 @@ function buildDiagramElementDto(
     summary: useCaseSummary.summary || diagram.name,
     linkedRequirementIds: metadata.linkedRequirementIds ?? [],
     linkedUseCaseSlug: metadata.linkedUseCaseSlug ?? null,
+    linkedUseCaseNodeId: metadata.linkedUseCaseNodeId ?? null,
+    linkedUseCaseNodeLabel: metadata.linkedUseCaseNodeLabel ?? null,
     actors: type === "use-case" ? useCaseSummary.actors : [],
     dependencies: type === "use-case" ? useCaseSummary.dependencies : [],
     entities: type === "domain-model" ? domainSummary.entities : [],

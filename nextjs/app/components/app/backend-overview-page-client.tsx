@@ -3,6 +3,7 @@
 import { BackendOverviewWorkspace } from "@/app/components/app/backend-overview-workspace";
 import type {
     AllowedGenerationFolder,
+    BackendWorkflowReadiness,
     GenerationArtifactType,
     IBackendStateContext
 } from "@/app/lib/providers/backendProvider/context";
@@ -32,6 +33,9 @@ export function BackendOverviewPageClient({
     selectedGenerationFolderPath,
     isLoadingGenerationFolders,
     generationFolderErrorMessage,
+    workflowReadiness,
+    shouldPromptOverviewCreation,
+    onOverviewPromptConsumed,
     onSelectGenerationRunMode,
     onSelectGenerationArtifactType,
     onSelectGenerationFolder,
@@ -59,6 +63,9 @@ export function BackendOverviewPageClient({
     selectedGenerationFolderPath?: string;
     isLoadingGenerationFolders?: boolean;
     generationFolderErrorMessage?: string | null;
+    workflowReadiness?: BackendWorkflowReadiness | null;
+    shouldPromptOverviewCreation?: boolean;
+    onOverviewPromptConsumed?: () => void;
     onSelectGenerationRunMode?: (mode: GenerationRunMode) => void;
     onSelectGenerationArtifactType?: (artifactType: GenerationArtifactType) => void;
     onSelectGenerationFolder?: (folderPath: string) => void;
@@ -89,6 +96,9 @@ export function BackendOverviewPageClient({
             selectedGenerationFolderPath={selectedGenerationFolderPath ?? ""}
             isLoadingGenerationFolders={isLoadingGenerationFolders ?? false}
             generationFolderErrorMessage={generationFolderErrorMessage ?? null}
+            workflowReadiness={workflowReadiness ?? null}
+            shouldPromptOverviewCreation={shouldPromptOverviewCreation ?? false}
+            onOverviewPromptConsumed={onOverviewPromptConsumed ?? (() => {})}
             onSelectGenerationRunMode={onSelectGenerationRunMode ?? (() => {})}
             onSelectGenerationArtifactType={onSelectGenerationArtifactType ?? (() => {})}
             onSelectGenerationFolder={onSelectGenerationFolder ?? (() => {})}

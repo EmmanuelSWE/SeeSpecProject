@@ -1,12 +1,13 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { BackendRequirementsWorkspace } from "@/app/components/app/backend-requirements-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
 import { withAuth, type WithAuthProps } from "@/app/lib/auth/with-auth";
 import { useBackendActions, useBackendState } from "@/app/lib/providers/backendProvider";
+import type { BackendWorkflowReadiness } from "@/app/lib/providers/backendProvider/context";
 import { useDiagramElementActions, useDiagramElementState } from "@/app/lib/providers/diagramElementProvider";
 import { useSpecSectionActions, useSpecSectionState } from "@/app/lib/providers/specSectionProvider";
 import { selectOverviewSection } from "@/app/lib/workflow/overview-gate";
@@ -15,17 +16,17 @@ const WORKFLOW_ROLES = ["Host Admin", "Tenant Admin", "Business Analyst", "Syste
 
 function BackendRequirementsPage({ session }: WithAuthProps) {
     const params = useParams<{ backendSlug: string }>();
-    const router = useRouter();
     const { backend } = useBackendState();
     const { sections } = useSpecSectionState();
     const { diagramElements } = useDiagramElementState();
-    const { getBackendBySlug } = useBackendActions();
+    const { getBackendBySlug, getWorkflowReadiness } = useBackendActions();
     const { createDiagramElement, getDiagramElementsByBackend, updateDiagramElement } = useDiagramElementActions();
     const { createSection, getSectionsByBackend, updateSection } = useSpecSectionActions();
     const backendId = backend?.id ?? null;
     const [hasResolvedBackend, setHasResolvedBackend] = useState(false);
     const [hasResolvedData, setHasResolvedData] = useState(false);
     const [pageErrorMessage, setPageErrorMessage] = useState<string | null>(null);
+    const [workflowReadiness, setWorkflowReadiness] = useState<BackendWorkflowReadiness | null>(null);
 
     useEffect(() => {
         let isActive = true;
@@ -52,8 +53,20 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
     useEffect(() => {
         let isActive = true;
         if (backendId !== null) {
-            Promise.all([getSectionsByBackend(backendId), getDiagramElementsByBackend(backendId)])
-                .catch((error) => {
+            void (async () => {
+                try {
+                    const [, , readiness] = await Promise.all([
+                        getSectionsByBackend(backendId),
+                        getDiagramElementsByBackend(backendId),
+                        getWorkflowReadiness(backendId)
+                    ]);
+
+                    if (!isActive) {
+                        return;
+                    }
+
+                    setWorkflowReadiness(readiness);
+                } catch (error) {
                     if (!isActive) {
                         return;
                     }
@@ -61,12 +74,13 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
                     setPageErrorMessage(
                         error instanceof Error ? error.message : "Unable to load backend requirements."
                     );
-                })
-                .finally(() => {
+                } finally {
                     if (isActive) {
                         setHasResolvedData(true);
                     }
-                });
+                }
+            })();
+
             return () => {
                 isActive = false;
             };
@@ -74,20 +88,10 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
         return () => {
             isActive = false;
         };
-    }, [backendId, getDiagramElementsByBackend, getSectionsByBackend]);
+    }, [backendId, getDiagramElementsByBackend, getSectionsByBackend, getWorkflowReadiness]);
 
     const overviewSection = backend ? selectOverviewSection(sections, backend.slug) : null;
     const requirementSections = sections.filter((item) => item.type === "requirement");
-
-    useEffect(() => {
-        if (!backend || !hasResolvedBackend || !hasResolvedData) {
-            return;
-        }
-
-        if (!overviewSection || !overviewSection.isAccepted) {
-            router.replace(`/app/backends/${backend.slug}/overview`);
-        }
-    }, [backend, hasResolvedBackend, hasResolvedData, overviewSection, router]);
 
     if (!hasPermission(session, APP_PERMISSIONS.requirements)) {
         return <AccessPanel title="Requirements" message="Your current role does not allow access to backend requirements." />;
@@ -132,10 +136,6 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
         );
     }
 
-    if (!overviewSection || !overviewSection.isAccepted) {
-        return null;
-    }
-
     return (
         <BackendRequirementsWorkspace
             backend={backend}
@@ -143,14 +143,17 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
             requirementSections={requirementSections}
             useCaseDiagrams={diagramElements.filter((item) => item.type === "use-case")}
             activityDiagrams={diagramElements.filter((item) => item.type === "activity")}
+            workflowReadiness={workflowReadiness}
             onCreateRequirement={async (payload) => {
                 const created = await createSection(payload);
                 await getSectionsByBackend(backend.id);
+                setWorkflowReadiness(await getWorkflowReadiness(backend.id));
                 return created;
             }}
             onUpdateRequirement={async (payload) => {
                 await updateSection(payload);
                 await getSectionsByBackend(backend.id);
+                setWorkflowReadiness(await getWorkflowReadiness(backend.id));
             }}
             onCreateUseCaseDiagram={async (requirement) => {
                 const created = await createDiagramElement({
@@ -166,22 +169,11 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
                     dependencies: []
                 });
                 await getDiagramElementsByBackend(backend.id);
+                setWorkflowReadiness(await getWorkflowReadiness(backend.id));
                 return created;
             }}
-            onCreateActivityDiagram={async (requirement, useCaseDiagram) => {
-                const created = await createDiagramElement({
-                    backendId: backend.id,
-                    specSectionId: requirement.id,
-                    type: "activity",
-                    slug: `${useCaseDiagram.slug}-activity`,
-                    name: `${requirement.title} Activity`,
-                    summary: requirement.summary,
-                    description: requirement.content[0] ?? requirement.summary,
-                    linkedRequirementIds: [requirement.id],
-                    linkedUseCaseSlug: useCaseDiagram.slug
-                });
-                await getDiagramElementsByBackend(backend.id);
-                return created;
+            onCreateActivityDiagram={async () => {
+                throw new Error("Activity diagrams are created from stored use cases, not directly from requirements.");
             }}
             onEnsureUseCaseDiagramBinding={async (diagram, requirement) => {
                 if (diagram.specSectionId === requirement.id) {
@@ -194,6 +186,7 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
                     linkedRequirementIds: [requirement.id]
                 });
                 await getDiagramElementsByBackend(backend.id);
+                setWorkflowReadiness(await getWorkflowReadiness(backend.id));
             }}
             onEnsureActivityDiagramBinding={async (diagram, requirement, useCaseDiagram) => {
                 if (diagram.specSectionId === requirement.id && diagram.linkedUseCaseSlug === useCaseDiagram.slug) {
@@ -207,6 +200,7 @@ function BackendRequirementsPage({ session }: WithAuthProps) {
                     linkedUseCaseSlug: useCaseDiagram.slug
                 });
                 await getDiagramElementsByBackend(backend.id);
+                setWorkflowReadiness(await getWorkflowReadiness(backend.id));
             }}
         />
     );

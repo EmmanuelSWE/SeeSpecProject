@@ -8,6 +8,7 @@ import { RequirementsDetailPanel } from "@/app/components/app/requirements-detai
 import { RequirementsSectionList, type RequirementSummary } from "@/app/components/app/requirements-section-list";
 import { RequirementsTraceabilityPanel } from "@/app/components/app/requirements-traceability-panel";
 import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
+import type { BackendWorkflowReadiness } from "@/app/lib/providers/backendProvider/context";
 import type { DiagramElementDto } from "@/app/lib/utils/services/diagram-element-service";
 import type { CreateSpecSectionInput, SpecSectionDto, UpdateSpecSectionInput } from "@/app/lib/utils/services/spec-section-service";
 
@@ -28,6 +29,7 @@ export function BackendRequirementsWorkspace({
     requirementSections,
     useCaseDiagrams,
     activityDiagrams,
+    workflowReadiness,
     onCreateRequirement,
     onUpdateRequirement,
     onCreateUseCaseDiagram,
@@ -40,6 +42,7 @@ export function BackendRequirementsWorkspace({
     requirementSections: SpecSectionDto[];
     useCaseDiagrams: DiagramElementDto[];
     activityDiagrams: DiagramElementDto[];
+    workflowReadiness: BackendWorkflowReadiness | null;
     onCreateRequirement: (payload: CreateSpecSectionInput) => Promise<SpecSectionDto>;
     onUpdateRequirement: (payload: UpdateSpecSectionInput) => Promise<void>;
     onCreateUseCaseDiagram: (requirement: SpecSectionDto) => Promise<DiagramElementDto>;
@@ -67,6 +70,11 @@ export function BackendRequirementsWorkspace({
 
     const hasOverview = Boolean(overviewSection);
     const isOverviewAccepted = overviewSection?.isAccepted ?? false;
+    const canCreateRequirements = workflowReadiness?.canCreateRequirements ?? false;
+    const workflowMissingItems = useMemo(
+        () => (workflowReadiness?.missingItems ?? []).filter((item) => item.includes("overview") || item.includes("role")),
+        [workflowReadiness?.missingItems]
+    );
     const effectiveSelectedId =
         selectedId && requirementSections.some((requirement) => requirement.id === selectedId)
             ? selectedId
@@ -88,6 +96,11 @@ export function BackendRequirementsWorkspace({
     const activeRequirement = filteredRequirements.find((item) => item.id === effectiveSelectedId) ?? null;
 
     async function saveRequirement() {
+        if (!canCreateRequirements) {
+            setActionErrorMessage("Complete the required overview and role setup before creating requirements.");
+            return;
+        }
+
         setActionErrorMessage(null);
         setIsSavingRequirement(true);
         try {
@@ -256,12 +269,31 @@ export function BackendRequirementsWorkspace({
                             <option value="Approved">Approved</option>
                         </select>
 
-                        <button type="button" className="requirements-action-button" onClick={() => setIsCreateOpen(true)}>
-                            New requirement
+                        <button type="button" className="requirements-action-button" onClick={() => setIsCreateOpen(true)} disabled={!canCreateRequirements}>
+                            {canCreateRequirements ? "New requirement" : "Requirements locked"}
                         </button>
                     </div>
                 </div>
             </div>
+
+            {!canCreateRequirements && workflowMissingItems.length > 0 ? (
+                <div className="card requirements-state-card">
+                    <div className="card-body requirements-state-body">
+                        <strong>Requirements are blocked until the workflow prerequisites are complete.</strong>
+                        <p>Finish the missing setup below, then requirement authoring will unlock automatically.</p>
+                        <div className="backend-role-list">
+                            {workflowMissingItems.map((missingItem) => (
+                                <article key={missingItem} className="backend-role-item">
+                                    <div className="backend-role-heading">
+                                        <strong>Missing prerequisite</strong>
+                                    </div>
+                                    <p>{missingItem}</p>
+                                </article>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
 
             {actionErrorMessage ? (
                 <div className="backend-feedback-banner" role="alert">
@@ -347,6 +379,7 @@ export function BackendRequirementsWorkspace({
                         onOpenUseCaseDiagram={() => { void createOrOpenUseCaseDiagram(); }}
                         onCreateActivityDiagram={() => { void createOrOpenActivityDiagram(); }}
                         onOpenActivityDiagram={() => { void createOrOpenActivityDiagram(); }}
+                        canManageActivityFromRequirement={false}
                     />
 
                     <div className="requirements-side-stack">
@@ -358,9 +391,9 @@ export function BackendRequirementsWorkspace({
                                 </div>
                             </div>
                             <div className="card-body backend-quick-actions">
-                                <button type="button" className="requirements-action-button" onClick={() => setIsCreateOpen(true)}>
-                                    New requirement
-                                </button>
+                        <button type="button" className="requirements-action-button" onClick={() => setIsCreateOpen(true)} disabled={!canCreateRequirements}>
+                            New requirement
+                        </button>
                                 <button type="button" className="secondary-button" onClick={addReviewNote} disabled={isAddingReviewNote}>
                                     {isAddingReviewNote ? "Saving note..." : "Add review note"}
                                 </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { DomainModelWorkspace } from "@/app/components/app/domain-model-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
@@ -20,11 +20,12 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
     const { sections } = useSpecSectionState();
     const { diagramElements } = useDiagramElementState();
     const { getBackendBySlug } = useBackendActions();
-    const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
+    const { createDiagramElement, getDiagramElementsByBackendAndType } = useDiagramElementActions();
     const { getSectionsByBackend } = useSpecSectionActions();
     const backendId = backend?.id ?? null;
     const [hasResolvedBackend, setHasResolvedBackend] = useState(false);
     const [hasResolvedData, setHasResolvedData] = useState(false);
+    const diagramProvisionRequestedRef = useRef(false);
     const [pageErrorMessage, setPageErrorMessage] = useState<string | null>(null);
 
     useEffect(() => {
@@ -91,6 +92,67 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
         }
     }, [backend, hasResolvedBackend, hasResolvedData, overviewSection, router]);
 
+    useEffect(() => {
+        let isActive = true;
+
+        if (!backend || !hasResolvedBackend || !hasResolvedData || !overviewSection?.isAccepted) {
+            return () => {
+                isActive = false;
+            };
+        }
+
+        if (diagramElements.length > 0 || diagramProvisionRequestedRef.current) {
+            return () => {
+                isActive = false;
+            };
+        }
+
+        diagramProvisionRequestedRef.current = true;
+
+        createDiagramElement({
+            backendId: backend.id,
+            type: "domain-model",
+            slug: "domain-model",
+            name: `${backend.name} Domain Model`,
+            summary: `${backend.name} domain model`,
+            description: "Blank domain model ready for entity and relationship editing."
+        })
+            .catch((error) => {
+                if (!isActive) {
+                    return;
+                }
+
+                setPageErrorMessage(
+                    error instanceof Error ? error.message : "Unable to create the blank domain model."
+                );
+                diagramProvisionRequestedRef.current = false;
+            })
+            .finally(() => {
+                if (!isActive) {
+                    diagramProvisionRequestedRef.current = false;
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [
+        backend,
+        createDiagramElement,
+        diagramElements.length,
+        hasResolvedBackend,
+        hasResolvedData,
+        overviewSection?.isAccepted
+    ]);
+
+    const isPreparingBlankDiagram =
+        !!backend &&
+        hasResolvedBackend &&
+        hasResolvedData &&
+        !!overviewSection?.isAccepted &&
+        diagramElements.length === 0 &&
+        !pageErrorMessage;
+
     if (!hasPermission(session, APP_PERMISSIONS.domainModel)) {
         return <AccessPanel title="Domain model" message="Your current role does not allow access to the domain model." />;
     }
@@ -108,13 +170,13 @@ function BackendDomainModelPage({ session }: WithAuthProps) {
         );
     }
 
-    if (!hasResolvedBackend || (backend !== null && !hasResolvedData)) {
+    if (!hasResolvedBackend || (backend !== null && (!hasResolvedData || isPreparingBlankDiagram))) {
         return (
             <section className="page-section">
                 <div className="card backend-state-card">
                     <div className="card-body backend-blocked-state">
                         <strong>Loading domain model workspace...</strong>
-                        <p>Fetching the overview gate and domain model diagram for this backend.</p>
+                        <p>Fetching the overview gate and preparing the domain model workspace for this backend.</p>
                     </div>
                 </div>
             </section>

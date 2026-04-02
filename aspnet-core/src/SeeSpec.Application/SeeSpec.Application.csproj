@@ -14,4 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SeeSpec.Core\SeeSpec.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="$(USERPROFILE)\Downloads\DiagramElementAppService.cs" />
+  </ItemGroup>
 </Project>

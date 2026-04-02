@@ -13,6 +13,8 @@ namespace SeeSpec.Services.BackendService
     {
         Task<BackendDto> GetBySlugAsync(GetBackendBySlugInputDto input);
 
+        Task<BackendWorkflowReadinessDto> GetWorkflowReadinessAsync(GetBackendWorkflowReadinessInputDto input);
+
         Task<BackendUploadResultDto> UploadAsync(IFormFile file, CancellationToken cancellationToken);
 
         Task<BackendUploadResultDto> ImportFolderAsync(BackendFolderImportInputDto input, CancellationToken cancellationToken);

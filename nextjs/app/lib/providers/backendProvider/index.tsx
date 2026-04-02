@@ -36,6 +36,7 @@ import {
   type BackendRoleName,
   type BackendStatus,
   type AllowedGenerationFolder,
+  type BackendWorkflowReadiness,
   type BackendFolderImportInput,
   type BackendUploadResult,
   type CreateBackendInput,
@@ -548,6 +549,17 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const getWorkflowReadiness = useCallback(async (backendId: string) => {
+    try {
+      return await getOne<BackendWorkflowReadiness>("/services/app/Backend/GetWorkflowReadiness", {
+        BackendId: backendId
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load backend workflow readiness.";
+      throw new Error(mapErrorMessage(error, message));
+    }
+  }, []);
+
   const setBackend = useCallback((backend: BackendRecord | null) => {
     dispatch(setActiveBackend(backend));
   }, []);
@@ -567,6 +579,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       uploadBackendArchive,
       importBackendFolder,
       getAllowedGenerationFolders,
+      getWorkflowReadiness,
       deleteBackend,
       setActiveBackend: setBackend,
       reset
@@ -578,6 +591,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       getBackendBySlug,
       getBackends,
       getAllowedGenerationFolders,
+      getWorkflowReadiness,
       importBackendFolder,
       reset,
       setBackend,

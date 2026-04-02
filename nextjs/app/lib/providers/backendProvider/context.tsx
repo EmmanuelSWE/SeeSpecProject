@@ -103,6 +103,28 @@ export type AllowedGenerationFolder = {
   folderExists: boolean;
 };
 
+export type BackendWorkflowReadiness = {
+  backendId: string;
+  specId: string | null;
+  hasOverview: boolean;
+  isOverviewAccepted: boolean;
+  hasRoles: boolean;
+  canCreateRequirements: boolean;
+  hasRequirements: boolean;
+  everyRequirementHasUseCaseDiagram: boolean;
+  hasDomainModel: boolean;
+  hasDomainEntities: boolean;
+  everyUseCaseHasActivityDiagram: boolean;
+  isCodeGenerationReady: boolean;
+  roleCount: number;
+  requirementCount: number;
+  useCaseDiagramCount: number;
+  domainEntityCount: number;
+  activityDiagramCount: number;
+  missingItems: string[];
+  missingActivityDiagramUseCases: string[];
+};
+
 export interface IBackendStateContext {
   isPending: boolean;
   isSuccess: boolean;
@@ -124,6 +146,7 @@ export interface IBackendActionContext {
     backendId: string,
     artifactType: GenerationArtifactType
   ) => Promise<AllowedGenerationFolder[]>;
+  getWorkflowReadiness: (backendId: string) => Promise<BackendWorkflowReadiness>;
   deleteBackend: (id: string) => Promise<void>;
   setActiveBackend: (backend: BackendRecord | null) => void;
   reset: () => void;
@@ -155,6 +178,27 @@ export const INITIAL_ACTION_STATE: IBackendActionContext = {
     throw new Error("BackendActionContext is not initialized.");
   },
   getAllowedGenerationFolders: async () => [],
+  getWorkflowReadiness: async () => ({
+    backendId: "",
+    specId: null,
+    hasOverview: false,
+    isOverviewAccepted: false,
+    hasRoles: false,
+    canCreateRequirements: false,
+    hasRequirements: false,
+    everyRequirementHasUseCaseDiagram: false,
+    hasDomainModel: false,
+    hasDomainEntities: false,
+    everyUseCaseHasActivityDiagram: false,
+    isCodeGenerationReady: false,
+    roleCount: 0,
+    requirementCount: 0,
+    useCaseDiagramCount: 0,
+    domainEntityCount: 0,
+    activityDiagramCount: 0,
+    missingItems: [],
+    missingActivityDiagramUseCases: []
+  }),
   deleteBackend: async () => {},
   setActiveBackend: () => {},
   reset: () => {}

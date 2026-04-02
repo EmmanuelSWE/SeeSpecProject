@@ -18,15 +18,21 @@ namespace SeeSpec.Services.SpecSectionService
     {
         private readonly IRepository<SectionItem, Guid> _sectionItemRepository;
         private readonly IRepository<SectionDependency, Guid> _sectionDependencyRepository;
+        private readonly IRepository<Spec, Guid> _specRepository;
+        private readonly IRepository<DiagramElement, Guid> _diagramElementRepository;
 
         public SpecSectionAppService(
             IRepository<SpecSection, Guid> repository,
             IRepository<SectionItem, Guid> sectionItemRepository,
-            IRepository<SectionDependency, Guid> sectionDependencyRepository)
+            IRepository<SectionDependency, Guid> sectionDependencyRepository,
+            IRepository<Spec, Guid> specRepository,
+            IRepository<DiagramElement, Guid> diagramElementRepository)
             : base(repository)
         {
             _sectionItemRepository = sectionItemRepository;
             _sectionDependencyRepository = sectionDependencyRepository;
+            _specRepository = specRepository;
+            _diagramElementRepository = diagramElementRepository;
         }
 
         public override async Task<SpecSectionDto> CreateAsync(SpecSectionDto input)
@@ -58,7 +64,14 @@ namespace SeeSpec.Services.SpecSectionService
                 }
             }
 
-            return await base.CreateAsync(input);
+            SpecSectionDto created = await base.CreateAsync(input);
+
+            if (created.SectionType == SectionType.Requirement)
+            {
+                await EnsureUseCaseDiagramContainerAsync(created);
+            }
+
+            return created;
         }
 
         public override async Task<SpecSectionDto> UpdateAsync(SpecSectionDto input)
@@ -97,6 +110,11 @@ namespace SeeSpec.Services.SpecSectionService
             {
                 throw new UserFriendlyException("Accept the overview before creating requirements.");
             }
+
+            if (!await HasAtLeastOneRoleAsync(input.SpecId))
+            {
+                throw new UserFriendlyException("Add at least one backend role before creating requirements.");
+            }
         }
 
         private async Task<bool> IsOverviewAcceptedAsync(Guid specId)
@@ -123,6 +141,14 @@ namespace SeeSpec.Services.SpecSectionService
 
             JObject acceptancePayload = ParseObject(acceptanceItem.Content);
             return acceptancePayload?["value"]?.Value<bool>() == true;
+        }
+
+        private async Task<bool> HasAtLeastOneRoleAsync(Guid specId)
+        {
+            return await Repository.GetAll().AnyAsync(item =>
+                item.SpecId == specId
+                && item.SectionType == SectionType.Shared
+                && EF.Functions.Like(item.Slug, "role-%"));
         }
 
         private static bool IsOverviewSlug(string slug)
@@ -203,6 +229,54 @@ namespace SeeSpec.Services.SpecSectionService
 
                 await Repository.DeleteAsync(duplicateSection);
             }
+        }
+
+        private async Task EnsureUseCaseDiagramContainerAsync(SpecSectionDto requirementSection)
+        {
+            Spec spec = await _specRepository.GetAsync(requirementSection.SpecId);
+            string diagramSlug = requirementSection.Slug + "-use-case";
+
+            DiagramElement existingDiagram = await _diagramElementRepository.FirstOrDefaultAsync(item =>
+                item.BackendId == spec.BackendId
+                && item.DiagramType == DiagramType.UseCase
+                && item.ExternalElementKey == diagramSlug);
+
+            if (existingDiagram != null)
+            {
+                return;
+            }
+
+            await _diagramElementRepository.InsertAsync(new DiagramElement
+            {
+                BackendId = spec.BackendId,
+                SpecSectionId = requirementSection.Id,
+                DiagramType = DiagramType.UseCase,
+                ExternalElementKey = diagramSlug,
+                Name = requirementSection.Title + " Use Case",
+                MetadataJson = BuildUseCaseDiagramMetadata(requirementSection.Id)
+            });
+        }
+
+        private static string BuildUseCaseDiagramMetadata(Guid requirementSectionId)
+        {
+            return new JObject
+            {
+                ["summary"] = string.Empty,
+                ["description"] = string.Empty,
+                ["linkedRequirementIds"] = new JArray(requirementSectionId.ToString()),
+                ["linkedUseCaseSlug"] = null,
+                ["linkedUseCaseNodeId"] = null,
+                ["actors"] = new JArray(),
+                ["dependencies"] = new JArray(),
+                ["entities"] = new JArray(),
+                ["relationships"] = new JArray(),
+                ["graph"] = new JObject
+                {
+                    ["metadata"] = new JObject(),
+                    ["nodes"] = new JArray(),
+                    ["edges"] = new JArray()
+                }
+            }.ToString();
         }
     }
 }
