@@ -66,6 +66,21 @@ namespace SeeSpec.Services.BackendService
             return await _backendImportService.ImportFolderAsync(input.FolderPath, cancellationToken);
         }
 
+        public async Task<ListResultDto<AllowedGenerationFolderDto>> GetAllowedGenerationFoldersAsync(
+            GetAllowedGenerationFoldersInputDto input,
+            CancellationToken cancellationToken)
+        {
+            return new ListResultDto<AllowedGenerationFolderDto>(
+                await _backendImportService.GetAllowedGenerationFoldersAsync(input, cancellationToken));
+        }
+
+        public Task<AllowedGenerationFolderDto> ValidateGenerationFolderAsync(
+            ValidateGenerationFolderInputDto input,
+            CancellationToken cancellationToken)
+        {
+            return _backendImportService.ValidateGenerationFolderAsync(input, cancellationToken);
+        }
+
         protected override IQueryable<Backend> CreateFilteredQuery(PagedAndSortedResultRequestDto input)
         {
             var query = base.CreateFilteredQuery(input);

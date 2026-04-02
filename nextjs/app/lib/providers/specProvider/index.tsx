@@ -3,6 +3,9 @@
 import { useCallback, useContext, useMemo, useReducer } from "react";
 import { getOne, getPaged, mapErrorMessage, postOne, putOne } from "@/app/lib/utils/services/service-helpers";
 import {
+  applyGeneratedCodeError,
+  applyGeneratedCodePending,
+  applyGeneratedCodeSuccess,
   createSpecSuccess,
   clearGeneratedPreview,
   generatePreviewError,
@@ -17,6 +20,8 @@ import {
   updateSpecSuccess
 } from "./actions";
 import {
+  type IApplyGeneratedCodeInput,
+  type IApplyGeneratedCodeResult,
   type ICreateSpecInput,
   type IGenerateSpecCodeInput,
   type IGeneratedSpecPreview,
@@ -124,6 +129,27 @@ export function SpecProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const applyGeneratedCode = useCallback(async (payload: IApplyGeneratedCodeInput) => {
+    dispatch(applyGeneratedCodePending());
+    try {
+      const result = await postOne<IApplyGeneratedCodeResult, IApplyGeneratedCodeInput>(
+        "/services/app/AI/ApplyGeneratedCode",
+        payload
+      );
+      dispatch(applyGeneratedCodeSuccess(result));
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to apply generated code.";
+      dispatch(applyGeneratedCodeError(mapErrorMessage(error, message)));
+      throw error;
+    }
+  }, []);
+
+  const cleanupGenerationWorkspace = useCallback(async (backendId: string) => {
+    await postOne<void, { backendId: string }>("/services/app/AI/CleanupGenerationWorkspace", { backendId });
+    dispatch(clearGeneratedPreview());
+  }, []);
+
   const clearPreview = useCallback(() => {
     dispatch(clearGeneratedPreview());
   }, []);
@@ -144,11 +170,13 @@ export function SpecProvider({ children }: { children: React.ReactNode }) {
       createSpec,
       updateSpec,
       generateSpecCode,
+      applyGeneratedCode,
+      cleanupGenerationWorkspace,
       clearGeneratedPreview: clearPreview,
       setActiveSpec: setSpec,
       reset
     }),
-    [clearPreview, createSpec, generateSpecCode, getSpec, getSpecByBackend, getSpecs, reset, setSpec, updateSpec]
+    [applyGeneratedCode, cleanupGenerationWorkspace, clearPreview, createSpec, generateSpecCode, getSpec, getSpecByBackend, getSpecs, reset, setSpec, updateSpec]
   );
 
   return (

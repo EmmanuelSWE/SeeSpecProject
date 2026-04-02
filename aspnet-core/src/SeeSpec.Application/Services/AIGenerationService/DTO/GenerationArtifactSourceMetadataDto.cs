@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace SeeSpec.Services.AIGenerationService.DTO
 {
@@ -13,5 +14,9 @@ namespace SeeSpec.Services.AIGenerationService.DTO
         public string PromptHash { get; set; }
 
         public string SourceKind { get; set; }
+
+        public List<Guid> SourceSectionIds { get; set; } = new List<Guid>();
+
+        public List<Guid> DependencySectionIds { get; set; } = new List<Guid>();
     }
 }

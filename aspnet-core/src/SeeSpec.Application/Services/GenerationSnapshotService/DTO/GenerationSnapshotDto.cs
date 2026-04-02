@@ -32,8 +32,16 @@ namespace SeeSpec.Services.GenerationSnapshotService.DTO
         [StringLength(128)]
         public string ModelName { get; set; }
 
+        [Required]
+        [StringLength(64)]
+        public string ProviderName { get; set; }
+
         [StringLength(32000)]
         public string OutputText { get; set; }
+
+        public string TargetFilePathsJson { get; set; }
+
+        public string GeneratedArtifactsJson { get; set; }
 
         public DateTime CreationTime { get; set; }
     }

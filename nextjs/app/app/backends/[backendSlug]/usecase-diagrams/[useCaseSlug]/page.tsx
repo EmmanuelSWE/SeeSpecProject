@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { UseCaseDiagramWorkspace } from "@/app/components/app/usecase-diagram-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
@@ -20,16 +20,60 @@ export default function BackendUseCaseDiagramPage() {
     const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
     const { getSectionsByBackendAndType } = useSpecSectionActions();
     const backendId = backend?.id ?? null;
+    const [hasResolvedBackend, setHasResolvedBackend] = useState(false);
+    const [hasResolvedData, setHasResolvedData] = useState(false);
+    const [pageErrorMessage, setPageErrorMessage] = useState<string | null>(null);
 
     useEffect(() => {
-        getBackendBySlug(params.backendSlug).catch(() => {});
+        let isActive = true;
+
+        getBackendBySlug(params.backendSlug)
+            .catch((error) => {
+                if (!isActive) {
+                    return;
+                }
+
+                setPageErrorMessage(error instanceof Error ? error.message : "Unable to load this backend.");
+            })
+            .finally(() => {
+                if (isActive) {
+                    setHasResolvedBackend(true);
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
     }, [getBackendBySlug, params.backendSlug]);
 
     useEffect(() => {
+        let isActive = true;
         if (backendId !== null) {
-            getDiagramElementsByBackendAndType(backendId, "use-case").catch(() => {});
-            getSectionsByBackendAndType(backendId, "requirement").catch(() => {});
+            Promise.all([
+                getDiagramElementsByBackendAndType(backendId, "use-case"),
+                getSectionsByBackendAndType(backendId, "requirement")
+            ])
+                .catch((error) => {
+                    if (!isActive) {
+                        return;
+                    }
+
+                    setPageErrorMessage(
+                        error instanceof Error ? error.message : "Unable to load the use case diagram."
+                    );
+                })
+                .finally(() => {
+                    if (isActive) {
+                        setHasResolvedData(true);
+                    }
+                });
+            return () => {
+                isActive = false;
+            };
         }
+        return () => {
+            isActive = false;
+        };
     }, [backendId, getDiagramElementsByBackendAndType, getSectionsByBackendAndType]);
 
     const useCase = useMemo(
@@ -49,6 +93,32 @@ export default function BackendUseCaseDiagramPage() {
 
     if (!hasPermission(session, APP_PERMISSIONS.usecaseDiagrams)) {
         return <AccessPanel title="Use Case Diagrams" message="Your current role does not allow access to use case diagrams." />;
+    }
+
+    if (pageErrorMessage) {
+        return (
+            <section className="page-section">
+                <div className="card backend-state-card">
+                    <div className="card-body backend-blocked-state">
+                        <strong>Use case diagram failed to load.</strong>
+                        <p>{pageErrorMessage}</p>
+                    </div>
+                </div>
+            </section>
+        );
+    }
+
+    if (!hasResolvedBackend || (backend !== null && !hasResolvedData)) {
+        return (
+            <section className="page-section">
+                <div className="card backend-state-card">
+                    <div className="card-body backend-blocked-state">
+                        <strong>Loading use case diagram...</strong>
+                        <p>Fetching the linked requirement context and persisted semantic diagram.</p>
+                    </div>
+                </div>
+            </section>
+        );
     }
 
     if (!backend || !useCase) {

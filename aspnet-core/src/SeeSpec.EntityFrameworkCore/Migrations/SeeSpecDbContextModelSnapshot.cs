@@ -1605,6 +1605,9 @@ namespace SeeSpec.Migrations
                     b.Property<DateTime?>("DeletionTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("GeneratedArtifactsJson")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -1630,6 +1633,11 @@ namespace SeeSpec.Migrations
                         .HasMaxLength(12000)
                         .HasColumnType("character varying(12000)");
 
+                    b.Property<string>("ProviderName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<Guid?>("SpecId")
                         .HasColumnType("uuid");
 
@@ -1639,6 +1647,9 @@ namespace SeeSpec.Migrations
                     b.Property<string>("Summary")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("TargetFilePathsJson")
+                        .HasColumnType("text");
 
                     b.Property<long>("TriggeredByUserId")
                         .HasColumnType("bigint");

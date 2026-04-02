@@ -1,6 +1,9 @@
 "use client";
 
 import { createContext } from "react";
+import type { GenerationArtifactType } from "@/app/lib/providers/backendProvider/context";
+export type GenerationRunMode = 1 | 2;
+export type GenerationArtifactApplyStatus = 0 | 1 | 2 | 3 | 4 | 5;
 
 export interface ISpec {
   id: string;
@@ -17,17 +20,68 @@ export interface ITokenUsage {
 
 export interface IGeneratedSpecPreview {
   specId: string;
+  workspaceKey: string;
+  generationMode: GenerationRunMode;
+  isPreviewOnly: boolean;
+  hasAppliedArtifacts: boolean;
   prompt: string;
   model: string;
   outputText: string;
   usage: ITokenUsage | null;
   timestamp: string;
+  artifacts?: IGenerationArtifactPreview[];
+}
+
+export interface IGenerationArtifactPreview {
+  targetFilePath: string;
+  artifactType: GenerationArtifactType;
+  generatedContent: string;
+  targetExists: boolean;
+  hasMeaningfulDifference: boolean;
+  protectedRegionsDetected: boolean;
+  isGeneratorOwnedFile: boolean;
+  workspaceKey: string;
+  workspaceFilePath: string;
+  requiresMalformedRegionDecision: boolean;
+  requiresOverwriteConfirmation: boolean;
+  applyStatus: GenerationArtifactApplyStatus;
+  appliedMalformedRegionDecision: number;
+  malformedRegionWarning?: IMalformedRegionWarning | null;
+}
+
+export interface IMalformedRegionWarning {
+  targetFilePath: string;
+  requiresUserDecision: boolean;
+  message: string;
+  affectedRegionNames: string[];
 }
 
 export interface IGenerateSpecCodeInput {
   specId: string;
+  generationMode: GenerationRunMode;
+  artifactType: GenerationArtifactType;
+  targetFolderPath: string;
   model?: string;
   maxTokens?: number;
+  malformedRegionDecision?: number;
+}
+
+export interface IApplyGeneratedCodeInput {
+  specId: string;
+  workspaceKey: string;
+  confirmApply: boolean;
+  confirmOverwriteExisting: boolean;
+}
+
+export interface IApplyGeneratedCodeResult {
+  specId: string;
+  workspaceKey: string;
+  requiresApplyConfirmation: boolean;
+  requiresOverwriteConfirmation: boolean;
+  anyArtifactsApplied: boolean;
+  allArtifactsApplied: boolean;
+  timestamp: string;
+  artifacts: IGenerationArtifactPreview[];
 }
 
 export interface ICreateSpecInput {
@@ -51,6 +105,8 @@ export interface ISpecStateContext {
   isGeneratingPreview: boolean;
   previewErrorMessage: string | null;
   generatedPreview: IGeneratedSpecPreview | null;
+  isApplyingGeneratedCode: boolean;
+  applyGeneratedCodeErrorMessage: string | null;
 }
 
 export interface ISpecActionContext {
@@ -60,6 +116,8 @@ export interface ISpecActionContext {
   createSpec: (payload: ICreateSpecInput) => Promise<ISpec>;
   updateSpec: (payload: IUpdateSpecInput) => Promise<ISpec>;
   generateSpecCode: (payload: IGenerateSpecCodeInput) => Promise<IGeneratedSpecPreview>;
+  applyGeneratedCode: (payload: IApplyGeneratedCodeInput) => Promise<IApplyGeneratedCodeResult>;
+  cleanupGenerationWorkspace: (backendId: string) => Promise<void>;
   clearGeneratedPreview: () => void;
   setActiveSpec: (spec: ISpec | null) => void;
   reset: () => void;
@@ -74,7 +132,9 @@ export const INITIAL_STATE: ISpecStateContext = {
   specs: [],
   isGeneratingPreview: false,
   previewErrorMessage: null,
-  generatedPreview: null
+  generatedPreview: null,
+  isApplyingGeneratedCode: false,
+  applyGeneratedCodeErrorMessage: null
 };
 
 export const SpecStateContext = createContext<ISpecStateContext>(INITIAL_STATE);

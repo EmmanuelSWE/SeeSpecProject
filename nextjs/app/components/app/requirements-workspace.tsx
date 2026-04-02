@@ -264,6 +264,8 @@ export function RequirementsWorkspace({ session }: { session: IUserSession | nul
             canEdit={canEdit}
             hasUseCaseDiagram={false}
             hasActivityDiagram={false}
+            isUseCaseBusy={false}
+            isActivityBusy={false}
             onCreateUseCaseDiagram={() => {}}
             onOpenUseCaseDiagram={() => {}}
             onCreateActivityDiagram={() => {}}

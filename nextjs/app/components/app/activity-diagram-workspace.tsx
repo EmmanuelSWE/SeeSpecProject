@@ -45,13 +45,17 @@ export function ActivityDiagramWorkspace({
             </div>
             <div className="usecase-summary-block">
               <strong>Actors</strong>
-              <div className="badge-row">
-                {useCase.actors.map((actor) => (
-                  <span key={actor} className="badge">
-                    {actor}
-                  </span>
-                ))}
-              </div>
+              {useCase.actors.length > 0 ? (
+                <div className="badge-row">
+                  {useCase.actors.map((actor) => (
+                    <span key={actor} className="badge">
+                      {actor}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p>No actors have been mapped to this use case yet.</p>
+              )}
             </div>
           </div>
         </aside>

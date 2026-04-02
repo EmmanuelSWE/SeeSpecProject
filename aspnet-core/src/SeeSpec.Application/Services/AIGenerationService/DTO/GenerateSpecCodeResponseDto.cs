@@ -7,6 +7,14 @@ namespace SeeSpec.Services.AIGenerationService.DTO
     {
         public Guid SpecId { get; set; }
 
+        public string WorkspaceKey { get; set; }
+
+        public GenerationRunMode GenerationMode { get; set; }
+
+        public bool IsPreviewOnly { get; set; }
+
+        public bool HasAppliedArtifacts { get; set; }
+
         public string Prompt { get; set; }
 
         public string Model { get; set; }

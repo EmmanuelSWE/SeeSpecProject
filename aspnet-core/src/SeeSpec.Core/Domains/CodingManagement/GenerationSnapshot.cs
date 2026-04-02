@@ -49,8 +49,18 @@ namespace SeeSpec.Domains.CodingManagement
         [StringLength(128)]
         public string ModelName { get; set; }
 
+        [Required]
+        [StringLength(64)]
+        public string ProviderName { get; set; }
+
         [StringLength(32000)]
         public string OutputText { get; set; }
+
+        [Column(TypeName = "text")]
+        public string TargetFilePathsJson { get; set; }
+
+        [Column(TypeName = "text")]
+        public string GeneratedArtifactsJson { get; set; }
 
         public virtual ICollection<Note> Notes { get; set; }
 

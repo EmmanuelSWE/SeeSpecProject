@@ -11,11 +11,27 @@ import {
     type BackendRoleFormState
 } from "@/app/components/app/backend-form-fields";
 import { BackendModal } from "@/app/components/app/backend-modal";
-import type { BackendRecord } from "@/app/lib/providers/backendProvider/context";
-import type { IGeneratedSpecPreview } from "@/app/lib/providers/specProvider/context";
+import type {
+    AllowedGenerationFolder,
+    BackendRecord,
+    GenerationArtifactType
+} from "@/app/lib/providers/backendProvider/context";
+import type { GenerationRunMode, IGeneratedSpecPreview } from "@/app/lib/providers/specProvider/context";
 import type { SpecSectionDto } from "@/app/lib/utils/services/spec-section-service";
 
 type ModalState = "edit-backend" | "overview" | "role" | null;
+const generationArtifactOptions: Array<{ value: GenerationArtifactType; label: string }> = [
+    { value: 2, label: "App service class" },
+    { value: 1, label: "App service interface" },
+    { value: 3, label: "DTO" },
+    { value: 4, label: "Repository" },
+    { value: 5, label: "Domain entity" },
+    { value: 6, label: "Permission seed" }
+];
+const generationRunModeOptions: Array<{ value: GenerationRunMode; label: string }> = [
+    { value: 1, label: "Single artifact family" },
+    { value: 2, label: "Full backend generation" }
+];
 
 function toBackendFormState(backend: BackendRecord): BackendFormState {
     return {
@@ -51,7 +67,20 @@ export function BackendOverviewWorkspace({
     generatedPreview,
     isGeneratingPreview,
     previewErrorMessage,
+    applyGeneratedCodeErrorMessage,
+    isApplyingGeneratedCode,
+    generationRunMode,
+    generationArtifactType,
+    generationFolderOptions,
+    selectedGenerationFolderPath,
+    isLoadingGenerationFolders,
+    generationFolderErrorMessage,
+    onSelectGenerationRunMode,
+    onSelectGenerationArtifactType,
+    onSelectGenerationFolder,
     onGeneratePreview,
+    onResolveMalformedRegions,
+    onApplyGeneratedCode,
     onClearPreview
 }: {
     backend: BackendRecord;
@@ -65,7 +94,20 @@ export function BackendOverviewWorkspace({
     generatedPreview: IGeneratedSpecPreview | null;
     isGeneratingPreview: boolean;
     previewErrorMessage: string | null;
+    applyGeneratedCodeErrorMessage: string | null;
+    isApplyingGeneratedCode: boolean;
+    generationRunMode: GenerationRunMode;
+    generationArtifactType: GenerationArtifactType;
+    generationFolderOptions: AllowedGenerationFolder[];
+    selectedGenerationFolderPath: string;
+    isLoadingGenerationFolders: boolean;
+    generationFolderErrorMessage: string | null;
+    onSelectGenerationRunMode: (mode: GenerationRunMode) => void;
+    onSelectGenerationArtifactType: (artifactType: GenerationArtifactType) => void;
+    onSelectGenerationFolder: (folderPath: string) => void;
     onGeneratePreview: () => Promise<void>;
+    onResolveMalformedRegions: (decision: number) => Promise<void>;
+    onApplyGeneratedCode: (confirmOverwriteExisting: boolean) => Promise<void>;
     onClearPreview: () => void;
 }) {
     const [modal, setModal] = useState<ModalState>(null);
@@ -77,9 +119,16 @@ export function BackendOverviewWorkspace({
         emailAddress: "",
         note: ""
     });
+    const [actionErrorMessage, setActionErrorMessage] = useState<string | null>(null);
+    const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
+    const [isSavingBackend, setIsSavingBackend] = useState(false);
+    const [isSavingOverview, setIsSavingOverview] = useState(false);
+    const [isAcceptingOverview, setIsAcceptingOverview] = useState(false);
+    const [isSavingRole, setIsSavingRole] = useState(false);
 
     const hasOverview = Boolean(overviewSection);
     const isOverviewAccepted = overviewSection?.isAccepted ?? false;
+    const canOpenDownstream = isOverviewAccepted;
     const projectRoles = useMemo(
         () =>
             roleSections.map((section) => ({
@@ -101,19 +150,43 @@ export function BackendOverviewWorkspace({
     );
 
     async function saveBackend() {
-        await onSaveBackend(backendForm);
-        setModal(null);
+        setActionErrorMessage(null);
+        setIsSavingBackend(true);
+        try {
+            await onSaveBackend(backendForm);
+            setModal(null);
+        } catch (error) {
+            setActionErrorMessage(error instanceof Error ? error.message : "Unable to save backend details.");
+        } finally {
+            setIsSavingBackend(false);
+        }
     }
 
     async function saveOverview() {
-        await onSaveOverview(overviewForm);
-        setModal(null);
+        setActionErrorMessage(null);
+        setIsSavingOverview(true);
+        try {
+            await onSaveOverview(overviewForm);
+            setModal(null);
+        } catch (error) {
+            setActionErrorMessage(error instanceof Error ? error.message : "Unable to save the overview.");
+        } finally {
+            setIsSavingOverview(false);
+        }
     }
 
     async function saveRole() {
-        await onSaveRole(roleForm);
-        setRoleForm({ roleName: "Project Lead", assignedTo: "", emailAddress: "", note: "" });
-        setModal(null);
+        setActionErrorMessage(null);
+        setIsSavingRole(true);
+        try {
+            await onSaveRole(roleForm);
+            setRoleForm({ roleName: "Project Lead", assignedTo: "", emailAddress: "", note: "" });
+            setModal(null);
+        } catch (error) {
+            setActionErrorMessage(error instanceof Error ? error.message : "Unable to save the project role.");
+        } finally {
+            setIsSavingRole(false);
+        }
     }
 
     return (
@@ -129,40 +202,43 @@ export function BackendOverviewWorkspace({
                         <button
                             type="button"
                             className="secondary-button"
+                            disabled={isSavingBackend}
                             onClick={() => {
+                                setActionErrorMessage(null);
                                 setBackendForm(toBackendFormState(backend));
                                 setModal("edit-backend");
                             }}
                         >
                             Edit backend
                         </button>
-                        <Link
-                            href={isOverviewAccepted ? `/app/backends/${backend.slug}/requirements` : "#"}
-                            className={`requirements-action-button ${isOverviewAccepted ? "" : "is-disabled-link"}`}
-                            aria-disabled={!isOverviewAccepted}
-                            onClick={(event) => {
-                                if (!isOverviewAccepted) {
-                                    event.preventDefault();
-                                }
-                            }}
-                        >
-                            Open requirements
-                        </Link>
-                        <Link
-                            href={isOverviewAccepted ? `/app/backends/${backend.slug}/domain-model` : "#"}
-                            className={`secondary-button ${isOverviewAccepted ? "" : "is-disabled-link"}`}
-                            aria-disabled={!isOverviewAccepted}
-                            onClick={(event) => {
-                                if (!isOverviewAccepted) {
-                                    event.preventDefault();
-                                }
-                            }}
-                        >
-                            Open domain model
-                        </Link>
+                        {canOpenDownstream ? (
+                            <Link href={`/app/backends/${backend.slug}/requirements`} className="requirements-action-button">
+                                Open requirements
+                            </Link>
+                        ) : (
+                            <button type="button" className="requirements-action-button" disabled>
+                                Open requirements
+                            </button>
+                        )}
+                        {canOpenDownstream ? (
+                            <Link href={`/app/backends/${backend.slug}/domain-model`} className="secondary-button">
+                                Open domain model
+                            </Link>
+                        ) : (
+                            <button type="button" className="secondary-button" disabled>
+                                Open domain model
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
+
+            {actionErrorMessage ? (
+                <div className="backend-feedback-banner" role="alert">
+                    <strong>Action failed.</strong>
+                    <span>{actionErrorMessage}</span>
+                </div>
+            ) : null}
 
             <div className="backend-summary-grid">
                 {summaryCards.map((card) => (
@@ -185,7 +261,9 @@ export function BackendOverviewWorkspace({
                         <button
                             type="button"
                             className="requirements-action-button"
+                            disabled={isSavingOverview}
                             onClick={() => {
+                                setActionErrorMessage(null);
                                 setOverviewForm(toOverviewFormState(overviewSection));
                                 setModal("overview");
                             }}
@@ -225,8 +303,25 @@ export function BackendOverviewWorkspace({
                     </div>
                     {overviewSection && !isOverviewAccepted ? (
                         <div className="card-footer requirements-panel-footer">
-                            <button type="button" className="requirements-action-button" onClick={() => { onAcceptOverview().catch(() => {}); }}>
-                                Accept overview
+                            <button
+                                type="button"
+                                className="requirements-action-button"
+                                disabled={isAcceptingOverview}
+                                onClick={async () => {
+                                    setActionErrorMessage(null);
+                                    setIsAcceptingOverview(true);
+                                    try {
+                                        await onAcceptOverview();
+                                    } catch (error) {
+                                        setActionErrorMessage(
+                                            error instanceof Error ? error.message : "Unable to accept the overview."
+                                        );
+                                    } finally {
+                                        setIsAcceptingOverview(false);
+                                    }
+                                }}
+                            >
+                                {isAcceptingOverview ? "Accepting..." : "Accept overview"}
                             </button>
                         </div>
                     ) : null}
@@ -238,7 +333,15 @@ export function BackendOverviewWorkspace({
                             <span className="requirements-eyebrow">Project Roles</span>
                             <h3>Assigned workspace roles</h3>
                         </div>
-                        <button type="button" className="requirements-action-button" disabled={!hasOverview || !canManageRoles} onClick={() => setModal("role")}>
+                        <button
+                            type="button"
+                            className="requirements-action-button"
+                            disabled={!hasOverview || !canManageRoles || isSavingRole}
+                            onClick={() => {
+                                setActionErrorMessage(null);
+                                setModal("role");
+                            }}
+                        >
                             Add role
                         </button>
                     </div>
@@ -285,7 +388,21 @@ export function BackendOverviewWorkspace({
                         <button type="button" className="secondary-button" onClick={onClearPreview} disabled={!generatedPreview && !previewErrorMessage}>
                             Clear
                         </button>
-                        <button type="button" className="requirements-action-button" onClick={() => { onGeneratePreview().catch(() => {}); }} disabled={isGeneratingPreview}>
+                        <button
+                            type="button"
+                            className="requirements-action-button"
+                            onClick={async () => {
+                                setActionErrorMessage(null);
+                                try {
+                                    await onGeneratePreview();
+                                } catch (error) {
+                                    setActionErrorMessage(
+                                        error instanceof Error ? error.message : "Unable to generate the AI preview."
+                                    );
+                                }
+                            }}
+                            disabled={isGeneratingPreview || !selectedGenerationFolderPath || isLoadingGenerationFolders}
+                        >
                             {isGeneratingPreview ? "Generating..." : "Generate preview"}
                         </button>
                     </div>
@@ -297,14 +414,98 @@ export function BackendOverviewWorkspace({
                             {isGeneratingPreview
                                 ? "Building the prompt from the backend spec and requesting raw AI output."
                                 : generatedPreview
-                                  ? "Raw preview is available below. This output is not persisted."
-                                  : "Generate a preview to inspect the backend-built prompt and raw AI response."}
+                                  ? generatedPreview.hasAppliedArtifacts
+                                      ? "Preview remains visible below and the staged generation has already been applied to the backend."
+                                      : "Preview and staged generation are available below. No backend files have been written yet."
+                                : "Generate a preview to inspect the backend-built prompt, staged artifact set, and raw AI response before writing code."}
                         </p>
                     </div>
+                    <div className="backend-overview-copy">
+                        <strong>Generation mode</strong>
+                        <label className="backend-inline-field">
+                            <span>Generation scope</span>
+                            <select
+                                className="backend-inline-select"
+                                value={generationRunMode}
+                                onChange={(event) => onSelectGenerationRunMode(Number(event.target.value) as GenerationRunMode)}
+                                disabled={isGeneratingPreview || isApplyingGeneratedCode}
+                            >
+                                {generationRunModeOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <p>
+                            Full backend generation follows template-defined folder standards automatically. Single artifact family lets you inspect one family at a chosen approved target folder first.
+                        </p>
+                    </div>
+                    <div className="backend-overview-copy">
+                        <strong>Target artifact</strong>
+                        <label className="backend-inline-field">
+                            <span>Artifact type</span>
+                            <select
+                                className="backend-inline-select"
+                                value={generationArtifactType}
+                                onChange={(event) =>
+                                    onSelectGenerationArtifactType(Number(event.target.value) as GenerationArtifactType)
+                                }
+                                disabled={isGeneratingPreview || isApplyingGeneratedCode || generationRunMode === 2}
+                            >
+                                {generationArtifactOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        {generationRunMode === 1 ? (
+                            <label className="backend-inline-field">
+                                <span>Approved target folder</span>
+                                <select
+                                    className="backend-inline-select"
+                                    value={selectedGenerationFolderPath}
+                                    onChange={(event) => onSelectGenerationFolder(event.target.value)}
+                                    disabled={isGeneratingPreview || isApplyingGeneratedCode || isLoadingGenerationFolders || generationFolderOptions.length === 0}
+                                >
+                                    <option value="">
+                                        {isLoadingGenerationFolders
+                                            ? "Loading approved folders..."
+                                            : generationFolderOptions.length === 0
+                                              ? "No approved folders available"
+                                              : "Select an approved folder"}
+                                    </option>
+                                    {generationFolderOptions.map((folder) => (
+                                        <option key={folder.folderPath} value={folder.folderPath}>
+                                            {folder.projectName}: {folder.folderPath}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        ) : null}
+                        <p>
+                            {generationRunMode === 1
+                                ? "The backend resolves the allowed folders. Preview content is staged only against the selected approved target path."
+                                : "The backend auto-resolves each artifact family folder from the template and standards rules for the imported backend structure."}
+                        </p>
+                    </div>
+                    {generationFolderErrorMessage ? (
+                        <div className="backend-blocked-state">
+                            <strong>Folder discovery failed</strong>
+                            <p>{generationFolderErrorMessage}</p>
+                        </div>
+                    ) : null}
                     {previewErrorMessage ? (
                         <div className="backend-blocked-state">
                             <strong>Preview failed</strong>
                             <p>{previewErrorMessage}</p>
+                        </div>
+                    ) : null}
+                    {applyGeneratedCodeErrorMessage ? (
+                        <div className="backend-blocked-state">
+                            <strong>Code generation failed</strong>
+                            <p>{applyGeneratedCodeErrorMessage}</p>
                         </div>
                     ) : null}
                     {generatedPreview ? (
@@ -331,6 +532,161 @@ export function BackendOverviewWorkspace({
                                 </div>
                                 <pre className="semantic-diagram-editor-status">{generatedPreview.outputText}</pre>
                             </article>
+                            {generatedPreview.artifacts?.map((artifact) => (
+                                <article key={artifact.targetFilePath} className="backend-role-item">
+                                    <div className="backend-role-heading">
+                                        <strong>Prepared artifact</strong>
+                                        <span>
+                                            {artifact.applyStatus === 4
+                                                ? "Written"
+                                                : artifact.applyStatus === 2
+                                                  ? "Overwrite confirmation needed"
+                                                  : artifact.applyStatus === 3
+                                                    ? "Blocked by dependency"
+                                                    : artifact.targetExists
+                                                      ? "Existing target detected"
+                                                      : "New target"}
+                                        </span>
+                                    </div>
+                                    <p>{artifact.targetFilePath}</p>
+                                    {artifact.requiresMalformedRegionDecision && artifact.malformedRegionWarning ? (
+                                        <div className="backend-blocked-state">
+                                            <strong>Protected regions need review</strong>
+                                            <p>{artifact.malformedRegionWarning.message}</p>
+                                            {artifact.malformedRegionWarning.affectedRegionNames.length > 0 ? (
+                                                <small>
+                                                    Affected regions: {artifact.malformedRegionWarning.affectedRegionNames.join(", ")}
+                                                </small>
+                                            ) : null}
+                                            <div className="backend-hero-actions">
+                                                <button
+                                                    type="button"
+                                                    className="requirements-action-button"
+                                                    disabled={isGeneratingPreview}
+                                                    onClick={async () => {
+                                                        setActionErrorMessage(null);
+                                                        try {
+                                                            await onResolveMalformedRegions(1);
+                                                        } catch (error) {
+                                                            setActionErrorMessage(
+                                                                error instanceof Error
+                                                                    ? error.message
+                                                                    : "Unable to continue with protected-region repair."
+                                                            );
+                                                        }
+                                                    }}
+                                                >
+                                                    Repair and continue
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="secondary-button"
+                                                    disabled={isGeneratingPreview}
+                                                    onClick={async () => {
+                                                        setActionErrorMessage(null);
+                                                        try {
+                                                            await onResolveMalformedRegions(2);
+                                                        } catch (error) {
+                                                            setActionErrorMessage(
+                                                                error instanceof Error
+                                                                    ? error.message
+                                                                    : "Unable to preserve conflicted manual code."
+                                                            );
+                                                        }
+                                                    }}
+                                                >
+                                                    Preserve at file end
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <small>
+                                            Workspace: {artifact.workspaceKey} | {artifact.targetExists ? (artifact.hasMeaningfulDifference ? "Existing file differs" : "Existing file already matches") : "New file"}
+                                        </small>
+                                    )}
+                                    {artifact.malformedRegionWarning && !artifact.requiresMalformedRegionDecision ? (
+                                        <small>{artifact.malformedRegionWarning.message}</small>
+                                    ) : null}
+                                </article>
+                            ))}
+                            {!generatedPreview.artifacts?.some((artifact) => artifact.requiresMalformedRegionDecision) ? (
+                                <article className="backend-role-item">
+                                    <div className="backend-role-heading">
+                                        <strong>Generate code</strong>
+                                        <span>{generatedPreview.hasAppliedArtifacts ? "Applied" : "Awaiting confirmation"}</span>
+                                    </div>
+                                    <p>
+                                        {generatedPreview.hasAppliedArtifacts
+                                            ? "The staged artifact set remains visible for review. Existing files that differed may still require overwrite approval if they were held."
+                                            : "Confirm to write the staged artifact set into the approved backend folders. This does not change the preview text shown above."}
+                                    </p>
+                                    <div className="backend-hero-actions">
+                                                <button
+                                                    type="button"
+                                                    className="requirements-action-button"
+                                                    disabled={isGeneratingPreview || isApplyingGeneratedCode}
+                                                    onClick={() => setShowApplyConfirmation(true)}
+                                                >
+                                                    {isApplyingGeneratedCode ? "Generating code..." : "Generate code"}
+                                                </button>
+                                        {generatedPreview.artifacts?.some((artifact) => artifact.applyStatus === 2) ? (
+                                            <button
+                                                type="button"
+                                                className="secondary-button"
+                                                disabled={isGeneratingPreview || isApplyingGeneratedCode}
+                                                onClick={async () => {
+                                                    setActionErrorMessage(null);
+                                                    try {
+                                                        await onApplyGeneratedCode(true);
+                                                    } catch (error) {
+                                                        setActionErrorMessage(
+                                                            error instanceof Error ? error.message : "Unable to confirm overwrite for staged code."
+                                                        );
+                                                    }
+                                                }}
+                                            >
+                                                Confirm overwrite for held files
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                    {showApplyConfirmation ? (
+                                        <div className="backend-blocked-state">
+                                            <strong>Confirm code generation</strong>
+                                            <p>
+                                                This will write every currently staged artifact that is eligible to be applied now. Existing files with differences may still pause for overwrite confirmation.
+                                            </p>
+                                            <div className="backend-hero-actions">
+                                                <button
+                                                    type="button"
+                                                    className="secondary-button"
+                                                    onClick={() => setShowApplyConfirmation(false)}
+                                                    disabled={isApplyingGeneratedCode}
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="requirements-action-button"
+                                                    disabled={isApplyingGeneratedCode}
+                                                    onClick={async () => {
+                                                        setActionErrorMessage(null);
+                                                        try {
+                                                            await onApplyGeneratedCode(false);
+                                                            setShowApplyConfirmation(false);
+                                                        } catch (error) {
+                                                            setActionErrorMessage(
+                                                                error instanceof Error ? error.message : "Unable to apply generated code."
+                                                            );
+                                                        }
+                                                    }}
+                                                >
+                                                    {isApplyingGeneratedCode ? "Applying..." : "Confirm generate code"}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </article>
+                            ) : null}
                         </div>
                     ) : null}
                 </div>
@@ -343,8 +699,8 @@ export function BackendOverviewWorkspace({
                         <button type="button" className="secondary-button" onClick={() => setModal(null)}>
                             Cancel
                         </button>
-                        <button type="button" className="requirements-action-button" onClick={saveBackend}>
-                            Save backend
+                        <button type="button" className="requirements-action-button" onClick={saveBackend} disabled={isSavingBackend}>
+                            {isSavingBackend ? "Saving..." : "Save backend"}
                         </button>
                     </div>
                 </BackendModal>
@@ -357,8 +713,8 @@ export function BackendOverviewWorkspace({
                         <button type="button" className="secondary-button" onClick={() => setModal(null)}>
                             Cancel
                         </button>
-                        <button type="button" className="requirements-action-button" onClick={saveOverview}>
-                            Save overview
+                        <button type="button" className="requirements-action-button" onClick={saveOverview} disabled={isSavingOverview}>
+                            {isSavingOverview ? "Saving..." : "Save overview"}
                         </button>
                     </div>
                 </BackendModal>
@@ -371,8 +727,8 @@ export function BackendOverviewWorkspace({
                         <button type="button" className="secondary-button" onClick={() => setModal(null)}>
                             Cancel
                         </button>
-                        <button type="button" className="requirements-action-button" onClick={saveRole}>
-                            Save role
+                        <button type="button" className="requirements-action-button" onClick={saveRole} disabled={isSavingRole}>
+                            {isSavingRole ? "Saving..." : "Save role"}
                         </button>
                     </div>
                 </BackendModal>

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace SeeSpec.Services.AIGenerationService.DTO
 {
     public class GenerationArtifactDto
@@ -12,12 +14,32 @@ namespace SeeSpec.Services.AIGenerationService.DTO
 
         public bool TargetExists { get; set; }
 
+        public bool HasMeaningfulDifference { get; set; }
+
         public bool ProtectedRegionsDetected { get; set; }
+
+        // Only explicit protected regions are manual-owned. Everything else in a generator-owned
+        // artifact remains owned by the generator so regeneration boundaries stay unambiguous.
+        public bool IsGeneratorOwnedFile { get; set; }
 
         // RAM workspace linkage is carried with the artifact contract so preview and final write
         // can resolve the same in-session generation set without permanent file storage.
         public string WorkspaceKey { get; set; }
 
+        public string WorkspaceFilePath { get; set; }
+
+        public bool RequiresMalformedRegionDecision { get; set; }
+
+        public bool RequiresOverwriteConfirmation { get; set; }
+
+        public GenerationArtifactApplyStatus ApplyStatus { get; set; }
+
+        public MalformedProtectedRegionDecision AppliedMalformedRegionDecision { get; set; }
+
+        public MalformedProtectedRegionWarningDto MalformedRegionWarning { get; set; }
+
         public GenerationArtifactSourceMetadataDto SourceMetadata { get; set; }
+
+        public List<ProtectedRegionDefinitionDto> ProtectedRegions { get; set; } = new List<ProtectedRegionDefinitionDto>();
     }
 }

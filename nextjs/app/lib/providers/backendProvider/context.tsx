@@ -85,6 +85,24 @@ export type BackendFolderImportInput = {
   folderPath: string;
 };
 
+export type GenerationArtifactType =
+  | 1
+  | 2
+  | 3
+  | 4
+  | 5
+  | 6;
+
+export type AllowedGenerationFolder = {
+  folderPath: string;
+  projectPath: string;
+  projectName: string;
+  moduleName: string;
+  projectKind: string;
+  artifactType: GenerationArtifactType;
+  folderExists: boolean;
+};
+
 export interface IBackendStateContext {
   isPending: boolean;
   isSuccess: boolean;
@@ -102,6 +120,10 @@ export interface IBackendActionContext {
   updateBackend: (payload: UpdateBackendInput) => Promise<BackendRecord>;
   uploadBackendArchive: (file: File) => Promise<BackendUploadResult>;
   importBackendFolder: (payload: BackendFolderImportInput) => Promise<BackendUploadResult>;
+  getAllowedGenerationFolders: (
+    backendId: string,
+    artifactType: GenerationArtifactType
+  ) => Promise<AllowedGenerationFolder[]>;
   deleteBackend: (id: string) => Promise<void>;
   setActiveBackend: (backend: BackendRecord | null) => void;
   reset: () => void;
@@ -132,6 +154,7 @@ export const INITIAL_ACTION_STATE: IBackendActionContext = {
   importBackendFolder: async () => {
     throw new Error("BackendActionContext is not initialized.");
   },
+  getAllowedGenerationFolders: async () => [],
   deleteBackend: async () => {},
   setActiveBackend: () => {},
   reset: () => {}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AccessPanel } from "@/app/components/app/access-panel";
 import { DomainModelWorkspace } from "@/app/components/app/domain-model-workspace";
 import { APP_PERMISSIONS, hasPermission } from "@/app/lib/auth/permissions";
@@ -20,20 +20,90 @@ export default function BackendDomainModelPage() {
     const { getDiagramElementsByBackendAndType } = useDiagramElementActions();
     const { getSectionsByBackend } = useSpecSectionActions();
     const backendId = backend?.id ?? null;
+    const [hasResolvedBackend, setHasResolvedBackend] = useState(false);
+    const [hasResolvedData, setHasResolvedData] = useState(false);
+    const [pageErrorMessage, setPageErrorMessage] = useState<string | null>(null);
 
     useEffect(() => {
-        getBackendBySlug(params.backendSlug).catch(() => {});
+        let isActive = true;
+
+        getBackendBySlug(params.backendSlug)
+            .catch((error) => {
+                if (!isActive) {
+                    return;
+                }
+
+                setPageErrorMessage(error instanceof Error ? error.message : "Unable to load this backend.");
+            })
+            .finally(() => {
+                if (isActive) {
+                    setHasResolvedBackend(true);
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
     }, [getBackendBySlug, params.backendSlug]);
 
     useEffect(() => {
+        let isActive = true;
         if (backendId !== null) {
-            getSectionsByBackend(backendId).catch(() => {});
-            getDiagramElementsByBackendAndType(backendId, "domain-model").catch(() => {});
+            Promise.all([
+                getSectionsByBackend(backendId),
+                getDiagramElementsByBackendAndType(backendId, "domain-model")
+            ])
+                .catch((error) => {
+                    if (!isActive) {
+                        return;
+                    }
+
+                    setPageErrorMessage(
+                        error instanceof Error ? error.message : "Unable to load domain model data."
+                    );
+                })
+                .finally(() => {
+                    if (isActive) {
+                        setHasResolvedData(true);
+                    }
+                });
+            return () => {
+                isActive = false;
+            };
         }
+        return () => {
+            isActive = false;
+        };
     }, [backendId, getDiagramElementsByBackendAndType, getSectionsByBackend]);
 
     if (!hasPermission(session, APP_PERMISSIONS.domainModel)) {
         return <AccessPanel title="Domain model" message="Your current role does not allow access to the domain model." />;
+    }
+
+    if (pageErrorMessage) {
+        return (
+            <section className="page-section">
+                <div className="card backend-state-card">
+                    <div className="card-body backend-blocked-state">
+                        <strong>Domain model workspace failed to load.</strong>
+                        <p>{pageErrorMessage}</p>
+                    </div>
+                </div>
+            </section>
+        );
+    }
+
+    if (!hasResolvedBackend || (backend !== null && !hasResolvedData)) {
+        return (
+            <section className="page-section">
+                <div className="card backend-state-card">
+                    <div className="card-body backend-blocked-state">
+                        <strong>Loading domain model workspace...</strong>
+                        <p>Fetching the overview gate and domain model diagram for this backend.</p>
+                    </div>
+                </div>
+            </section>
+        );
     }
 
     if (!backend) {

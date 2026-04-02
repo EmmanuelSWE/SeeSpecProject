@@ -1,4 +1,4 @@
-import type { IGeneratedSpecPreview, ISpec } from "./context";
+import type { IApplyGeneratedCodeResult, IGeneratedSpecPreview, ISpec } from "./context";
 
 export enum SpecActionEnums {
   pending = "SPEC_PENDING",
@@ -10,6 +10,9 @@ export enum SpecActionEnums {
   generatePreviewPending = "GENERATE_SPEC_PREVIEW_PENDING",
   generatePreviewSuccess = "GENERATE_SPEC_PREVIEW_SUCCESS",
   generatePreviewError = "GENERATE_SPEC_PREVIEW_ERROR",
+  applyGeneratedCodePending = "APPLY_GENERATED_CODE_PENDING",
+  applyGeneratedCodeSuccess = "APPLY_GENERATED_CODE_SUCCESS",
+  applyGeneratedCodeError = "APPLY_GENERATED_CODE_ERROR",
   clearGeneratedPreview = "CLEAR_GENERATED_PREVIEW",
   setActiveSpec = "SET_ACTIVE_SPEC",
   reset = "RESET_SPEC_STATE"
@@ -25,6 +28,9 @@ export type SpecAction =
   | { type: SpecActionEnums.generatePreviewPending }
   | { type: SpecActionEnums.generatePreviewSuccess; payload: IGeneratedSpecPreview }
   | { type: SpecActionEnums.generatePreviewError; payload: string }
+  | { type: SpecActionEnums.applyGeneratedCodePending }
+  | { type: SpecActionEnums.applyGeneratedCodeSuccess; payload: IApplyGeneratedCodeResult }
+  | { type: SpecActionEnums.applyGeneratedCodeError; payload: string }
   | { type: SpecActionEnums.clearGeneratedPreview }
   | { type: SpecActionEnums.setActiveSpec; payload: ISpec | null }
   | { type: SpecActionEnums.reset };
@@ -38,6 +44,9 @@ export const updateSpecSuccess = (payload: ISpec): SpecAction => ({ type: SpecAc
 export const generatePreviewPending = (): SpecAction => ({ type: SpecActionEnums.generatePreviewPending });
 export const generatePreviewSuccess = (payload: IGeneratedSpecPreview): SpecAction => ({ type: SpecActionEnums.generatePreviewSuccess, payload });
 export const generatePreviewError = (payload: string): SpecAction => ({ type: SpecActionEnums.generatePreviewError, payload });
+export const applyGeneratedCodePending = (): SpecAction => ({ type: SpecActionEnums.applyGeneratedCodePending });
+export const applyGeneratedCodeSuccess = (payload: IApplyGeneratedCodeResult): SpecAction => ({ type: SpecActionEnums.applyGeneratedCodeSuccess, payload });
+export const applyGeneratedCodeError = (payload: string): SpecAction => ({ type: SpecActionEnums.applyGeneratedCodeError, payload });
 export const clearGeneratedPreview = (): SpecAction => ({ type: SpecActionEnums.clearGeneratedPreview });
 export const setActiveSpec = (payload: ISpec | null): SpecAction => ({ type: SpecActionEnums.setActiveSpec, payload });
 export const resetSpecState = (): SpecAction => ({ type: SpecActionEnums.reset });
